@@ -41,8 +41,8 @@ intellijPlatform {
 tasks {
     // Set the JVM compatibility versions
     withType<JavaCompile> {
-        sourceCompatibility = "25"
-        targetCompatibility = "25"
+        sourceCompatibility = "21"
+        targetCompatibility = "21"
     }
 }
 

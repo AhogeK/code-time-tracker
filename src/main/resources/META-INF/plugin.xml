@@ -23,6 +23,13 @@
     <!-- Extension points defined by the plugin.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
-
+        <postStartupActivity implementation="com.ahogek.codetimetracker.activity.StartupTriggerActivity"/>
     </extensions>
+
+    <applicationListeners>
+        <listener
+                class="com.ahogek.codetimetracker.listeners.GlobalActionListener"
+                topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
+    </applicationListeners>
+
 </idea-plugin>
