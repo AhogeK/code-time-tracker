@@ -1,11 +1,13 @@
 package com.ahogek.codetimetracker.service
 
+import com.ahogek.codetimetracker.handler.MyTypedActionHandler
 import com.intellij.ide.IdeEventQueue
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.actionSystem.TypedAction
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import java.awt.AWTEvent
 import java.awt.MouseInfo
@@ -18,19 +20,17 @@ import java.util.concurrent.atomic.AtomicBoolean
 class GlobalEventMonitorService : Disposable {
 
     private val log = Logger.getInstance(GlobalEventMonitorService::class.java)
-
-    // 使用线程安全的 AtomicBoolean 作为“只执行一次”的标志位
     private val isListenerInitialized = AtomicBoolean(false)
 
     /**
-     * 这是新的初始化方法，它将由一个稳定的触发器调用。
+     * 初始化所有需要通过编程方式注册的监听器。
+     * 这个方法通过一个稳定的触发器来调用，且内置的逻辑门确保只执行一次。
      */
-    fun initializeListener() {
-        // compareAndSet 是一个原子操作，它能确保在多线程环境下，
-        // if 块内的代码在整个 application 生命周期中只会被执行一次。
+    fun initializeListeners() {
         if (isListenerInitialized.compareAndSet(false, true)) {
-            log.info("Initializing Global AWT listener for the first time.")
+            log.info("Initializing global listeners for the first time.")
 
+            // 1. 注册底层AWT事件监听器 (鼠标点击、滚动)
             IdeEventQueue.getInstance().addPostprocessor({ awtEvent: AWTEvent ->
                 findEditorForEvent(awtEvent)?.let { editor ->
                     val vFile = FileDocumentManager.getInstance().getFile(editor.document)
@@ -50,11 +50,18 @@ class GlobalEventMonitorService : Disposable {
                 }
                 false
             }, this)
+            log.info("Low-level AWT listener registered.")
+
+            // 2. 注册字符输入监听器
+            val typedAction = TypedAction.getInstance()
+            val originalHandler = typedAction.rawHandler
+            typedAction.setupRawHandler(MyTypedActionHandler(originalHandler))
+            log.info("Custom TypedActionHandler registered.")
         }
     }
 
     override fun dispose() {
-        log.info("GlobalEventMonitorService disposed, AWT listener removed automatically.")
+        log.info("GlobalEventMonitorService disposed.")
     }
 
     private fun findEditorForEvent(awtEvent: AWTEvent): Editor? {

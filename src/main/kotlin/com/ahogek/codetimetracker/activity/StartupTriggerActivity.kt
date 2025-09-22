@@ -11,9 +11,8 @@ import com.intellij.openapi.startup.ProjectActivity
  */
 class StartupTriggerActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
-        // 获取我们的单例服务
+        // 获取服务单例并调用其初始化方法
         val service = ApplicationManager.getApplication().getService(GlobalEventMonitorService::class.java)
-        // 调用初始化方法。即使这个Activity被多次调用，服务内部的逻辑门也会确保监听器只被添加一次。
-        service.initializeListener()
+        service.initializeListeners()
     }
 }

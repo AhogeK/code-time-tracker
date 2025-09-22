@@ -32,4 +32,5 @@
                 topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
     </applicationListeners>
 
+
 </idea-plugin>
