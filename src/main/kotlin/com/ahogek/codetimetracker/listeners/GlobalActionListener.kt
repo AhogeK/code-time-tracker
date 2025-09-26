@@ -1,9 +1,11 @@
 package com.ahogek.codetimetracker.listeners
 
+import com.ahogek.codetimetracker.service.TimeTrackerService
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ex.AnActionListener
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import java.awt.event.KeyEvent
@@ -22,28 +24,44 @@ import java.awt.event.MouseEvent
  */
 class GlobalActionListener : AnActionListener {
     private val log = Logger.getInstance(GlobalActionListener::class.java)
+    private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
 
     override fun beforeActionPerformed(action: AnAction, event: AnActionEvent) {
+        // 尝试从事件上下文中获取编辑器
+        val editor = event.dataContext.getData(CommonDataKeys.EDITOR)
+        if (editor != null) {
+            // 检查文件有效性
+            val vFile = FileDocumentManager.getInstance().getFile(editor.document)
+            if (vFile != null && vFile.isInLocalFileSystem && vFile.isWritable)
+            // 如果是在一个有效的编辑器中执行动作，则认为是一次活动
+                timeTrackerService.onActivity(editor)
+        }
+
+        // 日志监控（用于调试可后续移除）
+        logAction(action, event)
+    }
+
+    private fun logAction(
+        action: AnAction,
+        event: AnActionEvent
+    ) {
         val actionId = event.actionManager.getId(action) ?: action.javaClass.name
         val triggerSource = when (val inputEvent = event.inputEvent) {
             is KeyEvent -> "Key Press: ${KeyEvent.getKeyText(inputEvent.keyCode)}"
             is MouseEvent -> "Mouse Click (count: ${inputEvent.clickCount})"
             else -> "Programmatic/Unknown"
         }
-
         val editor = event.dataContext.getData(CommonDataKeys.EDITOR)
         if (editor != null) {
-            val virtualFile = FileDocumentManager.getInstance().getFile(editor.document)
-            log.info("Action '$actionId' triggered by [$triggerSource] in Editor -> File: ${virtualFile?.path}")
+            val vFile = FileDocumentManager.getInstance().getFile(editor.document)
+            log.info("Action '$actionId' triggered by [$triggerSource] in Editor -> File: ${vFile?.path}")
             return
         }
-
-        val virtualFile = event.dataContext.getData(CommonDataKeys.VIRTUAL_FILE)
-        if (virtualFile != null) {
-            log.info("Action '$actionId' triggered by [$triggerSource] on File -> File: ${virtualFile.path}")
+        val vFile = event.dataContext.getData(CommonDataKeys.VIRTUAL_FILE)
+        if (vFile != null) {
+            log.info("Action '$actionId' triggered by [$triggerSource] on File -> File: ${vFile.path}")
             return
         }
-
         log.info("Action '$actionId' triggered by [$triggerSource] (Global, no file context)")
     }
 }
