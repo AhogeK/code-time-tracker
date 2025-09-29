@@ -7,6 +7,7 @@ import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.util.SystemInfo
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
@@ -28,10 +29,12 @@ private const val IDLE_CHECK_INTERVAL_SECONDS = 5L
 class TimeTrackerService : Disposable {
     private val log = Logger.getInstance(TimeTrackerService::class.java)
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
-    private val activeSessions: MutableMap<String, CodingSession> = ConcurrentHashMap()
+    private val activeSessions: MutableMap<String, MutableMap<String, CodingSession>> = ConcurrentHashMap()
     private val lastActivityTime: AtomicReference<LocalDateTime> = AtomicReference(LocalDateTime.now())
+    private val platform: String = "${SystemInfo.OS_NAME} | ${SystemInfo.OS_VERSION} | ${SystemInfo.OS_ARCH}"
 
     init {
+        log.info("TimeTrackerService initialized on platform: $platform")
         // Start a unique, periodic task to check for idle state
         scheduler.scheduleAtFixedRate(
             ::checkIdleStatus,
@@ -47,39 +50,48 @@ class TimeTrackerService : Disposable {
      * @param editor The currently active editor instance
      */
     fun onActivity(editor: Editor) {
+        val project = editor.project ?: return
+        // Use the project's unique base path as the key.
+        val projectPath = project.basePath ?: return
+        val projectName = project.name
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return
         val currentLanguage = file.fileType.name
         val now = LocalDateTime.now()
 
-        // Update last active time
+        // Update the last activity timestamp.
         lastActivityTime.set(now)
 
-        // Check if language is switched
-        val activeLanguage = activeSessions.keys.firstOrNull()
-        if (activeLanguage != null && activeLanguage != currentLanguage) {
-            log.info("Language switch detected from $activeLanguage to $currentLanguage. Pausing previous session.")
-            // Immediately pause and save the session of the previous language
-            pauseAndPersistSessions()
+        // Get or create the session map for the current project.
+        val projectSessions = activeSessions.computeIfAbsent(projectPath) {
+            ConcurrentHashMap()
         }
 
-        // Start or update the current language session
-        val session = activeSessions.computeIfAbsent(currentLanguage) {
-            log.info("Starting new coding session for $currentLanguage")
-            CodingSession(currentLanguage, now, now)
+        // Check for language switch within the same project.
+        val activeLanguage = projectSessions.keys.firstOrNull()
+        if (activeLanguage != null && activeLanguage != currentLanguage) {
+            log.info("[$projectName] Language switch detected: $activeLanguage -> $currentLanguage.")
+            pauseAndPersistSessions() // This will clear all sessions, which is correct for a switch.
+        }
+
+        // Start a new session or update the end time of the existing one.
+        val session = projectSessions.computeIfAbsent(currentLanguage) {
+            log.info("[$projectName] Starting new coding session for $currentLanguage.")
+            CodingSession(projectName, projectPath, currentLanguage, platform, now, now)
         }
         session.endTime = now
     }
 
     /**
-     * Periodically called by the scheduler to check if the user is idle
+     * Periodically called by the scheduler to check if the user is idle.
      */
     private fun checkIdleStatus() {
         val now = LocalDateTime.now()
         val lastActivity = lastActivityTime.get()
         val idleSeconds = ChronoUnit.SECONDS.between(lastActivity, now)
 
-        if (idleSeconds >= IDLE_THRESHOLD_SECONDS && activeSessions.isNotEmpty()) {
-            log.info("User has been idle for over $IDLE_THRESHOLD_SECONDS seconds. Pausing tracking.")
+        // If idle threshold is met and there are any active sessions in any project.
+        if (idleSeconds >= IDLE_THRESHOLD_SECONDS && activeSessions.any { it.value.isNotEmpty() }) {
+            log.info("User has been idle for over $IDLE_THRESHOLD_SECONDS seconds. Pausing all tracking sessions.")
             ApplicationManager.getApplication().invokeLater {
                 pauseAndPersistSessions()
             }
@@ -91,18 +103,32 @@ class TimeTrackerService : Disposable {
      */
     private fun pauseAndPersistSessions() {
         if (activeSessions.isNotEmpty()) {
-            val sessionsToStore = activeSessions.values.toList()
-            log.info("Pausing tracking for: ${sessionsToStore.joinToString { it.language }}")
+            val sessionsToStore = mutableListOf<CodingSession>()
+            activeSessions.values.forEach { projectSessions ->
+                sessionsToStore.addAll(projectSessions.values)
+            }
+
+            if (sessionsToStore.isEmpty()) return
+
+            log.info("Pausing tracking for: ${sessionsToStore.joinToString { "[${it.projectName}] ${it.language}" }}")
+            // Clear all active sessions.
             activeSessions.clear()
 
-            // TODO: Add data persistence logic here
+            // TODO: Implement data persistence logic here.
             log.info("Persisted sessions: $sessionsToStore")
         }
     }
 
+    /**
+     * Immediately stops all tracking activities and shuts down the scheduler.
+     * Usually called when the application is closing.
+     */
     fun stopTracking() {
         log.info("Stopping all tracking sessions immediately.")
-        scheduler.shutdown()
+        // Prevent any further scheduled tasks from running.
+        if (!scheduler.isShutdown) {
+            scheduler.shutdown()
+        }
         pauseAndPersistSessions()
     }
 
