@@ -17,7 +17,7 @@ class MyTypedActionHandler(
                 timeTrackerService.onActivity(editor)
             }
         } finally {
-            // 必须调用原始handler，确保用户的输入能正常显示在编辑器中
+            // The original handler must be called to ensure that the user's input is displayed correctly in the editor
             originalHandler.execute(editor, charTyped, dataContext)
         }
     }

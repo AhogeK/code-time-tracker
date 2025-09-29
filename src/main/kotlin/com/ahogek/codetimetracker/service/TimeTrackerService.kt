@@ -19,7 +19,7 @@ private const val IDLE_THRESHOLD_SECONDS = 120L
 private const val IDLE_CHECK_INTERVAL_SECONDS = 5L
 
 /**
- * 管理所有计时逻辑
+ * Manage all timing logic
  *
  * @author AhogeK ahogek@gmail.com
  * @date 9/23/25
@@ -32,7 +32,7 @@ class TimeTrackerService : Disposable {
     private val lastActivityTime: AtomicReference<LocalDateTime> = AtomicReference(LocalDateTime.now())
 
     init {
-        // 启动一个唯一的、周期性的任务来检查闲置状态
+        // Start a unique, periodic task to check for idle state
         scheduler.scheduleAtFixedRate(
             ::checkIdleStatus,
             IDLE_CHECK_INTERVAL_SECONDS,
@@ -42,27 +42,27 @@ class TimeTrackerService : Disposable {
     }
 
     /**
-     * 当检测到用户活动时调用此方法。
+     * Call this method when user activity is detected
      *
-     * @param editor 当前活动的编辑器实例
+     * @param editor The currently active editor instance
      */
     fun onActivity(editor: Editor) {
         val file = FileDocumentManager.getInstance().getFile(editor.document) ?: return
         val currentLanguage = file.fileType.name
         val now = LocalDateTime.now()
 
-        // 更新最后活动时间
+        // Update last active time
         lastActivityTime.set(now)
 
-        // 检查语言是否切换
+        // Check if language is switched
         val activeLanguage = activeSessions.keys.firstOrNull()
         if (activeLanguage != null && activeLanguage != currentLanguage) {
             log.info("Language switch detected from $activeLanguage to $currentLanguage. Pausing previous session.")
-            // 立即暂停并保存上一个语言的会话
+            // Immediately pause and save the session of the previous language
             pauseAndPersistSessions()
         }
 
-        // 启动或更新当前语言会话
+        // Start or update the current language session
         val session = activeSessions.computeIfAbsent(currentLanguage) {
             log.info("Starting new coding session for $currentLanguage")
             CodingSession(currentLanguage, now, now)
@@ -71,7 +71,7 @@ class TimeTrackerService : Disposable {
     }
 
     /**
-     * 由调度器定期调用，以检查用户是否闲置。
+     * Periodically called by the scheduler to check if the user is idle
      */
     private fun checkIdleStatus() {
         val now = LocalDateTime.now()
@@ -87,7 +87,7 @@ class TimeTrackerService : Disposable {
     }
 
     /**
-     * 暂停并持久化当前所有的活动会话。
+     * Pause and persist all currently active sessions
      */
     private fun pauseAndPersistSessions() {
         if (activeSessions.isNotEmpty()) {
@@ -95,7 +95,7 @@ class TimeTrackerService : Disposable {
             log.info("Pausing tracking for: ${sessionsToStore.joinToString { it.language }}")
             activeSessions.clear()
 
-            // TODO: 在这里添加数据持久化逻辑
+            // TODO: Add data persistence logic here
             log.info("Persisted sessions: $sessionsToStore")
         }
     }

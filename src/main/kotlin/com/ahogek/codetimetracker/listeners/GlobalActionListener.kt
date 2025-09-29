@@ -12,13 +12,16 @@ import java.awt.event.KeyEvent
 import java.awt.event.MouseEvent
 
 /**
- * 全局动作监听器 (Global Action Listener)。
+ * Global Action Listener.
  *
- * 这个监听器通过实现 [AnActionListener] 接口，可以在 IntelliJ IDE 中任何一个 "Action" 执行前后进行拦截。
- * 它的核心职责是监控用户的操作意图（例如“复制”、“保存”、“向上移动光标”等），
- * 并记录触发该操作的原始输入方式（如键盘按键）以及操作发生的上下文（如具体在哪个文件中）。
+ * This listener, by implementing the [AnActionListener] interface, can intercept any "Action"
+ * before or after its execution within the IntelliJ IDE.
+ * Its core responsibility is to monitor a user's action intent (e.g., "Copy", "Save",
+ * "Move Caret Up"), and to record the original input method that triggered the action
+ * (e.g., a keyboard key press) as well as the context in which the action occurred
+ * (e.g., the specific file).
  *
- * 要使其生效，必须在 `plugin.xml` 中进行注册。
+ * To enable it, you must register it in `plugin.xml`.
  *
  * @see AnActionListener
  */
@@ -27,17 +30,17 @@ class GlobalActionListener : AnActionListener {
     private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
 
     override fun beforeActionPerformed(action: AnAction, event: AnActionEvent) {
-        // 尝试从事件上下文中获取编辑器
+        // Try to get the editor from the event context
         val editor = event.dataContext.getData(CommonDataKeys.EDITOR)
         if (editor != null) {
             // 检查文件有效性
             val vFile = FileDocumentManager.getInstance().getFile(editor.document)
             if (vFile != null && vFile.isInLocalFileSystem && vFile.isWritable)
-            // 如果是在一个有效的编辑器中执行动作，则认为是一次活动
+            // An action performed in a valid editor is considered an activity
                 timeTrackerService.onActivity(editor)
         }
 
-        // 日志监控（用于调试可后续移除）
+        // Logging for monitoring (for debugging, can be removed later)
         logAction(action, event)
     }
 

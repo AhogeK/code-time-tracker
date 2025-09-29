@@ -6,7 +6,7 @@
       <GradleProjectSettings>
         <option name="distributionType" value="LOCAL" />
         <option name="externalProjectPath" value="$PROJECT_DIR$" />
-        <option name="gradleHome" value="/opt/homebrew/Cellar/gradle/9.1.0/libexec" />
+        <option name="gradleHome" value="$USER_HOME$/.sdkman/candidates/gradle/9.1.0" />
         <option name="modules">
           <set>
             <option value="$PROJECT_DIR$" />

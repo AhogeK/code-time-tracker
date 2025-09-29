@@ -6,13 +6,14 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
 
 /**
- * 一个稳定的、公开的API入口点，在项目打开时运行。
- * 它的唯一职责就是去调用我们 application-level 服务的初始化方法。
+ * A stable, public API entry point that runs when the project opens.
+ * Its sole responsibility is to call the initialization method of our application-level services.
  */
 class StartupTriggerActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
-        // 获取服务单例并调用其初始化方法
-        val service = ApplicationManager.getApplication().getService(GlobalEventMonitorService::class.java)
+        // Get the service singleton and call its initialization method
+        val service = ApplicationManager.getApplication()
+            .getService(GlobalEventMonitorService::class.java)
         service.initializeListeners()
     }
 }

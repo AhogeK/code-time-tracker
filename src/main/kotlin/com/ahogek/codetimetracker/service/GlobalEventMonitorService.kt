@@ -27,14 +27,14 @@ class GlobalEventMonitorService : Disposable {
     private var originalTypedActionHandler: TypedActionHandler? = null
 
     /**
-     * 初始化所有需要通过编程方式注册的监听器。
-     * 这个方法通过一个稳定的触发器来调用，且内置的逻辑门确保只执行一次。
+     * Initializes all listeners that need to be registered programmatically.
+     * This method is called via a stable trigger, and the built-in logic gate ensures it only executes once.
      */
     fun initializeListeners() {
         if (isListenerInitialized.compareAndSet(false, true)) {
             log.info("Initializing global listeners for the first time.")
 
-            // 注册底层AWT事件监听器 (鼠标点击、滚动)
+            // Register low-level AWT event listeners (mouse clicks, scrolling)
             IdeEventQueue.getInstance().addPostprocessor({ awtEvent: AWTEvent ->
                 if (awtEvent.id == MouseEvent.MOUSE_PRESSED || awtEvent.id == MouseEvent.MOUSE_WHEEL) {
                     findEditorForEvent(awtEvent)?.let { editor ->
@@ -49,7 +49,7 @@ class GlobalEventMonitorService : Disposable {
             }, this)
             log.info("Low-level AWT listener registered.")
 
-            // 注册字符输入监听器
+            // Register character input listener
             val typedAction = TypedAction.getInstance()
             originalTypedActionHandler = typedAction.rawHandler
             typedAction.setupRawHandler(MyTypedActionHandler(originalTypedActionHandler!!, timeTrackerService))
@@ -58,7 +58,7 @@ class GlobalEventMonitorService : Disposable {
     }
 
     override fun dispose() {
-        // 恢复原始的 handler
+        // Restore the original handler
         originalTypedActionHandler?.let {
             TypedAction.getInstance().setupRawHandler(it)
             log.info("Restored original TypedActionHandler.")
