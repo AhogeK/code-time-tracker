@@ -6,10 +6,7 @@ import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
 import com.intellij.openapi.actionSystem.ex.AnActionListener
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
-import java.awt.event.KeyEvent
-import java.awt.event.MouseEvent
 
 /**
  * Global Action Listener.
@@ -26,7 +23,6 @@ import java.awt.event.MouseEvent
  * @see AnActionListener
  */
 class GlobalActionListener : AnActionListener {
-    private val log = Logger.getInstance(GlobalActionListener::class.java)
     private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
 
     override fun beforeActionPerformed(action: AnAction, event: AnActionEvent) {
@@ -39,32 +35,5 @@ class GlobalActionListener : AnActionListener {
             // An action performed in a valid editor is considered an activity
                 timeTrackerService.onActivity(editor)
         }
-
-        // Logging for monitoring (for debugging, can be removed later)
-        logAction(action, event)
-    }
-
-    private fun logAction(
-        action: AnAction,
-        event: AnActionEvent
-    ) {
-        val actionId = event.actionManager.getId(action) ?: action.javaClass.name
-        val triggerSource = when (val inputEvent = event.inputEvent) {
-            is KeyEvent -> "Key Press: ${KeyEvent.getKeyText(inputEvent.keyCode)}"
-            is MouseEvent -> "Mouse Click (count: ${inputEvent.clickCount})"
-            else -> "Programmatic/Unknown"
-        }
-        val editor = event.dataContext.getData(CommonDataKeys.EDITOR)
-        if (editor != null) {
-            val vFile = FileDocumentManager.getInstance().getFile(editor.document)
-            log.info("Action '$actionId' triggered by [$triggerSource] in Editor -> File: ${vFile?.path}")
-            return
-        }
-        val vFile = event.dataContext.getData(CommonDataKeys.VIRTUAL_FILE)
-        if (vFile != null) {
-            log.info("Action '$actionId' triggered by [$triggerSource] on File -> File: ${vFile.path}")
-            return
-        }
-        log.info("Action '$actionId' triggered by [$triggerSource] (Global, no file context)")
     }
 }

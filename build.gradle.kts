@@ -23,6 +23,8 @@ dependencies {
 
         // Add necessary plugin dependencies for compilation here, example:
         // bundledPlugin("com.intellij.java")
+
+        implementation("org.xerial:sqlite-jdbc:3.50.3.0")
     } 
 }
 

@@ -1,5 +1,6 @@
 package com.ahogek.codetimetracker.service
 
+import com.ahogek.codetimetracker.database.DatabaseManager
 import com.ahogek.codetimetracker.model.CodingSession
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
@@ -114,7 +115,7 @@ class TimeTrackerService : Disposable {
             // Clear all active sessions.
             activeSessions.clear()
 
-            // TODO: Implement data persistence logic here.
+            DatabaseManager.saveSessions(sessionsToStore)
             log.info("Persisted sessions: $sessionsToStore")
         }
     }

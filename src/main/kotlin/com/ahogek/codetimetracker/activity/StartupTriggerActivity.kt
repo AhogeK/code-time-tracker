@@ -1,5 +1,6 @@
 package com.ahogek.codetimetracker.activity
 
+import com.ahogek.codetimetracker.database.DatabaseManager
 import com.ahogek.codetimetracker.service.GlobalEventMonitorService
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
@@ -15,5 +16,10 @@ class StartupTriggerActivity : ProjectActivity {
         val service = ApplicationManager.getApplication()
             .getService(GlobalEventMonitorService::class.java)
         service.initializeListeners()
+
+        // By referencing the DatabaseManager singleton object here, we trigger its `init` block.
+        // This ensures the database is checked and ready right at startup.
+        // This code runs on a background thread, so it won't block the UI.
+        DatabaseManager.initialize()
     }
 }
