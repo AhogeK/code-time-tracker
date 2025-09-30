@@ -134,7 +134,12 @@ class TimeTrackerService : Disposable {
     }
 
     override fun dispose() {
+        // First, stop the tracker, which submits the final data to be saved.
         stopTracking()
+
+        // Then, explicitly tell the DatabaseManager to shut down and wait for
+        //      all pending tasks (including the final one) to complete.
+        DatabaseManager.shutdown()
         log.info("TimeTrackerService disposed.")
     }
 }

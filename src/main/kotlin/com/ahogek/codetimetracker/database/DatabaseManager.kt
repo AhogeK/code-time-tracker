@@ -8,6 +8,8 @@ import java.sql.DriverManager
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * Manages all database operations, including connection, table creation,
@@ -21,6 +23,9 @@ object DatabaseManager {
     private val log = Logger.getInstance(DatabaseManager::class.java)
     private val dbUrl: String
     private val dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+
+    // This executor will handle all database write operations sequentially on a background thread
+    private val databaseExecutor = Executors.newSingleThreadExecutor()
 
     init {
         try {
@@ -41,7 +46,9 @@ object DatabaseManager {
         dbFile.parentFile.mkdirs()
         dbUrl = "jdbc:sqlite:${dbFile.absolutePath}"
         log.info("Database initialized at official shared location: $dbUrl")
-        createTableIfNotExists()
+        databaseExecutor.execute {
+            createTableIfNotExists()
+        }
     }
 
     /**
@@ -107,38 +114,62 @@ object DatabaseManager {
     fun saveSessions(sessions: List<CodingSession>) {
         if (sessions.isEmpty()) return
 
-        val sql = """
-        INSERT INTO coding_sessions(
-            session_uuid, user_id, project_name, project_path, language, platform,
-            start_time, end_time, last_modified
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """
+        databaseExecutor.execute {
+            val sql = """
+            INSERT INTO coding_sessions(
+                session_uuid, user_id, project_name, project_path, language, platform,
+                start_time, end_time, last_modified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """
 
-        try {
-            DriverManager.getConnection(dbUrl).use { conn ->
-                conn.autoCommit = false // Use a transaction for batch inserts
-                val pstmt = conn.prepareStatement(sql)
-                val currentTimestamp = dateTimeFormatter.format(LocalDateTime.now())
-                val userId = UserManager.getUserId()
+            try {
+                DriverManager.getConnection(dbUrl).use { conn ->
+                    conn.autoCommit = false // Use a transaction for batch inserts
+                    val pstmt = conn.prepareStatement(sql)
+                    val currentTimestamp = dateTimeFormatter.format(LocalDateTime.now())
+                    val userId = UserManager.getUserId()
 
-                for (session in sessions) {
-                    pstmt.setString(1, UUID.randomUUID().toString())
-                    pstmt.setString(2, userId)
-                    pstmt.setString(3, session.projectName)
-                    pstmt.setString(4, session.projectPath)
-                    pstmt.setString(5, session.language)
-                    pstmt.setString(6, session.platform)
-                    pstmt.setString(7, dateTimeFormatter.format(session.startTime))
-                    pstmt.setString(8, dateTimeFormatter.format(session.endTime))
-                    pstmt.setString(9, currentTimestamp)
-                    pstmt.addBatch()
+                    for (session in sessions) {
+                        pstmt.setString(1, UUID.randomUUID().toString())
+                        pstmt.setString(2, userId)
+                        pstmt.setString(3, session.projectName)
+                        pstmt.setString(4, session.projectPath)
+                        pstmt.setString(5, session.language)
+                        pstmt.setString(6, session.platform)
+                        pstmt.setString(7, dateTimeFormatter.format(session.startTime))
+                        pstmt.setString(8, dateTimeFormatter.format(session.endTime))
+                        pstmt.setString(9, currentTimestamp)
+                        pstmt.addBatch()
+                    }
+                    pstmt.executeBatch()
+                    conn.commit()
+                    log.info("Successfully saved ${sessions.size} sessions to the database.")
                 }
-                pstmt.executeBatch()
-                conn.commit()
-                log.info("Successfully saved ${sessions.size} sessions to the database.")
+            } catch (e: Exception) {
+                log.error("Failed to save sessions to the database.", e)
             }
-        } catch (e: Exception) {
-            log.error("Failed to save sessions to the database.", e)
         }
+    }
+
+    /**
+     * Shuts down the database executor gracefully
+     * It stops accepting new tasks and waits for pending tasks to complete
+     */
+    fun shutdown() {
+        log.info("Shutting down DatabaseManager...")
+        // Prevent new tasks from being submitted
+        databaseExecutor.shutdown()
+        try {
+            // Wait a maximum of 5 seconds for existing tasks to terminate
+            if (!databaseExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                log.warn("Database executor did not terminate in the specified time.")
+                // Forcibly shut down if tasks are still running
+                databaseExecutor.shutdownNow()
+            }
+        } catch (e: InterruptedException) {
+            log.warn("Database shutdown was interrupted.", e)
+            databaseExecutor.shutdownNow()
+        }
+        log.info("DatabaseManager has been shut down.")
     }
 }
