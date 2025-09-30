@@ -12,14 +12,12 @@ import com.intellij.openapi.startup.ProjectActivity
  */
 class StartupTriggerActivity : ProjectActivity {
     override suspend fun execute(project: Project) {
-        // Get the service singleton and call its initialization method
+        // Initialize the database manager to ensure the DB file and tables are ready.
+        DatabaseManager.initialize()
+
+        // Initialize the event listeners.
         val service = ApplicationManager.getApplication()
             .getService(GlobalEventMonitorService::class.java)
         service.initializeListeners()
-
-        // By referencing the DatabaseManager singleton object here, we trigger its `init` block.
-        // This ensures the database is checked and ready right at startup.
-        // This code runs on a background thread, so it won't block the UI.
-        DatabaseManager.initialize()
     }
 }

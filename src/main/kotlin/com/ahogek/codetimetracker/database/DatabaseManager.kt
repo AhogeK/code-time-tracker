@@ -172,4 +172,25 @@ object DatabaseManager {
         }
         log.info("DatabaseManager has been shut down.")
     }
+
+    /**
+     * Fetched the user ID from the database, if not exists.
+     * It assumes all records in the database belong to the same user.
+     *
+     * @return The user ID string found in the database, or null if the database is empty.
+     */
+    fun getUserIdFromDatabase(): String? {
+        val sql = "SELECT user_id FROM coding_sessions LIMIT 1"
+        return try {
+            DriverManager.getConnection(dbUrl).use { conn ->
+                conn.createStatement().executeQuery(sql).use { rs ->
+                    if (rs.next()) rs.getString("user_id")
+                    else null // Database is empty
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get user ID from database.", e)
+            null
+        }
+    }
 }
