@@ -82,7 +82,7 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
         val hours = duration.toHours()
         val minutes = duration.toMinutesPart()
         val seconds = duration.toSecondsPart()
-        return String.format("Code Time: %d:%02d:%02d", hours, minutes, seconds)
+        return String.format("Code Time: %02d:%02d:%02d", hours, minutes, seconds)
     }
 
     override fun getAlignment(): Float {
