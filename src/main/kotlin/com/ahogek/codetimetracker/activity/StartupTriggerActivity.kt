@@ -2,6 +2,7 @@ package com.ahogek.codetimetracker.activity
 
 import com.ahogek.codetimetracker.database.DatabaseManager
 import com.ahogek.codetimetracker.service.GlobalEventMonitorService
+import com.ahogek.codetimetracker.topics.AppLifecycleTopics
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.startup.ProjectActivity
@@ -19,5 +20,9 @@ class StartupTriggerActivity : ProjectActivity {
         val service = ApplicationManager.getApplication()
             .getService(GlobalEventMonitorService::class.java)
         service.initializeListeners()
+
+        ApplicationManager.getApplication().messageBus
+            .syncPublisher(AppLifecycleTopics.APP_LIFECYCLE_TOPIC)
+            .onAppReady()
     }
 }

@@ -1,6 +1,8 @@
 package com.ahogek.codetimetracker.widget
 
 import com.ahogek.codetimetracker.database.DatabaseManager
+import com.ahogek.codetimetracker.topics.AppLifecycleListener
+import com.ahogek.codetimetracker.topics.AppLifecycleTopics
 import com.ahogek.codetimetracker.topics.TimeTrackerListener
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
 import com.intellij.openapi.application.ApplicationManager
@@ -35,20 +37,24 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
-        // Initial data fetch from database
-        null.updateTotalTimeFromDatabase()
+        val messageBus = ApplicationManager.getApplication().messageBus.connect(this)
+
+        messageBus.subscribe(AppLifecycleTopics.APP_LIFECYCLE_TOPIC, object : AppLifecycleListener {
+            override fun onAppReady() {
+                null.updateTotalTimeFromDatabase()
+            }
+        })
 
         // Subscribe to activity events
-        val connection = ApplicationManager.getApplication().messageBus.connect(this)
-        connection.subscribe(TimeTrackerTopics.ACTIVITY_TOPIC, object : TimeTrackerListener {
+        messageBus.subscribe(TimeTrackerTopics.ACTIVITY_TOPIC, object : TimeTrackerListener {
             override fun onActivityStarted() {
                 startTicker()
             }
 
             override fun onActivityStopped() {
                 stopTicker()
-                // After stopping, refresh with the precise value from the DB
                 val tickerStoppedValue = totalDuration.get()
+                // 修正语法错误
                 tickerStoppedValue.updateTotalTimeFromDatabase()
             }
         })
