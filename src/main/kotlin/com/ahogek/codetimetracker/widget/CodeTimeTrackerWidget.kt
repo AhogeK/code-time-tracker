@@ -41,7 +41,6 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
     private val totalDuration = AtomicReference(readCachedDuration())
     private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
     private val isInitialized = AtomicBoolean(false)
-    private val pendingStartTicker = AtomicBoolean(false)
 
     private var statusBar: StatusBar? = null
     private var tickerTask: ScheduledFuture<*>? = null
@@ -52,7 +51,6 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
         isInitialized.set(false)
-        pendingStartTicker.set(false)
         val connection = ApplicationManager.getApplication().messageBus.connect(this)
 
         updateTotalTimeFromDatabase {
@@ -60,8 +58,7 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
 
             val lastActivity = timeTrackerService.getLastActivityTime()
             val secondsSinceLastActivity = ChronoUnit.SECONDS.between(lastActivity, LocalDateTime.now())
-
-            if (pendingStartTicker.get() || secondsSinceLastActivity < 5L) {
+            if (secondsSinceLastActivity < 5L) {
                 startTicker()
             }
         }
@@ -70,8 +67,6 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
             override fun onActivityStarted() {
                 if (isInitialized.get()) {
                     startTicker()
-                } else {
-                    pendingStartTicker.set(true)
                 }
             }
 
