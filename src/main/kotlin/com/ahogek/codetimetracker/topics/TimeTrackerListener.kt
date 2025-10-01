@@ -26,19 +26,3 @@ object TimeTrackerTopics {
     val ACTIVITY_TOPIC: Topic<TimeTrackerListener> =
         Topic.create("Code Time Tracker Activity", TimeTrackerListener::class.java)
 }
-
-/**
- * Listener for application lifecycle events within the plugin
- */
-interface AppLifecycleListener {
-
-    /**
-     * Called when all essential services for the plugin have been initialized
-     */
-    fun onAppReady()
-}
-
-object AppLifecycleTopics {
-    val APP_LIFECYCLE_TOPIC: Topic<AppLifecycleListener> =
-        Topic.create("Code Time Tracker App Lifecycle", AppLifecycleListener::class.java)
-}

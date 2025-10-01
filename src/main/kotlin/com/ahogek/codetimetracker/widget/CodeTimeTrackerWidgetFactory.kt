@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.widget
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.util.NlsContexts
 import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
@@ -20,7 +21,7 @@ class CodeTimeTrackerWidgetFactory : StatusBarWidgetFactory {
     override fun createWidget(project: Project): StatusBarWidget = CodeTimeTrackerWidget()
 
     override fun disposeWidget(widget: StatusBarWidget) {
-        // Dispose of the widget if needed
+        Disposer.dispose(widget)
     }
 
     override fun canBeEnabledOn(statusBar: com.intellij.openapi.wm.StatusBar): Boolean = true

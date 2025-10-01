@@ -26,9 +26,8 @@
         <postStartupActivity implementation="com.ahogek.codetimetracker.activity.StartupTriggerActivity"/>
 
         <statusBarWidgetFactory
-                id="CodeTimeTrackerWidgetFactory"
-                implementation="com.ahogek.codetimetracker.widget.CodeTimeTrackerWidgetFactory"
-                order="last"/>
+                id="CodeTimeTrackerWidget"
+                implementation="com.ahogek.codetimetracker.widget.CodeTimeTrackerWidgetFactory"/>
     </extensions>
 
     <applicationListeners>

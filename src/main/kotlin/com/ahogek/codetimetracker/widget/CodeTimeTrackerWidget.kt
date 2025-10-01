@@ -1,10 +1,10 @@
 package com.ahogek.codetimetracker.widget
 
 import com.ahogek.codetimetracker.database.DatabaseManager
-import com.ahogek.codetimetracker.topics.AppLifecycleListener
-import com.ahogek.codetimetracker.topics.AppLifecycleTopics
+import com.ahogek.codetimetracker.service.TimeTrackerService
 import com.ahogek.codetimetracker.topics.TimeTrackerListener
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
+import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.util.NlsContexts
 import com.intellij.openapi.wm.StatusBar
@@ -12,11 +12,22 @@ import com.intellij.openapi.wm.StatusBarWidget
 import org.jetbrains.annotations.NonNls
 import java.awt.Component
 import java.time.Duration
+import java.time.LocalDateTime
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
+
+private const val CACHED_TOTAL_SECONDS_KEY = "com.ahogek.codetimetracker.cachedTotalSeconds"
+
+private fun readCachedDuration(): Duration {
+    val secondsStr = PropertiesComponent.getInstance().getValue(CACHED_TOTAL_SECONDS_KEY, "0")
+    val seconds = secondsStr.toLongOrNull() ?: 0L
+    return Duration.ofSeconds(seconds)
+}
 
 /**
  * @author AhogeK ahogek@gmail.com
@@ -27,7 +38,10 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
 
     // Use AtomicReference to ensure thread-safe updates to the duration
-    private val totalDuration = AtomicReference(Duration.ZERO)
+    private val totalDuration = AtomicReference(readCachedDuration())
+    private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
+    private val isInitialized = AtomicBoolean(false)
+    private val pendingStartTicker = AtomicBoolean(false)
 
     private var statusBar: StatusBar? = null
     private var tickerTask: ScheduledFuture<*>? = null
@@ -37,25 +51,33 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
-        val messageBus = ApplicationManager.getApplication().messageBus.connect(this)
+        isInitialized.set(false)
+        pendingStartTicker.set(false)
+        val connection = ApplicationManager.getApplication().messageBus.connect(this)
 
-        messageBus.subscribe(AppLifecycleTopics.APP_LIFECYCLE_TOPIC, object : AppLifecycleListener {
-            override fun onAppReady() {
-                null.updateTotalTimeFromDatabase()
-            }
-        })
+        updateTotalTimeFromDatabase {
+            isInitialized.set(true)
 
-        // Subscribe to activity events
-        messageBus.subscribe(TimeTrackerTopics.ACTIVITY_TOPIC, object : TimeTrackerListener {
-            override fun onActivityStarted() {
+            val lastActivity = timeTrackerService.getLastActivityTime()
+            val secondsSinceLastActivity = ChronoUnit.SECONDS.between(lastActivity, LocalDateTime.now())
+
+            if (pendingStartTicker.get() || secondsSinceLastActivity < 5L) {
                 startTicker()
+            }
+        }
+
+        connection.subscribe(TimeTrackerTopics.ACTIVITY_TOPIC, object : TimeTrackerListener {
+            override fun onActivityStarted() {
+                if (isInitialized.get()) {
+                    startTicker()
+                } else {
+                    pendingStartTicker.set(true)
+                }
             }
 
             override fun onActivityStopped() {
                 stopTicker()
-                val tickerStoppedValue = totalDuration.get()
-                // 修正语法错误
-                tickerStoppedValue.updateTotalTimeFromDatabase()
+                updateTotalTimeFromDatabase()
             }
         })
     }
@@ -87,28 +109,34 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.TextPresentation 
 
     private fun stopTicker() {
         tickerTask?.cancel(false)
+        tickerTask = null
     }
 
-    private fun Duration?.updateTotalTimeFromDatabase() {
+    private fun updateTotalTimeFromDatabase(onComplete: (() -> Unit)? = null) {
         ApplicationManager.getApplication().executeOnPooledThread {
             val dbValue = DatabaseManager.getTotalCodingTime()
+            val currentWidgetValue = totalDuration.get()
 
-            // If a baseline is provided, ensure the new value is not less than it.
-            val finalDuration = this?.let {
-                if (dbValue > it) dbValue else it
-            } ?: dbValue
+            val finalDuration = if (dbValue > currentWidgetValue) dbValue else currentWidgetValue
 
-            // Switch back to the UI thread to update the widget
             ApplicationManager.getApplication().invokeLater {
                 totalDuration.set(finalDuration)
+                PropertiesComponent.getInstance()
+                    .setValue(CACHED_TOTAL_SECONDS_KEY, finalDuration.toSeconds().toString())
                 statusBar?.updateWidget(ID())
+                onComplete?.invoke()
             }
         }
     }
 
     override fun dispose() {
         stopTicker()
-        scheduler.shutdown()
+        val currentSeconds = totalDuration.get().toSeconds()
+        PropertiesComponent.getInstance().setValue(CACHED_TOTAL_SECONDS_KEY, currentSeconds.toString())
+
+        if (!scheduler.isShutdown) {
+            scheduler.shutdown()
+        }
     }
 }
 

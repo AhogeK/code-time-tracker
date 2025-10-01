@@ -33,9 +33,13 @@ class TimeTrackerService : Disposable {
     private val log = Logger.getInstance(TimeTrackerService::class.java)
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val activeSessions: MutableMap<String, MutableMap<String, CodingSession>> = ConcurrentHashMap()
-    private val lastActivityTime: AtomicReference<LocalDateTime> = AtomicReference(LocalDateTime.now())
+    private val lastActivityTime: AtomicReference<LocalDateTime> = AtomicReference(LocalDateTime.now().minusHours(1))
     private val platform: String = "${SystemInfo.OS_NAME} | ${SystemInfo.OS_VERSION} | ${SystemInfo.OS_ARCH}"
     private val isUserActive = AtomicBoolean(false)
+
+    fun getLastActivityTime(): LocalDateTime {
+        return lastActivityTime.get()
+    }
 
     init {
         log.info("TimeTrackerService initialized on platform: $platform")
