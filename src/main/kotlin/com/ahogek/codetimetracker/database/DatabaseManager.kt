@@ -2,9 +2,11 @@ package com.ahogek.codetimetracker.database
 
 import com.ahogek.codetimetracker.model.CodingSession
 import com.ahogek.codetimetracker.user.UserManager
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
 import java.sql.DriverManager
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -111,8 +113,11 @@ object DatabaseManager {
         }
     }
 
-    fun saveSessions(sessions: List<CodingSession>) {
-        if (sessions.isEmpty()) return
+    fun saveSessions(sessions: List<CodingSession>, onComplete: () -> Unit) {
+        if (sessions.isEmpty()) {
+            onComplete()
+            return
+        }
 
         databaseExecutor.execute {
             val sql = """
@@ -147,6 +152,10 @@ object DatabaseManager {
                 }
             } catch (e: Exception) {
                 log.error("Failed to save sessions to the database.", e)
+            } finally {
+                ApplicationManager.getApplication().invokeLater {
+                    onComplete()
+                }
             }
         }
     }
@@ -192,5 +201,32 @@ object DatabaseManager {
             log.error("Failed to get user ID from database.", e)
             null
         }
+    }
+
+    /**
+     * Efficiently retrieves and calculates the total encoding duration from the database.
+     * This method leverages SQL's SUM and strftime functions, offloading the calculation
+     * entirely to the database and avoiding extensive data processing on the client side.
+     *
+     * @return The total duration of all encoding activities (Duration).
+     */
+    fun getTotalCodingTime(): Duration {
+        // Uses strftime('%s', column) to convert the time string into a Unix timestamp (seconds).
+        // Then, it subtracts to get the number of seconds for each session, and finally uses the SUM() function to get the total.
+        val sql =
+            "SELECT SUM(strftime('%s', end_time) - strftime('%s', start_time)) FROM coding_sessions WHERE is_deleted = 0"
+        var totalSeconds = 0L
+        try {
+            DriverManager.getConnection(dbUrl).use { conn ->
+                conn.createStatement().executeQuery(sql).use { rs ->
+                    if (rs.next()) {
+                        totalSeconds = rs.getLong(1)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get total coding time from database.", e)
+        }
+        return Duration.ofSeconds(totalSeconds)
     }
 }

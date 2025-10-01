@@ -24,6 +24,11 @@
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-extension-points.html -->
     <extensions defaultExtensionNs="com.intellij">
         <postStartupActivity implementation="com.ahogek.codetimetracker.activity.StartupTriggerActivity"/>
+
+        <statusBarWidgetFactory
+                id="CodeTimeTrackerWidgetFactory"
+                implementation="com.ahogek.codetimetracker.widget.CodeTimeTrackerWidgetFactory"
+                order="last"/>
     </extensions>
 
     <applicationListeners>

@@ -2,6 +2,7 @@ package com.ahogek.codetimetracker.service
 
 import com.ahogek.codetimetracker.database.DatabaseManager
 import com.ahogek.codetimetracker.model.CodingSession
+import com.ahogek.codetimetracker.topics.TimeTrackerTopics
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
@@ -15,9 +16,10 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-private const val IDLE_THRESHOLD_SECONDS = 120L
+private const val IDLE_THRESHOLD_SECONDS = 30L
 private const val IDLE_CHECK_INTERVAL_SECONDS = 5L
 
 /**
@@ -33,6 +35,7 @@ class TimeTrackerService : Disposable {
     private val activeSessions: MutableMap<String, MutableMap<String, CodingSession>> = ConcurrentHashMap()
     private val lastActivityTime: AtomicReference<LocalDateTime> = AtomicReference(LocalDateTime.now())
     private val platform: String = "${SystemInfo.OS_NAME} | ${SystemInfo.OS_VERSION} | ${SystemInfo.OS_ARCH}"
+    private val isUserActive = AtomicBoolean(false)
 
     init {
         log.info("TimeTrackerService initialized on platform: $platform")
@@ -62,6 +65,14 @@ class TimeTrackerService : Disposable {
         // Update the last activity timestamp.
         lastActivityTime.set(now)
 
+        // If the user was previously inactive, fire the "started" event
+        if (isUserActive.compareAndSet(false, true)) {
+            log.info("User activity started.")
+            ApplicationManager.getApplication().messageBus
+                .syncPublisher(TimeTrackerTopics.ACTIVITY_TOPIC)
+                .onActivityStarted()
+        }
+
         // Get or create the session map for the current project.
         val projectSessions = activeSessions.computeIfAbsent(projectPath) {
             ConcurrentHashMap()
@@ -71,7 +82,7 @@ class TimeTrackerService : Disposable {
         val activeLanguage = projectSessions.keys.firstOrNull()
         if (activeLanguage != null && activeLanguage != currentLanguage) {
             log.info("[$projectName] Language switch detected: $activeLanguage -> $currentLanguage.")
-            pauseAndPersistSessions() // This will clear all sessions, which is correct for a switch.
+            pauseAndPersistSessions(now) // This will clear all sessions, which is correct for a switch.
         }
 
         // Start a new session or update the end time of the existing one.
@@ -93,8 +104,16 @@ class TimeTrackerService : Disposable {
         // If idle threshold is met and there are any active sessions in any project.
         if (idleSeconds >= IDLE_THRESHOLD_SECONDS && activeSessions.any { it.value.isNotEmpty() }) {
             log.info("User has been idle for over $IDLE_THRESHOLD_SECONDS seconds. Pausing all tracking sessions.")
+            val sessionEndTime = lastActivity.plusSeconds(IDLE_THRESHOLD_SECONDS)
             ApplicationManager.getApplication().invokeLater {
-                pauseAndPersistSessions()
+                val onSaveCompleteCallback = {
+                    if (isUserActive.compareAndSet(true, false)) {
+                        ApplicationManager.getApplication().messageBus
+                            .syncPublisher(TimeTrackerTopics.ACTIVITY_TOPIC)
+                            .onActivityStopped()
+                    }
+                }
+                pauseAndPersistSessions(sessionEndTime, onSaveCompleteCallback)
             }
         }
     }
@@ -102,21 +121,30 @@ class TimeTrackerService : Disposable {
     /**
      * Pause and persist all currently active sessions
      */
-    private fun pauseAndPersistSessions() {
+    private fun pauseAndPersistSessions(finalEndTime: LocalDateTime, onSaveComplete: () -> Unit = {}) {
         if (activeSessions.isNotEmpty()) {
             val sessionsToStore = mutableListOf<CodingSession>()
+
             activeSessions.values.forEach { projectSessions ->
-                sessionsToStore.addAll(projectSessions.values)
+                projectSessions.values.forEach { session ->
+                    session.endTime = finalEndTime
+                    sessionsToStore.add(session)
+                }
             }
 
-            if (sessionsToStore.isEmpty()) return
+            if (sessionsToStore.isEmpty()) {
+                onSaveComplete()
+                return
+            }
 
             log.info("Pausing tracking for: ${sessionsToStore.joinToString { "[${it.projectName}] ${it.language}" }}")
             // Clear all active sessions.
             activeSessions.clear()
 
-            DatabaseManager.saveSessions(sessionsToStore)
-            log.info("Persisted sessions: $sessionsToStore")
+            DatabaseManager.saveSessions(sessionsToStore, onSaveComplete)
+            log.info("Persisted sessions task submitted for: $sessionsToStore")
+        } else {
+            onSaveComplete()
         }
     }
 
@@ -130,7 +158,7 @@ class TimeTrackerService : Disposable {
         if (!scheduler.isShutdown) {
             scheduler.shutdown()
         }
-        pauseAndPersistSessions()
+        pauseAndPersistSessions(LocalDateTime.now())
     }
 
     override fun dispose() {
