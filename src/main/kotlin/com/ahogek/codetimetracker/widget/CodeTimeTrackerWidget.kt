@@ -8,13 +8,16 @@ import com.intellij.icons.AllIcons
 import com.intellij.ide.util.PropertiesComponent
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.ui.popup.JBPopupFactory
-import com.intellij.openapi.util.NlsContexts
+import com.intellij.openapi.wm.CustomStatusBarWidget
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
-import com.intellij.util.Consumer
+import com.intellij.ui.awt.RelativePoint
 import com.intellij.util.ui.EmptyIcon
+import com.intellij.util.ui.JBUI
 import org.jetbrains.annotations.NonNls
 import java.awt.Component
+import java.awt.Point
+import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
 import java.time.Duration
 import java.time.LocalDateTime
@@ -42,7 +45,7 @@ private fun readCachedDuration(): Duration {
  * @author AhogeK ahogek@gmail.com
  * @since 2025-10-01 03:46:29
  */
-class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.MultipleTextValuesPresentation, Consumer<MouseEvent> {
+class CodeTimeTrackerWidget : StatusBarWidget, CustomStatusBarWidget {
 
     private enum class TimePeriod(val displayName: String) {
         TOTAL("Total"),
@@ -67,22 +70,34 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.MultipleTextValue
     private var selectedPeriod: TimePeriod =
         TimePeriod.fromString(PropertiesComponent.getInstance().getValue(SELECTED_PERIOD_KEY))
 
+    private val label = JLabel()
+
     override fun ID(): @NonNls String = "CodeTimeTrackerWidget"
 
-    override fun getPresentation(): StatusBarWidget.WidgetPresentation = this
+    override fun getComponent(): JComponent = label
 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
 
-        // Smart Initialization:
-        // Instantly show the cached value for "Total" to avoid any perceived loading.
-        // For other periods, start with a default of ZERO.
-        displayDuration.set(if (selectedPeriod == TimePeriod.TOTAL) readCachedDuration() else Duration.ZERO)
+        label.addMouseListener(object : MouseAdapter() {
+            override fun mouseClicked(e: MouseEvent) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    val popup = createPopup()
+                    val dimension = popup.content.preferredSize
+                    val at = Point(
+                        label.width - dimension.width,
+                        -dimension.height
+                    )
+                    popup.show(RelativePoint(label, at))
+                }
+            }
+        })
+        label.toolTipText = "Click to change tracked time period"
+        label.border = JBUI.Borders.empty(0, 6)
 
-        // Always trigger a fresh database fetch on installation to ensure data is up-to-date.
+        displayDuration.set(if (selectedPeriod == TimePeriod.TOTAL) readCachedDuration() else Duration.ZERO)
         updateTimeFromDatabase()
 
-        // Subscribe to activity events to start/stop the live ticker.
         val connection = ApplicationManager.getApplication().messageBus.connect(this)
         connection.subscribe(TimeTrackerTopics.ACTIVITY_TOPIC, object : TimeTrackerListener {
             override fun onActivityStarted() = startTicker()
@@ -92,14 +107,13 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.MultipleTextValue
             }
         })
 
-        // Check if user was already active on startup.
         val lastActivity = timeTrackerService.getLastActivityTime()
         if (ChronoUnit.SECONDS.between(lastActivity, LocalDateTime.now()) < 5L) {
             startTicker()
         }
     }
 
-    override fun getPopup() = JBPopupFactory.getInstance()
+    private fun createPopup() = JBPopupFactory.getInstance()
         .createPopupChooserBuilder(TimePeriod.entries.map { it.displayName })
         .setTitle("Select Time Period")
         .setRenderer(object : DefaultListCellRenderer() {
@@ -132,36 +146,30 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.MultipleTextValue
             if (selectedPeriod != newPeriod) {
                 selectedPeriod = newPeriod
                 PropertiesComponent.getInstance().setValue(SELECTED_PERIOD_KEY, newPeriod.name)
-                // Set to a default value and immediately request new data from DB.
                 displayDuration.set(Duration.ZERO)
                 updateTimeFromDatabase()
             }
         }
         .createPopup()
 
-    override fun getSelectedValue(): @NlsContexts.StatusBarText String {
-        // If the duration is null (which happens briefly during state transitions) or
-        // if the database returns no data, we default to Duration.ZERO.
-        // This ensures the UI always shows "00:00:00" instead of an error or loading text.
+    private fun updateLabelText() {
         val currentDuration = displayDuration.get() ?: Duration.ZERO
         val prefix = selectedPeriod.displayName
 
         val hours = currentDuration.toHours()
         val minutes = currentDuration.toMinutesPart()
         val seconds = currentDuration.toSecondsPart()
-        return String.format("%s: %02d:%02d:%02d", prefix, hours, minutes, seconds)
+        label.text = String.format("%s: %02d:%02d:%02d", prefix, hours, minutes, seconds)
     }
-
-    override fun getTooltipText(): @NlsContexts.Tooltip String = "Click to change tracked time period"
-
-    override fun getClickConsumer(): Consumer<MouseEvent> = this
 
     private fun startTicker() {
         if (tickerTask == null || tickerTask!!.isDone) {
             tickerTask = scheduler.scheduleAtFixedRate({
-                // The ticker only increments the duration if it's in a valid (non-loading) state.
                 displayDuration.getAndUpdate { it?.plusSeconds(1) }
-                statusBar?.updateWidget(ID())
+                // 直接在 UI 线程更新 label
+                ApplicationManager.getApplication().invokeLater {
+                    updateLabelText()
+                }
             }, 1, 1, TimeUnit.SECONDS)
         }
     }
@@ -173,7 +181,7 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.MultipleTextValue
 
     private fun updateTimeFromDatabase() {
         // Immediately update UI with the current state (which might be 00:00:00).
-        statusBar?.updateWidget(ID())
+        updateLabelText()
 
         ApplicationManager.getApplication().executeOnPooledThread {
             val now = LocalDateTime.now()
@@ -205,7 +213,7 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.MultipleTextValue
                 if (selectedPeriod == TimePeriod.TOTAL) {
                     PropertiesComponent.getInstance().setValue(CACHED_TOTAL_SECONDS_KEY, dbValue.toSeconds().toString())
                 }
-                statusBar?.updateWidget(ID())
+                updateLabelText()
             }
         }
     }
@@ -222,8 +230,5 @@ class CodeTimeTrackerWidget : StatusBarWidget, StatusBarWidget.MultipleTextValue
             scheduler.shutdown()
         }
     }
-
-    // This method is required by the interface, even if empty.
-    override fun consume(t: MouseEvent?) {}
 }
 
