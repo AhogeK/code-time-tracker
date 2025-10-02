@@ -208,19 +208,24 @@ object DatabaseManager {
      * This method leverages SQL's SUM and strftime functions, offloading the calculation
      * entirely to the database and avoiding extensive data processing on the client side.
      *
+     * @param projectName Optional project name to filter by
      * @return The total duration of all encoding activities (Duration).
      */
-    fun getTotalCodingTime(): Duration {
+    fun getTotalCodingTime(projectName: String? = null): Duration {
         // Uses strftime('%s', column) to convert the time string into a Unix timestamp (seconds).
         // Then, it subtracts to get the number of seconds for each session, and finally uses the SUM() function to get the total.
-        val sql =
+        val baseSql =
             "SELECT SUM(strftime('%s', end_time) - strftime('%s', start_time)) FROM coding_sessions WHERE is_deleted = 0"
+        val sql = if (projectName != null) "$baseSql AND project_name = ?" else baseSql
         var totalSeconds = 0L
         try {
             DriverManager.getConnection(dbUrl).use { conn ->
-                conn.createStatement().executeQuery(sql).use { rs ->
-                    if (rs.next()) {
-                        totalSeconds = rs.getLong(1)
+                conn.prepareStatement(sql).use { pstmt ->
+                    projectName?.let { pstmt.setString(1, it) }
+                    pstmt.executeQuery().use { rs ->
+                        if (rs.next()) {
+                            totalSeconds = rs.getLong(1)
+                        }
                     }
                 }
             }
@@ -236,15 +241,21 @@ object DatabaseManager {
      *
      * @param startTime The beginning of the time period (inclusive)
      * @param endTime The end of the time period (exclusive)
+     * @param projectName Optional project name to filter by.
      * @return The total duration of coding activities within the specified range
      */
-    fun getCodingTimeForPeriod(startTime: LocalDateTime, endTime: LocalDateTime): Duration {
+    fun getCodingTimeForPeriod(
+        startTime: LocalDateTime,
+        endTime: LocalDateTime,
+        projectName: String? = null
+    ): Duration {
         // The SQL query now includes a WHERE clause to filter sessions based on their start time.
-        val sql = """
+        val baseSql = """
         SELECT SUM(strftime('%s', end_time) - strftime('%s', start_time))
         FROM coding_sessions
         WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
         """
+        val sql = if (projectName != null) "$baseSql AND project_name = ?" else baseSql
         var totalSeconds = 0L
         try {
             DriverManager.getConnection(dbUrl).use { conn ->
@@ -252,6 +263,7 @@ object DatabaseManager {
                     // Set the start and end time parameters in the query.
                     pstmt.setString(1, dateTimeFormatter.format(startTime))
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    projectName?.let { pstmt.setString(3, it) }
                     pstmt.executeQuery().use { rs ->
                         if (rs.next()) {
                             totalSeconds = rs.getLong(1)

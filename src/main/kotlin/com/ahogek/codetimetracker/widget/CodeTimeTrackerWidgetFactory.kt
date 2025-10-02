@@ -19,7 +19,7 @@ class CodeTimeTrackerWidgetFactory : StatusBarWidgetFactory {
 
     override fun isAvailable(project: Project): Boolean = true
 
-    override fun createWidget(project: Project): StatusBarWidget = CodeTimeTrackerWidget()
+    override fun createWidget(project: Project): StatusBarWidget = CodeTimeTrackerWidget(project)
 
     override fun disposeWidget(widget: StatusBarWidget) {
         Disposer.dispose(widget)

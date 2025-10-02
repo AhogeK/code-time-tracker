@@ -5,8 +5,12 @@ import com.ahogek.codetimetracker.service.TimeTrackerService
 import com.ahogek.codetimetracker.topics.TimeTrackerListener
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
 import com.intellij.icons.AllIcons
+import com.intellij.ide.DataManager
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
 import com.intellij.openapi.wm.CustomStatusBarWidget
 import com.intellij.openapi.wm.StatusBar
@@ -15,7 +19,6 @@ import com.intellij.ui.awt.RelativePoint
 import com.intellij.util.ui.EmptyIcon
 import com.intellij.util.ui.JBUI
 import org.jetbrains.annotations.NonNls
-import java.awt.Component
 import java.awt.Point
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
@@ -30,10 +33,13 @@ import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
-import javax.swing.*
+import javax.swing.JComponent
+import javax.swing.JLabel
+import javax.swing.SwingUtilities
 
 private const val CACHED_TOTAL_SECONDS_KEY = "com.ahogek.codetimetracker.cachedTotalSeconds"
 private const val SELECTED_PERIOD_KEY = "com.ahogek.codetimetracker.selectedPeriod"
+private const val TRACK_CURRENT_PROJECT_ONLY_KEY = "com.ahogek.codetimetracker.trackCurrentProjectOnly"
 
 private fun readCachedDuration(): Duration {
     val secondsStr = PropertiesComponent.getInstance().getValue(CACHED_TOTAL_SECONDS_KEY, "0")
@@ -45,7 +51,7 @@ private fun readCachedDuration(): Duration {
  * @author AhogeK ahogek@gmail.com
  * @since 2025-10-01 03:46:29
  */
-class CodeTimeTrackerWidget : StatusBarWidget, CustomStatusBarWidget {
+class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, CustomStatusBarWidget {
 
     private enum class TimePeriod(val displayName: String) {
         TOTAL("Total"),
@@ -61,14 +67,14 @@ class CodeTimeTrackerWidget : StatusBarWidget, CustomStatusBarWidget {
 
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
-
-    // A null value in this AtomicReference indicates that the data is currently being fetched.
     private val displayDuration = AtomicReference<Duration?>(null)
+
     private var tickerTask: ScheduledFuture<*>? = null
     private var statusBar: StatusBar? = null
-
     private var selectedPeriod: TimePeriod =
         TimePeriod.fromString(PropertiesComponent.getInstance().getValue(SELECTED_PERIOD_KEY))
+    private var trackCurrentProjectOnly: Boolean =
+        PropertiesComponent.getInstance().getBoolean(TRACK_CURRENT_PROJECT_ONLY_KEY, false)
 
     private val label = JLabel()
 
@@ -82,11 +88,16 @@ class CodeTimeTrackerWidget : StatusBarWidget, CustomStatusBarWidget {
         label.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
-                    val popup = createPopup()
+                    val popup = JBPopupFactory.getInstance().createActionGroupPopup(
+                        "Code Time Tracker",
+                        createActionGroup(),
+                        DataManager.getInstance().getDataContext(label),
+                        JBPopupFactory.ActionSelectionAid.MNEMONICS,
+                        false
+                    )
                     val dimension = popup.content.preferredSize
                     val at = Point(
-                        label.width - dimension.width,
-                        -dimension.height
+                        label.width - dimension.width, -dimension.height
                     )
                     popup.show(RelativePoint(label, at))
                 }
@@ -113,44 +124,46 @@ class CodeTimeTrackerWidget : StatusBarWidget, CustomStatusBarWidget {
         }
     }
 
-    private fun createPopup() = JBPopupFactory.getInstance()
-        .createPopupChooserBuilder(TimePeriod.entries.map { it.displayName })
-        .setTitle("Select Time Period")
-        .setRenderer(object : DefaultListCellRenderer() {
-            private val checkIcon: Icon = AllIcons.Actions.Checked
-            private val spacerIcon: Icon = EmptyIcon.create(checkIcon)
+    private fun createActionGroup(): ActionGroup {
+        val group = DefaultActionGroup()
 
-            override fun getListCellRendererComponent(
-                list: JList<*>?,
-                value: Any?,
-                index: Int,
-                isSelected: Boolean,
-                cellHasFocus: Boolean
-            ): Component {
-                val component =
-                    super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus) as JLabel
-                component.border = BorderFactory.createEmptyBorder(5, 12, 5, 12)
+        group.add(object : ToggleAction("Track Current Project Only"), DumbAware {
+            override fun isSelected(e: AnActionEvent): Boolean = trackCurrentProjectOnly
 
-                if (value == selectedPeriod.displayName) {
-                    component.icon = checkIcon
-                } else {
-                    component.icon = spacerIcon
-                }
-
-                component.iconTextGap = 10
-                return component
-            }
-        })
-        .setItemChosenCallback { selectedValue ->
-            val newPeriod = TimePeriod.entries.find { it.displayName == selectedValue } ?: return@setItemChosenCallback
-            if (selectedPeriod != newPeriod) {
-                selectedPeriod = newPeriod
-                PropertiesComponent.getInstance().setValue(SELECTED_PERIOD_KEY, newPeriod.name)
-                displayDuration.set(Duration.ZERO)
+            override fun setSelected(e: AnActionEvent, state: Boolean) {
+                trackCurrentProjectOnly = state
+                PropertiesComponent.getInstance().setValue(TRACK_CURRENT_PROJECT_ONLY_KEY, state)
                 updateTimeFromDatabase()
             }
+
+            override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+        })
+
+        group.add(Separator.getInstance())
+
+        TimePeriod.entries.forEach { period ->
+            group.add(object : AnAction(period.displayName), DumbAware {
+                override fun actionPerformed(e: AnActionEvent) {
+                    if (selectedPeriod != period) {
+                        selectedPeriod = period
+                        PropertiesComponent.getInstance().setValue(SELECTED_PERIOD_KEY, period.name)
+                        displayDuration.set(Duration.ZERO)
+                        updateTimeFromDatabase()
+                    }
+                }
+
+                override fun update(e: AnActionEvent) {
+                    val presentation = e.presentation
+                    presentation.icon =
+                        if (selectedPeriod == period) AllIcons.Actions.Checked else EmptyIcon.create(AllIcons.Actions.Checked)
+                }
+
+                override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
+            })
         }
-        .createPopup()
+
+        return group
+    }
 
     private fun updateLabelText() {
         val currentDuration = displayDuration.get() ?: Duration.ZERO
@@ -186,31 +199,34 @@ class CodeTimeTrackerWidget : StatusBarWidget, CustomStatusBarWidget {
         ApplicationManager.getApplication().executeOnPooledThread {
             val now = LocalDateTime.now()
             val startOfToday = now.with(LocalTime.MIN)
+            val projectName = if (trackCurrentProjectOnly) project.name else null
 
             val dbValue = when (selectedPeriod) {
-                TimePeriod.TOTAL -> DatabaseManager.getTotalCodingTime()
-                TimePeriod.TODAY -> DatabaseManager.getCodingTimeForPeriod(startOfToday, startOfToday.plusDays(1))
+                TimePeriod.TOTAL -> DatabaseManager.getTotalCodingTime(projectName)
+                TimePeriod.TODAY -> DatabaseManager.getCodingTimeForPeriod(
+                    startOfToday, startOfToday.plusDays(1), projectName
+                )
+
                 TimePeriod.THIS_WEEK -> {
                     val weekFields = WeekFields.of(Locale.getDefault())
                     val startOfWeek = startOfToday.with(weekFields.dayOfWeek(), 1L)
-                    DatabaseManager.getCodingTimeForPeriod(startOfWeek, startOfWeek.plusWeeks(1))
+                    DatabaseManager.getCodingTimeForPeriod(startOfWeek, startOfWeek.plusWeeks(1), projectName)
                 }
 
                 TimePeriod.THIS_MONTH -> {
                     val startOfMonth = startOfToday.withDayOfMonth(1)
-                    DatabaseManager.getCodingTimeForPeriod(startOfMonth, startOfMonth.plusMonths(1))
+                    DatabaseManager.getCodingTimeForPeriod(startOfMonth, startOfMonth.plusMonths(1), projectName)
                 }
 
                 TimePeriod.THIS_YEAR -> {
                     val startOfYear = startOfToday.withDayOfYear(1)
-                    DatabaseManager.getCodingTimeForPeriod(startOfYear, startOfYear.plusYears(1))
+                    DatabaseManager.getCodingTimeForPeriod(startOfYear, startOfYear.plusYears(1), projectName)
                 }
             }
 
             ApplicationManager.getApplication().invokeLater {
                 displayDuration.set(dbValue)
-                // If we've just fetched the total, update the cache.
-                if (selectedPeriod == TimePeriod.TOTAL) {
+                if (selectedPeriod == TimePeriod.TOTAL && !trackCurrentProjectOnly) {
                     PropertiesComponent.getInstance().setValue(CACHED_TOTAL_SECONDS_KEY, dbValue.toSeconds().toString())
                 }
                 updateLabelText()
@@ -221,7 +237,7 @@ class CodeTimeTrackerWidget : StatusBarWidget, CustomStatusBarWidget {
     override fun dispose() {
         stopTicker()
         // Persist the current "Total" time to cache when closing.
-        if (selectedPeriod == TimePeriod.TOTAL) {
+        if (selectedPeriod == TimePeriod.TOTAL && !trackCurrentProjectOnly) {
             displayDuration.get()?.let {
                 PropertiesComponent.getInstance().setValue(CACHED_TOTAL_SECONDS_KEY, it.toSeconds().toString())
             }
