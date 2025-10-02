@@ -127,13 +127,17 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
     private fun createActionGroup(): ActionGroup {
         val group = DefaultActionGroup()
 
-        group.add(object : ToggleAction("Track Current Project Only"), DumbAware {
-            override fun isSelected(e: AnActionEvent): Boolean = trackCurrentProjectOnly
-
-            override fun setSelected(e: AnActionEvent, state: Boolean) {
-                trackCurrentProjectOnly = state
-                PropertiesComponent.getInstance().setValue(TRACK_CURRENT_PROJECT_ONLY_KEY, state)
+        group.add(object : AnAction("Current Project Only"), DumbAware {
+            override fun actionPerformed(e: AnActionEvent) {
+                trackCurrentProjectOnly = !trackCurrentProjectOnly
+                PropertiesComponent.getInstance().setValue(TRACK_CURRENT_PROJECT_ONLY_KEY, trackCurrentProjectOnly)
                 updateTimeFromDatabase()
+            }
+
+            override fun update(e: AnActionEvent) {
+                val presentation = e.presentation
+                presentation.icon =
+                    if (trackCurrentProjectOnly) AllIcons.Actions.Checked else EmptyIcon.create(AllIcons.Actions.Checked)
             }
 
             override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
@@ -164,6 +168,7 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
 
         return group
     }
+
 
     private fun updateLabelText() {
         val currentDuration = displayDuration.get() ?: Duration.ZERO
