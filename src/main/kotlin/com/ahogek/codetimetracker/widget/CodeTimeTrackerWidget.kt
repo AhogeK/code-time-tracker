@@ -170,7 +170,6 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
                     if (selectedPeriod != period) {
                         selectedPeriod = period
                         PropertiesComponent.getInstance().setValue(SELECTED_PERIOD_KEY, period.name)
-                        displayDuration.set(Duration.ZERO)
                         stopTicker()
                         timeTrackerService.forcePersistSessions()
                         updateTimeFromDatabase()
