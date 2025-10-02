@@ -6,17 +6,15 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.actionSystem.TypedAction
 import com.intellij.openapi.editor.actionSystem.TypedActionHandler
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import java.awt.AWTEvent
-import java.awt.MouseInfo
-import java.awt.Point
-import java.awt.Rectangle
+import java.awt.Component
 import java.awt.event.MouseEvent
 import java.util.concurrent.atomic.AtomicBoolean
+import javax.swing.SwingUtilities
 
 @Service(Service.Level.APP)
 class GlobalEventMonitorService : Disposable {
@@ -36,14 +34,10 @@ class GlobalEventMonitorService : Disposable {
 
             // Register low-level AWT event listeners (mouse clicks, scrolling)
             IdeEventQueue.getInstance().addPostprocessor({ awtEvent: AWTEvent ->
-                if (awtEvent.id == MouseEvent.MOUSE_PRESSED || awtEvent.id == MouseEvent.MOUSE_WHEEL) {
-                    findEditorForEvent(awtEvent)?.let { editor ->
-                        val vFile = FileDocumentManager.getInstance().getFile(editor.document)
-                        if (vFile != null && vFile.isInLocalFileSystem && vFile.isWritable) {
-                            // 所有检查通过后才认为是一次有效的编码活动
-                            timeTrackerService.onActivity(editor)
-                        }
-                    }
+                if (awtEvent is MouseEvent && (awtEvent.id == MouseEvent.MOUSE_PRESSED || awtEvent.id == MouseEvent.MOUSE_WHEEL)) {
+                    val component = awtEvent.component ?: return@addPostprocessor false
+
+                    checkEditor(component)
                 }
                 false
             }, this)
@@ -57,6 +51,19 @@ class GlobalEventMonitorService : Disposable {
         }
     }
 
+    private fun checkEditor(component: Component) {
+        val editor = EditorFactory.getInstance().allEditors.find { editor ->
+            SwingUtilities.isDescendingFrom(component, editor.component)
+        }
+
+        if (editor != null) {
+            val vFile = FileDocumentManager.getInstance().getFile(editor.document)
+            if (vFile != null && vFile.isInLocalFileSystem && vFile.isWritable) {
+                timeTrackerService.onActivity(editor)
+            }
+        }
+    }
+
     override fun dispose() {
         // Restore the original handler
         originalTypedActionHandler?.let {
@@ -64,19 +71,5 @@ class GlobalEventMonitorService : Disposable {
             log.info("Restored original TypedActionHandler.")
         }
         log.info("GlobalEventMonitorService disposed.")
-    }
-
-    private fun findEditorForEvent(awtEvent: AWTEvent): Editor? {
-        val mousePointOnScreen: Point = when (awtEvent) {
-            is MouseEvent -> awtEvent.locationOnScreen
-            else -> MouseInfo.getPointerInfo()?.location ?: return null
-        }
-
-        return EditorFactory.getInstance().allEditors.find { editor ->
-            val editorComponent = editor.component
-            if (!editorComponent.isShowing) return@find false
-            val editorBounds = Rectangle(editorComponent.locationOnScreen, editorComponent.size)
-            editorBounds.contains(mousePointOnScreen)
-        }
     }
 }

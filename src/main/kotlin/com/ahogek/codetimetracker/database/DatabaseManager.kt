@@ -229,4 +229,39 @@ object DatabaseManager {
         }
         return Duration.ofSeconds(totalSeconds)
     }
+
+    /**
+     * Calculates the total coding duration within a  specific time range.
+     * This method is versatile and can be used for daily, weekly, monthly, or any custom period reports.
+     *
+     * @param startTime The beginning of the time period (inclusive)
+     * @param endTime The end of the time period (exclusive)
+     * @return The total duration of coding activities within the specified range
+     */
+    fun getCodingTimeForPeriod(startTime: LocalDateTime, endTime: LocalDateTime): Duration {
+        // The SQL query now includes a WHERE clause to filter sessions based on their start time.
+        val sql = """
+        SELECT SUM(strftime('%s', end_time) - strftime('%s', start_time))
+        FROM coding_sessions
+        WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+        """
+        var totalSeconds = 0L
+        try {
+            DriverManager.getConnection(dbUrl).use { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    // Set the start and end time parameters in the query.
+                    pstmt.setString(1, dateTimeFormatter.format(startTime))
+                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    pstmt.executeQuery().use { rs ->
+                        if (rs.next()) {
+                            totalSeconds = rs.getLong(1)
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get coding time for period from database.", e)
+        }
+        return Duration.ofSeconds(totalSeconds)
+    }
 }

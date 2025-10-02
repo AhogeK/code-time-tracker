@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.listeners
 
 import com.ahogek.codetimetracker.service.TimeTrackerService
+import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.CommonDataKeys
@@ -26,6 +27,10 @@ class GlobalActionListener : AnActionListener {
     private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
 
     override fun beforeActionPerformed(action: AnAction, event: AnActionEvent) {
+        if (event.place == ActionPlaces.POPUP) {
+            return
+        }
+
         // Try to get the editor from the event context
         val editor = event.dataContext.getData(CommonDataKeys.EDITOR)
         if (editor != null) {
