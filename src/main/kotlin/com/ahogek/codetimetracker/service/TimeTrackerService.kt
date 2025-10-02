@@ -132,9 +132,21 @@ class TimeTrackerService : Disposable {
         val now = LocalDateTime.now()
 
         ApplicationManager.getApplication().invokeLater {
-            pauseAndPersistSessions(now) {
+            // Define the callback that will run after sessions are saved.
+            // This callback is crucial for resetting the user's active state.
+            val onSaveCompleteCallback = {
+                // If the user was considered active, set them to inactive
+                // and notify listeners that activity has stopped.
+                if (isUserActive.compareAndSet(true, false)) {
+                    ApplicationManager.getApplication().messageBus
+                        .syncPublisher(TimeTrackerTopics.ACTIVITY_TOPIC)
+                        .onActivityStopped()
+                }
                 log.info("Forced persistence completed.")
             }
+
+            // Call pauseAndPersistSessions with the state-resetting callback.
+            pauseAndPersistSessions(now, onSaveCompleteCallback)
         }
     }
 
