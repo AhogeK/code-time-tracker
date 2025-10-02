@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-private const val IDLE_THRESHOLD_SECONDS = 30L
+private const val IDLE_THRESHOLD_SECONDS = 15L
 private const val IDLE_CHECK_INTERVAL_SECONDS = 5L
 
 /**

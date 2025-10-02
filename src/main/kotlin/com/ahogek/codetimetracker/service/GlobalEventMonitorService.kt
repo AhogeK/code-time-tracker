@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.service
 
 import com.ahogek.codetimetracker.handler.MyTypedActionHandler
+import com.ahogek.codetimetracker.widget.CodeTimeTrackerWidget
 import com.intellij.ide.IdeEventQueue
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
@@ -33,6 +34,10 @@ class GlobalEventMonitorService : Disposable {
             log.info("Initializing global listeners for the first time.")
 
             IdeEventQueue.getInstance().addPostprocessor({ awtEvent: AWTEvent ->
+                // The definitive check: If our widget's popup is active, ignore the event.
+                if (CodeTimeTrackerWidget.isPopupActive) {
+                    return@addPostprocessor false
+                }
                 if (awtEvent is MouseEvent && (awtEvent.id == MouseEvent.MOUSE_PRESSED || awtEvent.id == MouseEvent.MOUSE_WHEEL)) {
                     findEditorByCoordinates(awtEvent)?.let { editor ->
                         processActivity(editor)

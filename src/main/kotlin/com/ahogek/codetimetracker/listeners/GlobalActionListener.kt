@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.listeners
 
 import com.ahogek.codetimetracker.service.TimeTrackerService
+import com.ahogek.codetimetracker.widget.CodeTimeTrackerWidget
 import com.intellij.openapi.actionSystem.ActionPlaces
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
@@ -28,6 +29,11 @@ class GlobalActionListener : AnActionListener {
     private val timeTrackerService = ApplicationManager.getApplication().getService(TimeTrackerService::class.java)
 
     override fun beforeActionPerformed(action: AnAction, event: AnActionEvent) {
+        // The definitive check: If our widget's popup is active, do nothing.
+        if (CodeTimeTrackerWidget.isPopupActive) {
+            return
+        }
+
         if (event.place == ActionPlaces.POPUP) {
             return
         }

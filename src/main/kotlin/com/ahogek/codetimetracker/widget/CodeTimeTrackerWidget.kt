@@ -12,6 +12,8 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.popup.JBPopupFactory
+import com.intellij.openapi.ui.popup.JBPopupListener
+import com.intellij.openapi.ui.popup.LightweightWindowEvent
 import com.intellij.openapi.wm.CustomStatusBarWidget
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
@@ -82,12 +84,21 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
 
     override fun getComponent(): JComponent = label
 
+    companion object {
+        // A global "switch" to indicate if our widget's popup is currently active.
+        // @Volatile ensures that changes are immediately visible to all threads.
+        @Volatile
+        var isPopupActive = false
+    }
+
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
         label.putClientProperty("code.time.tracker.widget.invoker", true)
         label.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
+                    // Flip the switch ON at the earliest possible moment.
+                    isPopupActive = true
                     val popup = JBPopupFactory.getInstance().createActionGroupPopup(
                         "Code Time Tracker",
                         createActionGroup(),
@@ -95,6 +106,12 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
                         JBPopupFactory.ActionSelectionAid.MNEMONICS,
                         false
                     )
+                    // Add a listener to flip the switch OFF when the popup closes.
+                    popup.addListener(object : JBPopupListener {
+                        override fun onClosed(event: LightweightWindowEvent) {
+                            isPopupActive = false
+                        }
+                    })
                     val dimension = popup.content.preferredSize
                     val at = Point(
                         label.width - dimension.width, -dimension.height
