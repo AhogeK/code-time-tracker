@@ -84,7 +84,7 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
-
+        label.putClientProperty("code.time.tracker.widget.invoker", true)
         label.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
                 if (SwingUtilities.isLeftMouseButton(e)) {
@@ -131,6 +131,8 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
             override fun actionPerformed(e: AnActionEvent) {
                 trackCurrentProjectOnly = !trackCurrentProjectOnly
                 PropertiesComponent.getInstance().setValue(TRACK_CURRENT_PROJECT_ONLY_KEY, trackCurrentProjectOnly)
+                stopTicker()
+                timeTrackerService.forcePersistSessions()
                 updateTimeFromDatabase()
             }
 

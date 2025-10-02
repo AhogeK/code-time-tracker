@@ -6,15 +6,15 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.editor.EditorFactory
 import com.intellij.openapi.editor.actionSystem.TypedAction
 import com.intellij.openapi.editor.actionSystem.TypedActionHandler
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import java.awt.AWTEvent
-import java.awt.Component
+import java.awt.Rectangle
 import java.awt.event.MouseEvent
 import java.util.concurrent.atomic.AtomicBoolean
-import javax.swing.SwingUtilities
 
 @Service(Service.Level.APP)
 class GlobalEventMonitorService : Disposable {
@@ -32,40 +32,41 @@ class GlobalEventMonitorService : Disposable {
         if (isListenerInitialized.compareAndSet(false, true)) {
             log.info("Initializing global listeners for the first time.")
 
-            // Register low-level AWT event listeners (mouse clicks, scrolling)
             IdeEventQueue.getInstance().addPostprocessor({ awtEvent: AWTEvent ->
                 if (awtEvent is MouseEvent && (awtEvent.id == MouseEvent.MOUSE_PRESSED || awtEvent.id == MouseEvent.MOUSE_WHEEL)) {
-                    val component = awtEvent.component ?: return@addPostprocessor false
-
-                    checkEditor(component)
+                    findEditorByCoordinates(awtEvent)?.let { editor ->
+                        processActivity(editor)
+                    }
                 }
                 false
             }, this)
-            log.info("Low-level AWT listener registered.")
 
-            // Register character input listener
             val typedAction = TypedAction.getInstance()
             originalTypedActionHandler = typedAction.rawHandler
             typedAction.setupRawHandler(MyTypedActionHandler(originalTypedActionHandler!!, timeTrackerService))
-            log.info("Custom TypedActionHandler registered.")
         }
     }
 
-    private fun checkEditor(component: Component) {
-        val editor = EditorFactory.getInstance().allEditors.find { editor ->
-            SwingUtilities.isDescendingFrom(component, editor.component)
-        }
-
-        if (editor != null) {
-            val vFile = FileDocumentManager.getInstance().getFile(editor.document)
-            if (vFile != null && vFile.isInLocalFileSystem && vFile.isWritable) {
-                timeTrackerService.onActivity(editor)
+    private fun findEditorByCoordinates(event: MouseEvent): Editor? {
+        return EditorFactory.getInstance().allEditors.find { editor ->
+            val component = editor.component
+            if (component.isShowing) {
+                val boundsOnScreen = Rectangle(component.locationOnScreen, component.size)
+                boundsOnScreen.contains(event.locationOnScreen)
+            } else {
+                false
             }
         }
     }
 
+    private fun processActivity(editor: Editor) {
+        val vFile = FileDocumentManager.getInstance().getFile(editor.document)
+        if (vFile != null && vFile.isInLocalFileSystem && vFile.isWritable) {
+            timeTrackerService.onActivity(editor)
+        }
+    }
+
     override fun dispose() {
-        // Restore the original handler
         originalTypedActionHandler?.let {
             TypedAction.getInstance().setupRawHandler(it)
             log.info("Restored original TypedActionHandler.")

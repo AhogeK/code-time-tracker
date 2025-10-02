@@ -123,6 +123,22 @@ class TimeTrackerService : Disposable {
     }
 
     /**
+     * Public method to force the persistence of all currently active sessions.
+     * This can be called when the user manually triggers an action that should
+     * result in a save, such as changing a tracking setting.
+     */
+    fun forcePersistSessions() {
+        log.info("Forcing persistence of all active sessions.")
+        val now = LocalDateTime.now()
+
+        ApplicationManager.getApplication().invokeLater {
+            pauseAndPersistSessions(now) {
+                log.info("Forced persistence completed.")
+            }
+        }
+    }
+
+    /**
      * Pause and persist all currently active sessions
      */
     private fun pauseAndPersistSessions(finalEndTime: LocalDateTime, onSaveComplete: () -> Unit = {}) {
