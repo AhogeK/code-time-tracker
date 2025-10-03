@@ -77,9 +77,6 @@ object DatabaseManager {
             -- The display name of the project.
             project_name TEXT NOT NULL,
             
-            -- The unique, absolute path of the project. A reliable identifier.
-            project_path TEXT NOT NULL,
-            
             -- The programming language used.
             language TEXT NOT NULL,
             
@@ -122,9 +119,9 @@ object DatabaseManager {
         databaseExecutor.execute {
             val sql = """
             INSERT INTO coding_sessions(
-                session_uuid, user_id, project_name, project_path, language, platform,
+                session_uuid, user_id, project_name, language, platform,
                 start_time, end_time, last_modified
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
             """
 
             try {
@@ -138,12 +135,11 @@ object DatabaseManager {
                         pstmt.setString(1, UUID.randomUUID().toString())
                         pstmt.setString(2, userId)
                         pstmt.setString(3, session.projectName)
-                        pstmt.setString(4, session.projectPath)
-                        pstmt.setString(5, session.language)
-                        pstmt.setString(6, session.platform)
-                        pstmt.setString(7, dateTimeFormatter.format(session.startTime))
-                        pstmt.setString(8, dateTimeFormatter.format(session.endTime))
-                        pstmt.setString(9, currentTimestamp)
+                        pstmt.setString(4, session.language)
+                        pstmt.setString(5, session.platform)
+                        pstmt.setString(6, dateTimeFormatter.format(session.startTime))
+                        pstmt.setString(7, dateTimeFormatter.format(session.endTime))
+                        pstmt.setString(8, currentTimestamp)
                         pstmt.addBatch()
                     }
                     pstmt.executeBatch()

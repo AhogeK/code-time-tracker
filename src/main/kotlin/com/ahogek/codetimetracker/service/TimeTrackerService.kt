@@ -92,7 +92,7 @@ class TimeTrackerService : Disposable {
         // Start a new session or update the end time of the existing one.
         val session = projectSessions.computeIfAbsent(currentLanguage) {
             log.info("[$projectName] Starting new coding session for $currentLanguage.")
-            CodingSession(projectName, projectPath, currentLanguage, platform, now, now)
+            CodingSession(projectName, currentLanguage, platform, now, now)
         }
         session.endTime = now
     }
