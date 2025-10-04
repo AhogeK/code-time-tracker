@@ -1,0 +1,22 @@
+[versions]
+
+# Plugin versioning
+pluginVersion = "0.1-SNAPSHOT"
+
+# dependencies versions
+junitVersion = "6.0.0"
+assertjCoreVersion = "4.0.0-M1"
+
+[libraries]
+
+junit-jupiter-api = { module = "org.junit.jupiter:junit-jupiter-api", version.ref = "junitVersion" }
+assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertjCoreVersion" }
+junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junitVersion" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitVersion" }
+junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine", version.ref = "junitVersion" }
+
+[plugins]
+
+java = { id = "java" }
+jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.1.0" }
+jetbrains-intellij-platform = { id = "org.jetbrains.intellij.platform", version = "2.5.0" }

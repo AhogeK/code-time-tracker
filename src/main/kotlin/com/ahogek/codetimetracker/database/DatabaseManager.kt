@@ -1,12 +1,14 @@
 package com.ahogek.codetimetracker.database
 
 import com.ahogek.codetimetracker.model.CodingSession
+import com.ahogek.codetimetracker.model.DailySummary
 import com.ahogek.codetimetracker.user.UserManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
 import java.sql.DriverManager
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
@@ -22,8 +24,9 @@ import java.util.concurrent.TimeUnit
  */
 object DatabaseManager {
 
+    internal var dbUrl: String
+
     private val log = Logger.getInstance(DatabaseManager::class.java)
-    private val dbUrl: String
     private val dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
     // This executor will handle all database write operations sequentially on a background thread
@@ -271,5 +274,43 @@ object DatabaseManager {
             log.error("Failed to get coding time for period from database.", e)
         }
         return Duration.ofSeconds(totalSeconds)
+    }
+
+    /**
+     * Fetches daily coding time for a specific time range, suitable for a heatmap
+     *
+     * @param startTime The start of the time range
+     * @param endTime The end of the time range
+     * @return A list of DailySummary objects, each representing a day with coding activity.
+     */
+    fun getDailyCodingTimeForHeatmap(startTime: LocalDateTime, endTime: LocalDateTime): List<DailySummary> {
+        val sql = """
+            SELECT
+                DATE(start_time) as coding_date,
+                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            GROUP BY coding_date
+            ORDER BY coding_date;
+        """
+        val dailySummaries = mutableListOf<DailySummary>()
+        try {
+            DriverManager.getConnection(dbUrl).use { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(startTime))
+                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val date = LocalDate.parse(rs.getString("coding_date"))
+                            val totalSeconds = rs.getLong("total_seconds")
+                            dailySummaries.add(DailySummary(date, Duration.ofSeconds(totalSeconds)))
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get daily coding time for heatmap.", e)
+        }
+        return dailySummaries
     }
 }

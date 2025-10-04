@@ -1,11 +1,11 @@
 plugins {
-    id("java")
-    id("org.jetbrains.kotlin.jvm") version "2.1.0"
-    id("org.jetbrains.intellij.platform") version "2.5.0"
+    alias(libs.plugins.java)
+    alias(libs.plugins.jetbrains.kotlin.jvm)
+    alias(libs.plugins.jetbrains.intellij.platform)
 }
 
 group = "com.ahogek"
-version = "0.1-SNAPSHOT"
+version = libs.versions.pluginVersion.get()
 
 repositories {
     mavenCentral()
@@ -27,6 +27,13 @@ dependencies {
         implementation("org.xerial:sqlite-jdbc:3.50.3.0")
         implementation("com.google.code.gson:gson:2.13.2")
     }
+
+    testImplementation(libs.junit.jupiter.api)
+    testImplementation(libs.assertj.core)
+
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly(libs.junit.platform.launcher)
+    testRuntimeOnly(libs.junit.vintage.engine)
 }
 
 intellijPlatform {
@@ -46,6 +53,10 @@ tasks {
     withType<JavaCompile> {
         sourceCompatibility = "21"
         targetCompatibility = "21"
+    }
+
+    withType<Test> {
+        useJUnitPlatform()
     }
 }
 
