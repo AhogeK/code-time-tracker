@@ -1,12 +1,13 @@
 package com.ahogek.codetimetracker.database
 
 import com.ahogek.codetimetracker.model.CodingSession
+import com.ahogek.codetimetracker.model.CodingStreaks
 import com.ahogek.codetimetracker.model.DailySummary
 import com.ahogek.codetimetracker.user.UserManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
-import java.sql.DriverManager
+import java.sql.Connection
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -24,7 +25,13 @@ import java.util.concurrent.TimeUnit
  */
 object DatabaseManager {
 
-    internal var dbUrl: String
+    private data class DbConfig(
+        val url: String,
+        val factory: ConnectionFactory
+    )
+
+    @Volatile
+    private var config: DbConfig
 
     private val log = Logger.getInstance(DatabaseManager::class.java)
     private val dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
@@ -34,26 +41,45 @@ object DatabaseManager {
 
     init {
         try {
-            // Manually load the SQLite JDBC driver class.
-            // This ensures it's registered with the DriverManager, preventing the "No suitable driver found" error.
             Class.forName("org.sqlite.JDBC")
         } catch (e: ClassNotFoundException) {
             log.error("Failed to load SQLite JDBC driver.", e)
         }
 
-        // PathManager.getCommonDataPath() returns a path that is shared all JetBrains products
-        // This is the ideal location for a shared database
         val commonDataPath = PathManager.getCommonDataPath()
         val dbPath = commonDataPath.resolve("code-time-tracker-data")
         val dbFile = dbPath.resolve("coding_data.db").toFile()
-
-        // Ensure the directory exists
         dbFile.parentFile.mkdirs()
-        dbUrl = "jdbc:sqlite:${dbFile.absolutePath}"
-        log.info("Database initialized at official shared location: $dbUrl")
-        databaseExecutor.execute {
-            createTableIfNotExists()
-        }
+        val dbUrl = "jdbc:sqlite:${dbFile.absolutePath}"
+        config = DbConfig(
+            url = dbUrl,
+            factory = DriverManagerConnectionFactory(dbUrl)
+        )
+        log.info("Database initialized at official shared location: ${config.url}")
+
+        createTableIfNotExists()
+    }
+
+    fun setConnectionFactory(factory: ConnectionFactory, urlHint: String? = null) {
+        val newUrl = urlHint ?: config.url
+        val normalizedUrl = normalizeJdbcUrl(newUrl)
+
+        config = DbConfig(
+            url = normalizedUrl,
+            factory = factory
+        )
+
+        createTableIfNotExists()
+    }
+
+    private fun normalizeJdbcUrl(url: String): String {
+        val trimmed = url.trim()
+        return if (trimmed.startsWith("jdbc:sqlite:")) trimmed else "jdbc:sqlite:$trimmed"
+    }
+
+    private inline fun <T> withConnection(block: (Connection) -> T): T {
+        val local = config
+        return local.factory.getConnection().use { conn -> block(conn) }
     }
 
     /**
@@ -103,7 +129,7 @@ object DatabaseManager {
         val indexSql = "CREATE UNIQUE INDEX IF NOT EXISTS idx_session_uuid ON coding_sessions(session_uuid);"
 
         try {
-            DriverManager.getConnection(dbUrl).use { conn ->
+            withConnection { conn ->
                 conn.createStatement().execute(sql)
                 conn.createStatement().execute(indexSql)
                 log.info("Database table 'coding_sessions' is ready.")
@@ -128,7 +154,7 @@ object DatabaseManager {
             """
 
             try {
-                DriverManager.getConnection(dbUrl).use { conn ->
+                withConnection { conn ->
                     conn.autoCommit = false // Use a transaction for batch inserts
                     val pstmt = conn.prepareStatement(sql)
                     val currentTimestamp = dateTimeFormatter.format(LocalDateTime.now())
@@ -190,7 +216,7 @@ object DatabaseManager {
     fun getUserIdFromDatabase(): String? {
         val sql = "SELECT user_id FROM coding_sessions LIMIT 1"
         return try {
-            DriverManager.getConnection(dbUrl).use { conn ->
+            withConnection { conn ->
                 conn.createStatement().executeQuery(sql).use { rs ->
                     if (rs.next()) rs.getString("user_id")
                     else null // Database is empty
@@ -218,7 +244,7 @@ object DatabaseManager {
         val sql = if (projectName != null) "$baseSql AND project_name = ?" else baseSql
         var totalSeconds = 0L
         try {
-            DriverManager.getConnection(dbUrl).use { conn ->
+            withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     projectName?.let { pstmt.setString(1, it) }
                     pstmt.executeQuery().use { rs ->
@@ -257,7 +283,7 @@ object DatabaseManager {
         val sql = if (projectName != null) "$baseSql AND project_name = ?" else baseSql
         var totalSeconds = 0L
         try {
-            DriverManager.getConnection(dbUrl).use { conn ->
+            withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     // Set the start and end time parameters in the query.
                     pstmt.setString(1, dateTimeFormatter.format(startTime))
@@ -295,7 +321,7 @@ object DatabaseManager {
         """
         val dailySummaries = mutableListOf<DailySummary>()
         try {
-            DriverManager.getConnection(dbUrl).use { conn ->
+            withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     pstmt.setString(1, dateTimeFormatter.format(startTime))
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
@@ -312,5 +338,75 @@ object DatabaseManager {
             log.error("Failed to get daily coding time for heatmap.", e)
         }
         return dailySummaries
+    }
+
+    /**
+     * Calculates the current and maximum consecutive coding streaks
+     *
+     * @return A CodingStreaks object containing the current and maximum streaks
+     */
+    fun getCodingStreaks(): CodingStreaks {
+        // SQL query to get all unique dates with coding activity, sorted from newest to oldest.
+        val sql =
+            "SELECT DISTINCT DATE(start_time) as coding_date FROM coding_sessions WHERE is_deleted = 0 ORDER BY coding_date DESC;"
+        val codingDates = mutableListOf<LocalDate>()
+        try {
+            withConnection { conn ->
+                conn.createStatement().executeQuery(sql).use { rs ->
+                    while (rs.next())
+                        codingDates.add(LocalDate.parse(rs.getString("coding_date")))
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get coding dates for streaks.", e)
+            return CodingStreaks(0, 0)
+        }
+
+        return calculateCodingStreaks(codingDates)
+    }
+
+    private fun calculateCodingStreaks(codingDates: List<LocalDate>): CodingStreaks {
+        // If there's no data, return zero for both streaks
+        if (codingDates.isEmpty()) return CodingStreaks(0, 0)
+
+        var maxStreak = 0
+        var loopStreakCounter = 0
+        // Start iterating from the most recent data
+        // Initialize `lastDate` to one day after the most recent coding day to correctly start the first streak count
+        var lastDate = codingDates.first().plusDays(1)
+        var mostRecentStreakLength = -1
+
+        for (date in codingDates) {
+            if (lastDate.minusDays(1).isEqual(date)) {
+                loopStreakCounter++
+            } else {
+                if (mostRecentStreakLength == -1) mostRecentStreakLength = loopStreakCounter
+                // The streak is broken
+                // First, check if the streak that just ended is the new maximum
+                maxStreak = maxOf(maxStreak, loopStreakCounter)
+                // Then, start a new streak
+                loopStreakCounter = 1
+            }
+            lastDate = date
+        }
+        // The loop finishes, so the very last calculated streak (which could be the longest) needs to be checked
+        maxStreak = maxOf(maxStreak, loopStreakCounter)
+        if (mostRecentStreakLength == -1) mostRecentStreakLength = loopStreakCounter
+
+        val today = LocalDate.now()
+        val mostRecentCodingDate = codingDates.first()
+
+        // The "current" streak is only valid if the last coding session was today or yesterday.
+        // Otherwise, the streak is considered broken.
+        val finalCurrentStreak =
+            if (mostRecentCodingDate.isEqual(today) ||
+                mostRecentCodingDate.isEqual(today.minusDays(1))
+            ) {
+                mostRecentStreakLength
+            } else {
+                0
+            }
+
+        return CodingStreaks(currentStreak = finalCurrentStreak, maxStreak = maxStreak)
     }
 }

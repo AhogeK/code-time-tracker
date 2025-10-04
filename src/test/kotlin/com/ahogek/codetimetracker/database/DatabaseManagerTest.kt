@@ -3,10 +3,8 @@ package com.ahogek.codetimetracker.database
 import com.ahogek.codetimetracker.model.DailySummary
 import org.assertj.core.api.Assertions
 import org.assertj.core.api.Assertions.assertThat
-import org.junit.jupiter.api.AfterEach
-import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.DisplayName
-import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.*
+import java.io.File
 import java.sql.Connection
 import java.sql.DriverManager
 import java.time.Duration
@@ -19,36 +17,44 @@ import java.time.LocalDateTime
  */
 class DatabaseManagerTest {
 
-    private lateinit var connection: Connection
-    private lateinit var originalDbUrl: String
+    companion object {
+        private const val TEST_DB_FILE = "build/test-dbs/coding_data_test.db"
+        private const val TEST_DB_URL = "jdbc:sqlite:$TEST_DB_FILE"
 
-    // A constant for our special test URL
-    private val testDbUrl = "jdbc:sqlite:file:testdb?mode=memory&cache=shared"
+        @BeforeAll
+        @JvmStatic
+        fun beforeAll() {
+            Class.forName("org.sqlite.JDBC")
+            File(TEST_DB_FILE).parentFile.mkdirs()
+            val supplier: ConnectionSupplier = { DriverManager.getConnection(TEST_DB_URL) }
+            DatabaseManager.setConnectionFactory(supplier.asFactory(), TEST_DB_URL)
+        }
+    }
+
+    private lateinit var connection: Connection
 
     @BeforeEach
     fun setup() {
-        // 1. Store the original dbUrl from the singleton
-        originalDbUrl = DatabaseManager.dbUrl
-
-        // 2. **Crucial Change**: Use the shared-cache in-memory URL.
-        // Now, any part of the code that uses this exact URL will connect
-        // to the SAME in-memory database instance.
-        DatabaseManager.dbUrl = testDbUrl
-        connection = DriverManager.getConnection(testDbUrl)
-
-        // This ensures that before each test runs, any existing table from a
-        // previous test is wiped clean, guaranteeing a fresh start.
-        connection.createStatement().execute("DROP TABLE IF EXISTS coding_sessions")
-
-        val createTableSql = """
-            CREATE TABLE coding_sessions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT, session_uuid TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL,
-                project_name TEXT NOT NULL, language TEXT NOT NULL, platform TEXT NOT NULL,
-                start_time TEXT NOT NULL, end_time TEXT NOT NULL, last_modified TEXT NOT NULL,
-                is_deleted INTEGER NOT NULL DEFAULT 0
-            );
-        """
-        connection.createStatement().execute(createTableSql)
+        connection = DriverManager.getConnection(TEST_DB_URL)
+        connection.createStatement().use { st ->
+            st.execute(
+                """
+                CREATE TABLE IF NOT EXISTS coding_sessions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_uuid TEXT NOT NULL UNIQUE,
+                    user_id TEXT NOT NULL,
+                    project_name TEXT NOT NULL,
+                    language TEXT NOT NULL,
+                    platform TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    end_time TEXT NOT NULL,
+                    last_modified TEXT NOT NULL,
+                    is_deleted INTEGER NOT NULL DEFAULT 0
+                );
+                """.trimIndent()
+            )
+            st.execute("DELETE FROM coding_sessions WHERE is_deleted = 0;")
+        }
     }
 
     @Test
@@ -121,11 +127,96 @@ class DatabaseManagerTest {
         assertThat(heatmapData).isEmpty()
     }
 
+    @Test
+    @DisplayName("getCodingStreaks: Should return (0, 0) when database is empty")
+    fun testGetCodingStreaks_noData() {
+        // Act: Call the method on an empty database
+        val streaks = DatabaseManager.getCodingStreaks()
+
+        // Assert: Both current and max streaks should be zero
+        assertThat(streaks.currentStreak).isZero()
+        assertThat(streaks.maxStreak).isZero()
+    }
+
+    @Test
+    @DisplayName("getCodingStreaks: Should correctly handle a single day of activity")
+    fun testGetCodingStreaks_singleDayOfActivity() {
+        // Arrange: Insert a session for yesterday
+        val yesterday = LocalDate.now().minusDays(1).atTime(10, 0).toString()
+        insertSession("ProjectA", "Kotlin", yesterday, yesterday)
+
+        // Act
+        val streaks = DatabaseManager.getCodingStreaks()
+
+        // Assert: Since activity was yesterday, current streak is 1, and max is 1
+        assertThat(streaks.currentStreak).isEqualTo(1)
+        assertThat(streaks.maxStreak).isEqualTo(1)
+    }
+
+    @Test
+    @DisplayName("getCodingStreaks: Should reset current streak if activity was two days ago")
+    fun testGetCodingStreaks_brokenCurrentStreak() {
+        // Arrange: Insert a session for two days ago
+        val twoDaysAgo = LocalDate.now().minusDays(2).atTime(10, 0).toString()
+        insertSession("ProjectA", "Kotlin", twoDaysAgo, twoDaysAgo)
+
+        // Act
+        val streaks = DatabaseManager.getCodingStreaks()
+
+        // Assert: The streak is broken, so current is 0, but the max streak was 1
+        assertThat(streaks.currentStreak).isZero()
+        assertThat(streaks.maxStreak).isEqualTo(1)
+    }
+
+    @Test
+    @DisplayName("getCodingStreaks: Should correctly calculate a perfect continuous streak ending today")
+    fun testGetCodingStreaks_perfectContinuousStreak() {
+        // Arrange: 4 continuous days of activity, ending today.
+        // Also add multiple sessions on the same day to ensure it doesn't double-count days.
+        val today = LocalDate.now()
+        insertSession("P1", "Go", today.minusDays(3).atStartOfDay().toString(), "...")
+        insertSession("P2", "Go", today.minusDays(2).atStartOfDay().toString(), "...")
+        insertSession("P3", "Go", today.minusDays(1).atStartOfDay().toString(), "...")
+        insertSession("P4", "Go", today.atStartOfDay().toString(), "...")
+        insertSession("P5", "Rust", today.atTime(5, 0).toString(), "...") // Same day, different time
+
+        // Act
+        val streaks = DatabaseManager.getCodingStreaks()
+
+        // Assert: Current and max streaks should both be 4
+        assertThat(streaks.currentStreak).isEqualTo(4)
+        assertThat(streaks.maxStreak).isEqualTo(4)
+    }
+
+    @Test
+    @DisplayName("getCodingStreaks: Should correctly identify max streak when it is not the current one")
+    fun testGetCodingStreaks_brokenLongestStreak() {
+        // Arrange: A 5-day streak in the past, a gap, then a current 3-day streak.
+        val today = LocalDate.now()
+
+        // Current 3-day streak
+        insertSession("Current", "Kotlin", today.minusDays(2).atStartOfDay().toString(), "...")
+        insertSession("Current", "Kotlin", today.minusDays(1).atStartOfDay().toString(), "...")
+        insertSession("Current", "Kotlin", today.atStartOfDay().toString(), "...")
+
+        // A longer, 5-day streak in the past
+        insertSession("Past", "Java", today.minusDays(10).atStartOfDay().toString(), "...")
+        insertSession("Past", "Java", today.minusDays(9).atStartOfDay().toString(), "...")
+        insertSession("Past", "Java", today.minusDays(8).atStartOfDay().toString(), "...")
+        insertSession("Past", "Java", today.minusDays(7).atStartOfDay().toString(), "...")
+        insertSession("Past", "Java", today.minusDays(6).atStartOfDay().toString(), "...")
+
+        // Act
+        val streaks = DatabaseManager.getCodingStreaks()
+
+        // Assert: Current streak is 3, but the max streak should be 5
+        assertThat(streaks.currentStreak).isEqualTo(3)
+        assertThat(streaks.maxStreak).isEqualTo(5)
+    }
+
     @AfterEach
     fun tearDown() {
         connection.close()
-        // Restore the original dbUrl to avoid side-effects on other tests
-        DatabaseManager.dbUrl = originalDbUrl
     }
 
     private fun insertSession(project: String, lang: String, start: String, end: String) {

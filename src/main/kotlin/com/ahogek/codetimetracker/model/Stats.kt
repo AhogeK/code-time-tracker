@@ -14,3 +14,14 @@ data class DailySummary(
     val date: LocalDate,
     val totalDuration: Duration
 )
+
+/**
+ * Holds statistics about the user's consecutive coding days
+ *
+ * @property currentStreak The number of consecutive days the user has coded up to today (or yesterday)
+ * @property maxStreak The longest consecutive coding streak ever recorded for the user
+ */
+data class CodingStreaks(
+    val currentStreak: Int,
+    val maxStreak: Int
+)
