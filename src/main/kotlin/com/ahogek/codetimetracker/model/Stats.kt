@@ -25,3 +25,17 @@ data class CodingStreaks(
     val currentStreak: Int,
     val maxStreak: Int
 )
+
+/**
+ * Represents coding activity within a specific hour of a specific day of the week.
+ *
+ * @property dayOfWeek The day of the week (1 for Monday, 7 for Sunday).
+ * @property hourOfDay The hour of the day (0-23).
+ * @property totalDuration The total time spent during this specific hour block.
+ */
+
+data class HourlyDistribution(
+    val dayOfWeek: Int,
+    val hourOfDay: Int,
+    val totalDuration: Duration
+)

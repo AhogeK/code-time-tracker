@@ -1,8 +1,8 @@
 package com.ahogek.codetimetracker.database
 
 import com.ahogek.codetimetracker.model.DailySummary
-import org.assertj.core.api.Assertions
 import org.assertj.core.api.Assertions.assertThat
+import org.assertj.core.api.Assertions.tuple
 import org.junit.jupiter.api.*
 import java.io.File
 import java.sql.Connection
@@ -88,7 +88,7 @@ class DatabaseManagerTest {
         assertThat(heatmapData)
             .extracting(DailySummary::date, DailySummary::totalDuration)
             .contains(
-                Assertions.tuple(
+                tuple(
                     LocalDate.of(2025, 10, 2),
                     Duration.ofMinutes(20)
                 )
@@ -98,7 +98,7 @@ class DatabaseManagerTest {
         assertThat(heatmapData)
             .extracting("date", "totalDuration") // Another way to extract properties
             .contains(
-                Assertions.tuple(
+                tuple(
                     LocalDate.of(2025, 10, 3),
                     Duration.ofMinutes(9)
                 )
@@ -212,6 +212,66 @@ class DatabaseManagerTest {
         // Assert: Current streak is 3, but the max streak should be 5
         assertThat(streaks.currentStreak).isEqualTo(3)
         assertThat(streaks.maxStreak).isEqualTo(5)
+    }
+
+    @Test
+    @DisplayName("getDailyHourDistribution: Should correctly aggregate time by day of week and hour")
+    fun testGetDailyHourDistribution() {
+        // Arrange: Insert data across different days and hours.
+        // Note: 2025-10-06 is a Monday (day 1). 2025-10-12 is a Sunday (day 7).
+
+        // === Monday at 10:xx ===
+        // Two sessions in the same hour block to test aggregation.
+        insertSession("P1", "Kotlin", "2025-10-06T10:00:00", "2025-10-06T10:10:00") // 10 mins
+        insertSession("P1", "Kotlin", "2025-10-06T10:30:00", "2025-10-06T10:35:00") // 5 mins
+        // Expected total for Monday (1), 10:00 hour = 15 mins
+
+        // === Monday at 14:xx ===
+        insertSession("P2", "Java", "2025-10-06T14:00:00", "2025-10-06T14:20:00") // 20 mins
+
+        // === Sunday at 23:xx ===
+        // Test the day-of-week conversion (SQLite's 0 -> 7)
+        insertSession("P3", "Python", "2025-10-12T23:55:00", "2025-10-12T23:59:00") // 4 mins
+
+        // === Data outside the query range (should be ignored) ===
+        insertSession("P4", "Go", "2025-10-05T10:00:00", "2025-10-05T10:10:00")
+
+        val startTime = LocalDateTime.of(2025, 10, 6, 0, 0) // Monday
+        val endTime = LocalDateTime.of(2025, 10, 13, 0, 0)  // Next Monday
+
+        // Act
+        val distribution = DatabaseManager.getDailyHourDistribution(startTime, endTime)
+
+        // Assert
+        // We expect 3 distinct hour blocks in the result.
+        assertThat(distribution).hasSize(3)
+
+        // Use AssertJ's `containsExactlyInAnyOrder` for robust, order-independent checking.
+        // This checks that the list contains exactly these elements, regardless of their order.
+        assertThat(distribution)
+            .extracting("dayOfWeek", "hourOfDay", "totalDuration")
+            .containsExactlyInAnyOrder(
+                tuple(1, 10, Duration.ofMinutes(15)), // Monday, 10:00-10:59, Total 15 mins
+                tuple(1, 14, Duration.ofMinutes(20)), // Monday, 14:00-14:59, Total 20 mins
+                tuple(7, 23, Duration.ofMinutes(4))   // Sunday, 23:00-23:59, Total 4 mins
+            )
+    }
+
+    @Test
+    @DisplayName("getDailyHourDistribution: Should return an empty list when no data is in range")
+    fun testGetDailyHourDistribution_empty() {
+        // Arrange: Data is present, but outside the query range.
+        insertSession("P1", "Kotlin", "2025-10-06T10:00:00", "2025-10-06T10:10:00")
+
+        val startTime = LocalDateTime.of(2025, 11, 1, 0, 0)
+        val endTime = LocalDateTime.of(2025, 11, 2, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getDailyHourDistribution(startTime, endTime)
+
+        // Assert
+        assertThat(distribution).isNotNull
+        assertThat(distribution).isEmpty()
     }
 
     @AfterEach
