@@ -17,9 +17,9 @@ import com.intellij.openapi.ui.popup.LightweightWindowEvent
 import com.intellij.openapi.wm.CustomStatusBarWidget
 import com.intellij.openapi.wm.StatusBar
 import com.intellij.openapi.wm.StatusBarWidget
+import com.intellij.openapi.wm.impl.status.TextPanel
 import com.intellij.ui.awt.RelativePoint
 import com.intellij.util.ui.EmptyIcon
-import com.intellij.util.ui.JBUI
 import org.jetbrains.annotations.NonNls
 import java.awt.Point
 import java.awt.event.MouseAdapter
@@ -36,7 +36,6 @@ import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 import javax.swing.JComponent
-import javax.swing.JLabel
 import javax.swing.SwingUtilities
 
 private const val CACHED_TOTAL_SECONDS_KEY = "com.ahogek.codetimetracker.cachedTotalSeconds"
@@ -78,7 +77,7 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
     private var trackCurrentProjectOnly: Boolean =
         PropertiesComponent.getInstance().getBoolean(TRACK_CURRENT_PROJECT_ONLY_KEY, false)
 
-    private val label = JLabel()
+    private val label = TextPanel()
 
     override fun ID(): @NonNls String = "CodeTimeTrackerWidget"
 
@@ -93,6 +92,7 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
 
     override fun install(statusBar: StatusBar) {
         this.statusBar = statusBar
+        label.isFocusable = false
         label.putClientProperty("code.time.tracker.widget.invoker", true)
         label.addMouseListener(object : MouseAdapter() {
             override fun mouseClicked(e: MouseEvent) {
@@ -121,7 +121,6 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
             }
         })
         label.toolTipText = "Click to change tracked time period"
-        label.border = JBUI.Borders.empty(0, 6)
 
         displayDuration.set(if (selectedPeriod == TimePeriod.TOTAL) readCachedDuration() else Duration.ZERO)
         updateTimeFromDatabase()
