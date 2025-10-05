@@ -449,6 +449,46 @@ object DatabaseManager {
         return distribution
     }
 
+    /**
+     * Fetches the total coding time for each programming language within a given time range.
+     *
+     * @param startTime The start of the time range.
+     * @param endTime The end of the time range.
+     * @return A list of LanguageUsage objects, typically ordered from the most used to the least.
+     */
+    fun getLanguageDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<LanguageUsage> {
+        val sql = """
+            SELECT
+                language,
+                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            GROUP BY language
+            ORDER BY total_seconds DESC;
+        """
+        val distribution = mutableListOf<LanguageUsage>()
+        try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(startTime))
+                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val language = rs.getString("language")
+                            val seconds = rs.getLong("total_seconds")
+                            distribution.add(
+                                LanguageUsage(language, Duration.ofSeconds(seconds))
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get language distribution.", e)
+        }
+        return distribution
+    }
+
     private fun calculateCodingStreaks(codingDates: List<LocalDate>): CodingStreaks {
         // If there's no data, return zero for both streaks
         if (codingDates.isEmpty()) return CodingStreaks(0, 0)

@@ -50,3 +50,14 @@ data class HourlyUsage(
     val hourOfDay: Int,
     val totalDuration: Duration
 )
+
+/**
+ * Represents the total coding time for a specific language.
+ *
+ * @property language The name of the programming language.
+ * @property totalDuration The total time spent coding in this language.
+ */
+data class LanguageUsage(
+    val language: String,
+    val totalDuration: Duration
+)

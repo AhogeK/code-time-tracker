@@ -308,6 +308,60 @@ class DatabaseManagerTest {
             )
     }
 
+    @Test
+    @DisplayName("getLanguageDistribution: Should correctly aggregate time by language")
+    fun testGetLanguageDistribution() {
+        // Arrange: Insert data for multiple languages.
+
+        // === Kotlin: 10 mins + 5 mins = 15 mins total ===
+        insertSession("ProjectA", "Kotlin", "2025-10-06T10:00:00", "2025-10-06T10:10:00")
+        insertSession("ProjectB", "Kotlin", "2025-10-07T11:00:00", "2025-10-07T11:05:00")
+
+        // === Java: 30 mins total ===
+        insertSession("ProjectC", "Java", "2025-10-08T14:00:00", "2025-10-08T14:30:00")
+
+        // === Data outside the query range (Python) ===
+        insertSession("ProjectD", "Python", "2025-10-05T10:00:00", "2025-10-05T10:10:00")
+
+        val startTime = LocalDateTime.of(2025, 10, 6, 0, 0)
+        val endTime = LocalDateTime.of(2025, 10, 9, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getLanguageDistribution(startTime, endTime)
+
+        // Assert
+        // We expect 2 languages (Kotlin and Java) in the result. Python should be excluded.
+        assertThat(distribution).hasSize(2)
+
+        // Check the contents regardless of order.
+        assertThat(distribution)
+            .extracting("language", "totalDuration")
+            .containsExactlyInAnyOrder(
+                tuple("Kotlin", Duration.ofMinutes(15)),
+                tuple("Java", Duration.ofMinutes(30))
+            )
+    }
+
+    @Test
+    @DisplayName("getLanguageDistribution: Should return a sorted list by duration descending")
+    fun testGetLanguageDistribution_isSorted() {
+        // Arrange: Insert data with clear duration differences.
+        insertSession("ProjectA", "Java", "2025-10-06T10:00:00", "2025-10-06T10:30:00") // 30 mins
+        insertSession("ProjectB", "Kotlin", "2025-10-06T11:00:00", "2025-10-06T11:10:00") // 10 mins
+        insertSession("ProjectC", "Go", "2025-10-06T12:00:00", "2025-10-06T12:50:00") // 50 mins
+
+        val startTime = LocalDateTime.of(2025, 10, 6, 0, 0)
+        val endTime = LocalDateTime.of(2025, 10, 7, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getLanguageDistribution(startTime, endTime)
+
+        // Assert
+        // Verify that the list is sorted correctly by duration in descending order.
+        val languages = distribution.map { it.language }
+        assertThat(languages).containsExactly("Go", "Java", "Kotlin")
+    }
+
     @AfterEach
     fun tearDown() {
         connection.close()
