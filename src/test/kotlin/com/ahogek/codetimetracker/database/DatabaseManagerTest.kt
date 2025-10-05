@@ -362,6 +362,57 @@ class DatabaseManagerTest {
         assertThat(languages).containsExactly("Go", "Java", "Kotlin")
     }
 
+    @Test
+    @DisplayName("getProjectDistribution: Should correctly aggregate time by project name")
+    fun testGetProjectDistribution() {
+        // Arrange: Insert data for multiple projects.
+
+        // === ProjectA: 10 mins (Kotlin) + 20 mins (Java) = 30 mins total ===
+        insertSession("ProjectA", "Kotlin", "2025-10-06T10:00:00", "2025-10-06T10:10:00")
+        insertSession("ProjectA", "Java", "2025-10-07T11:00:00", "2025-10-07T11:20:00")
+
+        // === ProjectB: 5 mins total ===
+        insertSession("ProjectB", "Kotlin", "2025-10-08T14:00:00", "2025-10-08T14:05:00")
+
+        // === Data outside the query range (ProjectC) ===
+        insertSession("ProjectC", "Python", "2025-10-05T10:00:00", "2025-10-05T10:10:00")
+
+        val startTime = LocalDateTime.of(2025, 10, 6, 0, 0)
+        val endTime = LocalDateTime.of(2025, 10, 9, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getProjectDistribution(startTime, endTime)
+
+        // Assert
+        // We expect 2 projects (ProjectA and ProjectB) in the result. ProjectC should be excluded.
+        assertThat(distribution).hasSize(2)
+
+        // Check that the list is sorted by duration descending and contains the correct totals.
+        assertThat(distribution)
+            .extracting("projectName", "totalDuration")
+            .containsExactly(
+                tuple("ProjectA", Duration.ofMinutes(30)),
+                tuple("ProjectB", Duration.ofMinutes(5))
+            )
+    }
+
+    @Test
+    @DisplayName("getProjectDistribution: Should return an empty list when no data is in range")
+    fun testGetProjectDistribution_empty() {
+        // Arrange
+        insertSession("ProjectA", "Kotlin", "2025-10-06T10:00:00", "2025-10-06T10:10:00")
+
+        val startTime = LocalDateTime.of(2025, 11, 1, 0, 0)
+        val endTime = LocalDateTime.of(2025, 11, 2, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getProjectDistribution(startTime, endTime)
+
+        // Assert
+        assertThat(distribution).isNotNull
+        assertThat(distribution).isEmpty()
+    }
+
     @AfterEach
     fun tearDown() {
         connection.close()

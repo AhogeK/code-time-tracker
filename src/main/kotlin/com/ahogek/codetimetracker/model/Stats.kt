@@ -61,3 +61,14 @@ data class LanguageUsage(
     val language: String,
     val totalDuration: Duration
 )
+
+/**
+ * Represents the total coding time for a specific project.
+ *
+ * @property projectName The name of the project.
+ * @property totalDuration The total time spent on this project.
+ */
+data class ProjectUsage(
+    val projectName: String,
+    val totalDuration: Duration
+)

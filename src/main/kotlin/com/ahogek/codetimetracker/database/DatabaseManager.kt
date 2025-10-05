@@ -489,6 +489,46 @@ object DatabaseManager {
         return distribution
     }
 
+    /**
+     * Fetches the total coding time for each project within a given time range.
+     *
+     * @param startTime The start of the time range.
+     * @param endTime The end of the time range.
+     * @return A list of ProjectUsage objects, ordered from the most worked-on to the least.
+     */
+    fun getProjectDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<ProjectUsage> {
+        val sql = """
+            SELECT
+                project_name,
+                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            GROUP BY project_name
+            ORDER BY total_seconds DESC;
+        """
+        val distribution = mutableListOf<ProjectUsage>()
+        try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(startTime))
+                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val projectName = rs.getString("project_name")
+                            val seconds = rs.getLong("total_seconds")
+                            distribution.add(
+                                ProjectUsage(projectName, Duration.ofSeconds(seconds))
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get project distribution.", e)
+        }
+        return distribution
+    }
+
     private fun calculateCodingStreaks(codingDates: List<LocalDate>): CodingStreaks {
         // If there's no data, return zero for both streaks
         if (codingDates.isEmpty()) return CodingStreaks(0, 0)
