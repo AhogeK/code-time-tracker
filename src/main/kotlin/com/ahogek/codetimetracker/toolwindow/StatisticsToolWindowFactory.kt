@@ -1,9 +1,11 @@
 package com.ahogek.codetimetracker.toolwindow
 
+import com.ahogek.codetimetracker.statistics.StatisticsView
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
+import com.intellij.ui.content.ContentFactory
 
 /**
  * Factory class for creating the statistics tool window.
@@ -24,6 +26,9 @@ class StatisticsToolWindowFactory : ToolWindowFactory, DumbAware {
         project: Project,
         toolWindow: ToolWindow
     ) {
-        TODO("Not yet implemented")
+        val statisticsView = StatisticsView()
+        val contentFactory = ContentFactory.getInstance()
+        val content = contentFactory.createContent(statisticsView, "", false)
+        toolWindow.contentManager.addContent(content)
     }
 }

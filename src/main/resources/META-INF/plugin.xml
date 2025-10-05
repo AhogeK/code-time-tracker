@@ -30,10 +30,10 @@
                 implementation="com.ahogek.codetimetracker.widget.CodeTimeTrackerWidgetFactory"/>
 
         <toolWindow
-                id="CodeTimeTracker.Statistics"
+                id="Code Statistics"
                 factoryClass="com.ahogek.codetimetracker.toolwindow.StatisticsToolWindowFactory"
                 anchor="right"
-                icon="AllIcons.Toolwindows.ToolWindowStructure"/>
+                icon="/icons/statistics_icon.svg"/>
     </extensions>
 
     <applicationListeners>
@@ -41,6 +41,5 @@
                 class="com.ahogek.codetimetracker.listeners.GlobalActionListener"
                 topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
     </applicationListeners>
-
 
 </idea-plugin>
