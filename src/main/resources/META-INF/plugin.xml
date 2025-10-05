@@ -28,6 +28,12 @@
         <statusBarWidgetFactory
                 id="CodeTimeTrackerWidget"
                 implementation="com.ahogek.codetimetracker.widget.CodeTimeTrackerWidgetFactory"/>
+
+        <toolWindow
+                id="CodeTimeTracker.Statistics"
+                factoryClass="com.ahogek.codetimetracker.toolwindow.StatisticsToolWindowFactory"
+                anchor="right"
+                icon="AllIcons.Toolwindows.ToolWindowStructure"/>
     </extensions>
 
     <applicationListeners>
