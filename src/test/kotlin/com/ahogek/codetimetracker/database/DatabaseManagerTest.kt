@@ -274,6 +274,40 @@ class DatabaseManagerTest {
         assertThat(distribution).isEmpty()
     }
 
+    @Test
+    @DisplayName("getOverallHourlyDistribution: Should correctly aggregate time by hour across all days")
+    fun testGetOverallHourlyDistribution() {
+        // Arrange: Insert data for the same hour but on different days.
+
+        // Day 1, 10:xx -> 10 mins
+        insertSession("P1", "Kotlin", "2025-10-06T10:00:00", "2025-10-06T10:10:00")
+        // Day 2, 10:xx -> 5 mins
+        insertSession("P1", "Kotlin", "2025-10-07T10:30:00", "2025-10-07T10:35:00")
+        // Expected total for 10:xx hour = 15 mins
+
+        // Day 1, 14:xx -> 20 mins
+        insertSession("P2", "Java", "2025-10-06T14:00:00", "2025-10-06T14:20:00")
+
+        // Data outside the query range (should be ignored)
+        insertSession("P4", "Go", "2025-10-05T10:00:00", "2025-10-05T10:10:00")
+
+        val startTime = LocalDateTime.of(2025, 10, 6, 0, 0)
+        val endTime = LocalDateTime.of(2025, 10, 8, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getOverallHourlyDistribution(startTime, endTime)
+
+        // Assert
+        assertThat(distribution).hasSize(2) // Expect 2 distinct hour blocks (10:xx and 14:xx)
+
+        assertThat(distribution)
+            .extracting("hourOfDay", "totalDuration")
+            .containsExactlyInAnyOrder(
+                tuple(10, Duration.ofMinutes(15)), // Total for 10:xx hour is 10 + 5 = 15 mins
+                tuple(14, Duration.ofMinutes(20))  // Total for 14:xx hour is 20 mins
+            )
+    }
+
     @AfterEach
     fun tearDown() {
         connection.close()

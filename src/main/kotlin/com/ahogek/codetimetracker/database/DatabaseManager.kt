@@ -1,9 +1,6 @@
 package com.ahogek.codetimetracker.database
 
-import com.ahogek.codetimetracker.model.CodingSession
-import com.ahogek.codetimetracker.model.CodingStreaks
-import com.ahogek.codetimetracker.model.DailySummary
-import com.ahogek.codetimetracker.model.HourlyDistribution
+import com.ahogek.codetimetracker.model.*
 import com.ahogek.codetimetracker.user.UserManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
@@ -407,6 +404,47 @@ object DatabaseManager {
             }
         } catch (e: Exception) {
             log.error("Failed to get daily hour distribution.", e)
+        }
+        return distribution
+    }
+
+    /**
+     * Fetches the total coding time distribution by hour, aggregated across all days in a given period.
+     * This is ideal for generating a "typical day" activity chart.
+     *
+     * @param startTime The start of the time range.
+     * @param endTime The end of the time range.
+     * @return A list of HourlyUsage objects.
+     */
+    fun getOverallHourlyDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<HourlyUsage> {
+        val sql = """
+            SELECT
+                CAST(strftime('%H', start_time) AS INTEGER) as hour_of_day,
+                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            GROUP BY hour_of_day
+            ORDER BY hour_of_day;
+        """
+        val distribution = mutableListOf<HourlyUsage>()
+        try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(startTime))
+                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val hour = rs.getInt("hour_of_day")
+                            val seconds = rs.getLong("total_seconds")
+                            distribution.add(
+                                HourlyUsage(hour, Duration.ofSeconds(seconds))
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get overall hourly distribution.", e)
         }
         return distribution
     }

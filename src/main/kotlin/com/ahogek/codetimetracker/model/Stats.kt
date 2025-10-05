@@ -39,3 +39,14 @@ data class HourlyDistribution(
     val hourOfDay: Int,
     val totalDuration: Duration
 )
+
+/**
+ * Represents total coding activity within a specific hour of the day, aggregated across all days.
+ *
+ * @property hourOfDay The hour of the day (0-23).
+ * @property totalDuration The total time spent during this hour across the entire queried period.
+ */
+data class HourlyUsage(
+    val hourOfDay: Int,
+    val totalDuration: Duration
+)
