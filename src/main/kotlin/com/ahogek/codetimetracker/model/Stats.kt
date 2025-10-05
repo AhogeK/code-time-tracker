@@ -72,3 +72,14 @@ data class ProjectUsage(
     val projectName: String,
     val totalDuration: Duration
 )
+
+/**
+ * Represents coding time distribution across different parts of the day.
+ *
+ * @property timeOfDay The name of the period (e.g., "Morning", "Daytime", "Evening", "Night").
+ * @property totalDuration The total time spent during this period.
+ */
+data class TimeOfDayUsage(
+    val timeOfDay: String,
+    val totalDuration: Duration
+)

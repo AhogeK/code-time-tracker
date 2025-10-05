@@ -529,6 +529,51 @@ object DatabaseManager {
         return distribution
     }
 
+    /**
+     * Categorizes coding time into four periods of the day and calculates the total duration for each.
+     * Periods are: Night (0-5), Morning (6-11), Daytime (12-17), Evening (18-23).
+     *
+     * @param startTime The start of the time range for the query.
+     * @param endTime The end of the time range for the query.
+     * @return A list of TimeOfDayUsage objects.
+     */
+    fun getTimeOfDayDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<TimeOfDayUsage> {
+        val sql = """
+            SELECT
+                CASE
+                    WHEN CAST(strftime('%H', start_time) AS INTEGER) BETWEEN 0 AND 5 THEN 'Night'
+                    WHEN CAST(strftime('%H', start_time) AS INTEGER) BETWEEN 6 AND 11 THEN 'Morning'
+                    WHEN CAST(strftime('%H', start_time) AS INTEGER) BETWEEN 12 AND 17 THEN 'Daytime'
+                    ELSE 'Evening'
+                END as time_of_day,
+                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            GROUP BY time_of_day;
+        """
+        val distribution = mutableListOf<TimeOfDayUsage>()
+        try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(startTime))
+                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            val timeOfDay = rs.getString("time_of_day")
+                            val seconds = rs.getLong("total_seconds")
+                            distribution.add(
+                                TimeOfDayUsage(timeOfDay, Duration.ofSeconds(seconds))
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get time of day distribution.", e)
+        }
+        return distribution
+    }
+
     private fun calculateCodingStreaks(codingDates: List<LocalDate>): CodingStreaks {
         // If there's no data, return zero for both streaks
         if (codingDates.isEmpty()) return CodingStreaks(0, 0)

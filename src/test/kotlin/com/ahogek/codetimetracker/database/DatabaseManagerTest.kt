@@ -413,6 +413,70 @@ class DatabaseManagerTest {
         assertThat(distribution).isEmpty()
     }
 
+    @Test
+    @DisplayName("getTimeOfDayDistribution: Should correctly categorize and aggregate time into four periods")
+    fun testGetTimeOfDayDistribution() {
+        // Arrange: Insert data covering all four time periods.
+
+        // === Night (00:00 - 05:59) ===
+        insertSession("ProjectA", "Rust", "2025-10-06T04:00:00", "2025-10-06T04:30:00") // 30 mins
+
+        // === Morning (06:00 - 11:59) ===
+        insertSession("ProjectB", "Kotlin", "2025-10-06T09:10:00", "2025-10-06T09:20:00") // 10 mins
+        insertSession("ProjectA", "Kotlin", "2025-10-07T11:50:00", "2025-10-07T11:55:00") // 5 mins
+        // Expected Morning total = 15 mins
+
+        // === Daytime (12:00 - 17:59) ===
+        insertSession("ProjectC", "Java", "2025-10-08T15:00:00", "2025-10-08T16:00:00") // 60 mins
+
+        // === Evening (18:00 - 23:59) ===
+        insertSession("ProjectD", "Go", "2025-10-08T22:00:00", "2025-10-08T22:40:00") // 40 mins
+
+        // === Data outside the range (should be ignored) ===
+        insertSession("ProjectE", "C++", "2025-10-05T12:00:00", "2025-10-05T13:00:00")
+
+        val startTime = LocalDateTime.of(2025, 10, 6, 0, 0)
+        val endTime = LocalDateTime.of(2025, 10, 9, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getTimeOfDayDistribution(startTime, endTime)
+
+        // Assert
+        // We expect all four periods to be present.
+        assertThat(distribution).hasSize(4)
+
+        // Check the contents regardless of their order.
+        assertThat(distribution)
+            .extracting("timeOfDay", "totalDuration")
+            .containsExactlyInAnyOrder(
+                tuple("Night", Duration.ofMinutes(30)),
+                tuple("Morning", Duration.ofMinutes(15)),
+                tuple("Daytime", Duration.ofMinutes(60)),
+                tuple("Evening", Duration.ofMinutes(40))
+            )
+    }
+
+    @Test
+    @DisplayName("getTimeOfDayDistribution: Should only return periods with actual data")
+    fun testGetTimeOfDayDistribution_missingPeriods() {
+        // Arrange: Insert data for only two periods
+        insertSession("ProjectA", "Rust", "2025-10-06T04:00:00", "2025-10-06T04:30:00") // Night
+        insertSession("ProjectB", "Kotlin", "2025-10-06T09:10:00", "2025-10-06T09:20:00") // Morning
+
+        val startTime = LocalDateTime.of(2025, 10, 6, 0, 0)
+        val endTime = LocalDateTime.of(2025, 10, 7, 0, 0)
+
+        // Act
+        val distribution = DatabaseManager.getTimeOfDayDistribution(startTime, endTime)
+
+        // Assert
+        // We expect only two periods in the result.
+        assertThat(distribution).hasSize(2)
+        assertThat(distribution)
+            .extracting("timeOfDay")
+            .containsExactlyInAnyOrder("Night", "Morning")
+    }
+
     @AfterEach
     fun tearDown() {
         connection.close()
