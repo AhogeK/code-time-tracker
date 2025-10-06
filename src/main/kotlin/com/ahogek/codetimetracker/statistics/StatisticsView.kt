@@ -1,6 +1,19 @@
 package com.ahogek.codetimetracker.statistics
 
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.util.Disposer
+import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
+import com.intellij.ui.jcef.JBCefClient
+import com.intellij.ui.jcef.utils.JBCefStreamResourceHandler
+import org.cef.browser.CefBrowser
+import org.cef.browser.CefFrame
+import org.cef.handler.CefRequestHandlerAdapter
+import org.cef.handler.CefResourceHandler
+import org.cef.handler.CefResourceRequestHandler
+import org.cef.handler.CefResourceRequestHandlerAdapter
+import org.cef.misc.BoolRef
+import org.cef.network.CefRequest
 import java.awt.BorderLayout
 import javax.swing.JPanel
 
@@ -11,18 +24,71 @@ import javax.swing.JPanel
  * @author AhogeK ahogek@gmail.com
  * @since 2025-10-05 20:32:16
  */
-class StatisticsView : JPanel(BorderLayout()) {
+class StatisticsView : JPanel(BorderLayout()), Disposable {
 
-    // The JCEF browser instance where we will render our charts
-    private val browser: JBCefBrowser = JBCefBrowser()
+    private val jbCefClient: JBCefClient = JBCefApp.getInstance().createClient()
+    private val browser: JBCefBrowser
+    private val virtualDomain = "http://myapp.local/"
 
     init {
-        // Add the browser's component to the center of our panel.
-        // The BorderLayout will make it fill all available space.
+        val requestHandler = object : CefRequestHandlerAdapter() {
+            override fun getResourceRequestHandler(
+                browser: CefBrowser,
+                frame: CefFrame,
+                request: CefRequest,
+                isNavigation: Boolean,
+                isDownload: Boolean,
+                requestInitiator: String,
+                disableDefaultHandling: BoolRef
+            ): CefResourceRequestHandler? {
+                if (request.url?.startsWith(virtualDomain) == true) {
+                    return resourceRequestHandler
+                }
+                return null
+            }
+        }
+
+        browser = JBCefBrowser.createBuilder()
+            .setClient(jbCefClient)
+            .build()
+
+        // Add handler BEFORE loading the URL
+        jbCefClient.addRequestHandler(requestHandler, browser.cefBrowser)
+
+        // Set background to match IntelliJ theme
+        browser.component.background = background
+
         add(browser.component, BorderLayout.CENTER)
 
-        // For now, we will load a simple HTML string to verify it works.
-        // Later, we will load our actual chart page from the plugin's resources.
-        browser.loadHTML("<h1>Loading Statistics...</h1>")
+        // Load URL after handler is registered
+        browser.loadURL(virtualDomain + "index.html")
+    }
+
+    private val resourceRequestHandler = object : CefResourceRequestHandlerAdapter() {
+        override fun getResourceHandler(
+            browser: CefBrowser,
+            frame: CefFrame,
+            request: CefRequest
+        ): CefResourceHandler? {
+            val url = request.url ?: return null
+            val resourcePath = "webview/" + url.substring(virtualDomain.length)
+            val resourceStream = this.javaClass.classLoader.getResourceAsStream(resourcePath)
+
+            if (resourceStream != null) {
+                val mimeType = when {
+                    resourcePath.endsWith(".html") -> "text/html"
+                    resourcePath.endsWith(".js") -> "text/javascript"
+                    resourcePath.endsWith(".css") -> "text/css"
+                    else -> "application/octet-stream"
+                }
+                return JBCefStreamResourceHandler(resourceStream, mimeType, this@StatisticsView)
+            }
+            return null
+        }
+    }
+
+    override fun dispose() {
+        Disposer.dispose(browser)
+        Disposer.dispose(jbCefClient)
     }
 }
