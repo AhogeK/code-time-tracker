@@ -5,6 +5,7 @@ import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
+import com.intellij.openapi.wm.ex.ToolWindowManagerListener
 import com.intellij.ui.content.ContentFactory
 
 /**
@@ -15,6 +16,10 @@ import com.intellij.ui.content.ContentFactory
  * @since 2025-10-05 20:26:10
  */
 class StatisticsToolWindowFactory : ToolWindowFactory, DumbAware {
+
+    companion object {
+        const val TOOL_WINDOW_ID = "Code Statistics"
+    }
 
     /**
      * This method is called by the IDE to create the content of the tool window.
@@ -31,11 +36,19 @@ class StatisticsToolWindowFactory : ToolWindowFactory, DumbAware {
         val content = contentFactory.createContent(statisticsView, "", false)
         toolWindow.contentManager.addContent(content)
 
-        // This is a modern callback for when the tool window is displayed.
-        // Calling loadAndRenderCharts() here ensures the data is refreshed
-        // every time the user opens or focuses the tool window.
-        toolWindow.show {
-            statisticsView.loadAndRenderCharts()
-        }
+        project.messageBus.connect(toolWindow.disposable).subscribe(
+            ToolWindowManagerListener.TOPIC,
+            object : ToolWindowManagerListener {
+                override fun stateChanged(toolWindowManager: com.intellij.openapi.wm.ToolWindowManager) {
+                    val currentToolWindow = toolWindowManager.getToolWindow(TOOL_WINDOW_ID)
+                    if (currentToolWindow != null && currentToolWindow.isVisible) {
+                        val content = currentToolWindow.contentManager.getContent(0)
+                        if (content?.component is StatisticsView) {
+                            (content.component as StatisticsView).loadAndRenderCharts()
+                        }
+                    }
+                }
+            }
+        )
     }
 }

@@ -1,6 +1,11 @@
 package com.ahogek.codetimetracker.statistics
 
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.actionSystem.ActionManager
+import com.intellij.openapi.actionSystem.AnAction
+import com.intellij.openapi.actionSystem.AnActionEvent
+import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
@@ -32,6 +37,24 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
     private val pendingCalls = mutableListOf<() -> Unit>()
 
     init {
+        val actionGroup = DefaultActionGroup()
+        val refreshAction = object : AnAction(
+            "Refresh",
+            "Reload statistics data",
+            AllIcons.Actions.Refresh
+        ) {
+            override fun actionPerformed(e: AnActionEvent) {
+                loadAndRenderCharts()
+            }
+        }
+        actionGroup.add(refreshAction)
+
+        val actionToolbar = ActionManager.getInstance()
+            .createActionToolbar("StatisticsToolbar", actionGroup, true)
+        actionToolbar.targetComponent = this
+
+        add(actionToolbar.component, BorderLayout.NORTH)
+
         val requestHandler = object : CefRequestHandlerAdapter() {
             override fun getResourceRequestHandler(
                 browser: CefBrowser,
@@ -81,19 +104,15 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
             // Get data from a database or other service (mock data used here)
             val data = """
             {
-                "title": "Daily Coding Time (Mock Data)",
+                "title": "Daily Coding Time (Refreshed at ${java.time.LocalTime.now()})",
                 "categories": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-                "values": [120, 200, 150, 80, 70, 110, 130]
+                "values": [${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}]
             }
             """.trimIndent()
             val escapedData = data.replace("\\", "\\\\")
                 .replace("'", "\\'")
                 .replace("\n", "")
-            val jsCode = """
-                if (window.renderCharts) { 
-                  window.renderCharts('$escapedData'); 
-                }
-            """.trimIndent()
+            val jsCode = "if (window.renderCharts) { window.renderCharts('$escapedData'); }"
             browser.cefBrowser.executeJavaScript(jsCode, browser.cefBrowser.url, 0)
         }
     }
