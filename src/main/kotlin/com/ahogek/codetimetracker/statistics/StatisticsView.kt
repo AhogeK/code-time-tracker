@@ -8,10 +8,7 @@ import com.intellij.ui.jcef.JBCefClient
 import com.intellij.ui.jcef.utils.JBCefStreamResourceHandler
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
-import org.cef.handler.CefRequestHandlerAdapter
-import org.cef.handler.CefResourceHandler
-import org.cef.handler.CefResourceRequestHandler
-import org.cef.handler.CefResourceRequestHandlerAdapter
+import org.cef.handler.*
 import org.cef.misc.BoolRef
 import org.cef.network.CefRequest
 import java.awt.BorderLayout
@@ -29,6 +26,10 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
     private val jbCefClient: JBCefClient = JBCefApp.getInstance().createClient()
     private val browser: JBCefBrowser
     private val virtualDomain = "http://myapp.local/"
+
+    @Volatile
+    private var isBrowserLoaded = false
+    private val pendingCalls = mutableListOf<() -> Unit>()
 
     init {
         val requestHandler = object : CefRequestHandlerAdapter() {
@@ -56,7 +57,53 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
         // Add handler AFTER browser creation
         jbCefClient.addRequestHandler(requestHandler, browser.getCefBrowser())
 
+        jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
+            override fun onLoadEnd(
+                browser: CefBrowser?,
+                frame: CefFrame?,
+                httpStatusCode: Int
+            ) {
+                if (frame != null && frame.isMain) {
+                    isBrowserLoaded = true
+                    synchronized(pendingCalls) {
+                        pendingCalls.forEach { it.invoke() }
+                        pendingCalls.clear()
+                    }
+                }
+            }
+        }, browser.cefBrowser)
+
         add(browser.component, BorderLayout.CENTER)
+    }
+
+    fun loadAndRenderCharts() {
+        executeJavaScriptWhenLoaded {
+            // Get data from a database or other service (mock data used here)
+            val data = """
+            {
+                "title": "Daily Coding Time (Mock Data)",
+                "categories": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
+                "values": [120, 200, 150, 80, 70, 110, 130]
+            }
+            """.trimIndent()
+            val escapedData = data.replace("\\", "\\\\").replace("'", "\\'")
+            val jsCode = """
+                if (window.renderCharts) { 
+                  window.renderCharts('$escapedData'); 
+                }
+            """.trimIndent()
+            browser.cefBrowser.executeJavaScript(jsCode, browser.cefBrowser.url, 0)
+        }
+    }
+
+    /**
+     * Safely execute JavaScript when the browser is loaded
+     */
+    private fun executeJavaScriptWhenLoaded(jsExecution: () -> Unit) {
+        if (isBrowserLoaded) jsExecution.invoke()
+        else synchronized(pendingCalls) {
+            pendingCalls.add(jsExecution)
+        }
     }
 
     private val resourceRequestHandler = object : CefResourceRequestHandlerAdapter() {
