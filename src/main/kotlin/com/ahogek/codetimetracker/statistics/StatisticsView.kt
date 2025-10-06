@@ -50,18 +50,13 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
 
         browser = JBCefBrowser.createBuilder()
             .setClient(jbCefClient)
+            .setUrl(virtualDomain + "index.html")
             .build()
 
-        // Add handler BEFORE loading the URL
-        jbCefClient.addRequestHandler(requestHandler, browser.cefBrowser)
-
-        // Set background to match IntelliJ theme
-        browser.component.background = background
+        // Add handler AFTER browser creation
+        jbCefClient.addRequestHandler(requestHandler, browser.getCefBrowser())
 
         add(browser.component, BorderLayout.CENTER)
-
-        // Load URL after handler is registered
-        browser.loadURL(virtualDomain + "index.html")
     }
 
     private val resourceRequestHandler = object : CefResourceRequestHandlerAdapter() {
@@ -81,6 +76,7 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
                     resourcePath.endsWith(".css") -> "text/css"
                     else -> "application/octet-stream"
                 }
+                // Pass 'this@StatisticsView' as the parent Disposable
                 return JBCefStreamResourceHandler(resourceStream, mimeType, this@StatisticsView)
             }
             return null
