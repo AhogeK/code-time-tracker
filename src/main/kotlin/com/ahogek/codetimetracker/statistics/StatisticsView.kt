@@ -55,7 +55,7 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
             .build()
 
         // Add handler AFTER browser creation
-        jbCefClient.addRequestHandler(requestHandler, browser.getCefBrowser())
+        jbCefClient.addRequestHandler(requestHandler, browser.cefBrowser)
 
         jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
             override fun onLoadEnd(
@@ -86,7 +86,9 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
                 "values": [120, 200, 150, 80, 70, 110, 130]
             }
             """.trimIndent()
-            val escapedData = data.replace("\\", "\\\\").replace("'", "\\'")
+            val escapedData = data.replace("\\", "\\\\")
+                .replace("'", "\\'")
+                .replace("\n", "")
             val jsCode = """
                 if (window.renderCharts) { 
                   window.renderCharts('$escapedData'); 
