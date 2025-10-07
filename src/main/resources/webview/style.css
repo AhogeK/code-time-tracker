@@ -12,6 +12,14 @@ h1 {
   margin-bottom: 20px;
 }
 
+/* Style for the heatmap container */
+#heatmap {
+  width: 100%;
+  height: 220px;
+  margin-top: 20px;
+}
+
+/* Generic style for other chart containers */
 #chart-container {
   width: 100%;
   height: 400px;

@@ -1,5 +1,8 @@
 package com.ahogek.codetimetracker.statistics
 
+import com.ahogek.codetimetracker.database.DatabaseManager
+import com.google.gson.Gson
+import com.google.gson.GsonBuilder
 import com.intellij.icons.AllIcons
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
@@ -7,16 +10,21 @@ import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
 import com.intellij.openapi.util.Disposer
+import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefClient
 import com.intellij.ui.jcef.utils.JBCefStreamResourceHandler
+import com.intellij.util.ui.UIUtil
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.handler.*
 import org.cef.misc.BoolRef
 import org.cef.network.CefRequest
 import java.awt.BorderLayout
+import java.awt.Color
+import java.time.Duration
+import java.time.LocalDateTime
 import javax.swing.JPanel
 
 /**
@@ -35,6 +43,10 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
     @Volatile
     private var isBrowserLoaded = false
     private val pendingCalls = mutableListOf<() -> Unit>()
+
+    private val gson: Gson = GsonBuilder()
+        .registerTypeAdapter(Duration::class.java, DurationAdapter())
+        .create()
 
     init {
         val actionGroup = DefaultActionGroup()
@@ -101,20 +113,44 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
 
     fun loadAndRenderCharts() {
         executeJavaScriptWhenLoaded {
-            // Get data from a database or other service (mock data used here)
-            val data = """
-            {
-                "title": "Daily Coding Time (Refreshed at ${java.time.LocalTime.now()})",
-                "categories": ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"],
-                "values": [${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}, ${(50..200).random()}]
+            val endTime = LocalDateTime.now()
+            val startTime = endTime.minusYears(1)
+            val dailySummary = DatabaseManager.getDailyCodingTimeForHeatmap(startTime, endTime)
+
+            // Transform data into a simpler structure (Map) for easier JS consumption
+            val chartData = dailySummary.map {
+                mapOf(
+                    "date" to it.date.toString(), // "YYYY-MM-DD"
+                    "seconds" to it.totalDuration.toSeconds()
+                )
             }
-            """.trimIndent()
+
+            val themeColors = mapOf(
+                "isDark" to !JBColor.isBright(),
+                "foreground" to UIUtil.getLabelForeground().toHex(),
+                "secondary" to UIUtil.getLabelDisabledForeground().toHex()
+            )
+
+            val payload = mapOf(
+                "theme" to themeColors,
+                "data" to chartData
+            )
+
+            val data = gson.toJson(payload)
+
             val escapedData = data.replace("\\", "\\\\")
                 .replace("'", "\\'")
                 .replace("\n", "")
             val jsCode = "if (window.renderCharts) { window.renderCharts('$escapedData'); }"
             browser.cefBrowser.executeJavaScript(jsCode, browser.cefBrowser.url, 0)
         }
+    }
+
+    /**
+     * Helper function to convert a Java Color object to a CSS-friendly hex string.
+     */
+    private fun Color.toHex(): String {
+        return String.format("#%02x%02x%02x", this.red, this.green, this.blue)
     }
 
     /**
