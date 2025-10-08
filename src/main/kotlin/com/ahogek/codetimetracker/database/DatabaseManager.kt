@@ -339,20 +339,30 @@ object DatabaseManager {
     }
 
     /**
-     * Calculates the current and maximum consecutive coding streaks
+     * Calculates the current and maximum consecutive coding streaks within a given time range.
      *
-     * @return A CodingStreaks object containing the current and maximum streaks
+     * @param startTime The start of the time range.
+     * @param endTime The end of the time range.
+     * @return A CodingStreaks object containing the current and maximum streaks.
      */
-    fun getCodingStreaks(): CodingStreaks {
-        // SQL query to get all unique dates with coding activity, sorted from newest to oldest.
-        val sql =
-            "SELECT DISTINCT DATE(start_time) as coding_date FROM coding_sessions WHERE is_deleted = 0 ORDER BY coding_date DESC;"
+    fun getCodingStreaks(startTime: LocalDateTime, endTime: LocalDateTime): CodingStreaks {
+        val sql = """
+            SELECT DISTINCT DATE(start_time) as coding_date
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            ORDER BY coding_date DESC;
+        """
         val codingDates = mutableListOf<LocalDate>()
         try {
             withConnection { conn ->
-                conn.createStatement().executeQuery(sql).use { rs ->
-                    while (rs.next())
-                        codingDates.add(LocalDate.parse(rs.getString("coding_date")))
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(startTime))
+                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            codingDates.add(LocalDate.parse(rs.getString("coding_date")))
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -361,6 +371,17 @@ object DatabaseManager {
         }
 
         return calculateCodingStreaks(codingDates)
+    }
+
+    /**
+     * Calculates the current and maximum consecutive coding streaks
+     *
+     * @return A CodingStreaks object containing the current and maximum streaks
+     */
+    fun getCodingStreaks(): CodingStreaks {
+        val endTime = LocalDateTime.now()
+        val startTime = endTime.minusYears(1)
+        return getCodingStreaks(startTime, endTime)
     }
 
     /**

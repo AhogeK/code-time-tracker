@@ -116,6 +116,7 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
             val endTime = LocalDateTime.now()
             val startTime = endTime.minusYears(1)
             val dailySummary = DatabaseManager.getDailyCodingTimeForHeatmap(startTime, endTime)
+            val codingStreaks = DatabaseManager.getCodingStreaks(startTime, endTime)
 
             // Transform data into a simpler structure (Map) for easier JS consumption
             val chartData = dailySummary.map {
@@ -133,7 +134,12 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
 
             val payload = mapOf(
                 "theme" to themeColors,
-                "data" to chartData
+                "data" to chartData,
+                "streaks" to mapOf(
+                    "current" to codingStreaks.currentStreak,
+                    "max" to codingStreaks.maxStreak,
+                    "totalDays" to dailySummary.size // Calculate total active days
+                )
             )
 
             val data = gson.toJson(payload)
