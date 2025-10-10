@@ -6,6 +6,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
 import java.sql.Connection
+import java.sql.PreparedStatement
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -391,26 +392,33 @@ object DatabaseManager {
      * @param endTime The end of the time range.
      * @return A list of HourlyDistribution objects.
      */
-    fun getDailyHourDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<HourlyDistribution> {
+    fun getDailyHourDistribution(
+        startTime: LocalDateTime? = null,
+        endTime: LocalDateTime? = null
+    ): List<HourlyDistribution> {
+        val conditions = mutableListOf("is_deleted = 0")
+
+        checkTimeParams(conditions, startTime, endTime)
+
         val sql = """
             SELECT
-                CAST(strftime('%w', start_time) AS INTEGER) as day_of_week, -- SQLite: 0=Sunday, 1=Monday,...
+                CAST(strftime('%w', start_time) AS INTEGER) as day_of_week,
                 CAST(strftime('%H', start_time) AS INTEGER) as hour_of_day,
                 SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
             FROM coding_sessions
-            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            WHERE ${conditions.joinToString(" AND ")}
             GROUP BY day_of_week, hour_of_day;
         """
+
         val distribution = mutableListOf<HourlyDistribution>()
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
-                    pstmt.setString(1, dateTimeFormatter.format(startTime))
-                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    checkTimeParamsInStatement(pstmt, startTime, endTime)
+
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             var dayOfWeek = rs.getInt("day_of_week")
-                            // Standardize to ISO 8601 week date system: 1=Monday, ..., 7=Sunday
                             if (dayOfWeek == 0) {
                                 dayOfWeek = 7
                             }
@@ -427,6 +435,33 @@ object DatabaseManager {
             log.error("Failed to get daily hour distribution.", e)
         }
         return distribution
+    }
+
+    private fun checkTimeParamsInStatement(
+        pstmt: PreparedStatement,
+        startTime: LocalDateTime?,
+        endTime: LocalDateTime?
+    ) {
+        var paramIndex = 1
+        if (startTime != null) {
+            pstmt.setString(paramIndex++, dateTimeFormatter.format(startTime))
+        }
+        if (endTime != null) {
+            pstmt.setString(paramIndex, dateTimeFormatter.format(endTime))
+        }
+    }
+
+    private fun checkTimeParams(
+        conditions: MutableList<String>,
+        startTime: LocalDateTime?,
+        endTime: LocalDateTime?
+    ) {
+        if (startTime != null) {
+            conditions.add("start_time >= ?")
+        }
+        if (endTime != null) {
+            conditions.add("start_time < ?")
+        }
     }
 
     /**

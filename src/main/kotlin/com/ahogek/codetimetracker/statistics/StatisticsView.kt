@@ -1,6 +1,5 @@
 package com.ahogek.codetimetracker.statistics
 
-import com.ahogek.codetimetracker.database.DatabaseManager
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.intellij.icons.AllIcons
@@ -47,6 +46,11 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
     private val gson: Gson = GsonBuilder()
         .registerTypeAdapter(Duration::class.java, DurationAdapter())
         .create()
+
+    private val dataProvides: List<ChartDataProvider> = listOf(
+        YearlyActivityDataProvider(),
+        DailyHourDataProvider()
+    )
 
     init {
         val actionGroup = DefaultActionGroup()
@@ -115,41 +119,44 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
         executeJavaScriptWhenLoaded {
             val endTime = LocalDateTime.now()
             val startTime = endTime.minusYears(1)
-            val dailySummary = DatabaseManager.getDailyCodingTimeForHeatmap(startTime, endTime)
-            val codingStreaks = DatabaseManager.getCodingStreaks(startTime, endTime)
 
-            // Transform data into a simpler structure (Map) for easier JS consumption
-            val chartData = dailySummary.map {
-                mapOf(
-                    "date" to it.date.toString(), // "YYYY-MM-DD"
-                    "seconds" to it.totalDuration.toSeconds()
-                )
+            val payload = buildMap {
+                put("theme", getThemeColors())
+                dataProvides.forEach { provider ->
+                    val data = if (provider.requiresTimeRange()) {
+                        provider.prepareData(startTime, endTime)
+                    } else {
+                        provider.prepareData()  // No time range - uses all data
+                    }
+                    put(provider.getChartKey(), data)
+                }
             }
 
-            val themeColors = mapOf(
-                "isDark" to !JBColor.isBright(),
-                "foreground" to UIUtil.getLabelForeground().toHex(),
-                "secondary" to UIUtil.getLabelDisabledForeground().toHex()
-            )
-
-            val payload = mapOf(
-                "theme" to themeColors,
-                "data" to chartData,
-                "streaks" to mapOf(
-                    "current" to codingStreaks.currentStreak,
-                    "max" to codingStreaks.maxStreak,
-                    "totalDays" to dailySummary.size // Calculate total active days
-                )
-            )
-
-            val data = gson.toJson(payload)
-
-            val escapedData = data.replace("\\", "\\\\")
-                .replace("'", "\\'")
-                .replace("\n", "")
-            val jsCode = "if (window.renderCharts) { window.renderCharts('$escapedData'); }"
-            browser.cefBrowser.executeJavaScript(jsCode, browser.cefBrowser.url, 0)
+            executeJavaScript("renderCharts", payload)
         }
+    }
+
+    /**
+     * Retrieves current theme colors from the IDE.
+     */
+    private fun getThemeColors(): Map<String, Any> {
+        return mapOf(
+            "isDark" to !JBColor.isBright(),
+            "foreground" to UIUtil.getLabelForeground().toHex(),
+            "secondary" to UIUtil.getLabelDisabledForeground().toHex()
+        )
+    }
+
+    /**
+     * Executes a JavaScript function with the given payload.
+     */
+    private fun executeJavaScript(@Suppress("SameParameterValue") functionName: String, payload: Map<String, Any>) {
+        val data = gson.toJson(payload)
+        val escapedData = data.replace("\\", "\\\\")
+            .replace("'", "\\'")
+            .replace("\n", "")
+        val jsCode = "if (window.$functionName) { window.$functionName('$escapedData'); }"
+        browser.cefBrowser.executeJavaScript(jsCode, browser.cefBrowser.url, 0)
     }
 
     /**
