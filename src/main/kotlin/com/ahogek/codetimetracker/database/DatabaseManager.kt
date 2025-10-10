@@ -472,28 +472,38 @@ object DatabaseManager {
      * @param endTime The end of the time range.
      * @return A list of HourlyUsage objects.
      */
-    fun getOverallHourlyDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<HourlyUsage> {
+    fun getOverallHourlyDistribution(
+        startTime: LocalDateTime? = null,
+        endTime: LocalDateTime? = null
+    ): List<HourlyUsage> {
+        val conditions = mutableListOf("is_deleted = 0")
+
+        checkTimeParams(conditions, startTime, endTime)
+
         val sql = """
             SELECT
                 CAST(strftime('%H', start_time) AS INTEGER) as hour_of_day,
+                CASE WHEN CAST(strftime('%M', start_time) AS INTEGER) >= 30 THEN 30 ELSE 0 END as minute_interval,
                 SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
             FROM coding_sessions
-            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
-            GROUP BY hour_of_day
-            ORDER BY hour_of_day;
+            WHERE ${conditions.joinToString(" AND ")}
+            GROUP BY hour_of_day, minute_interval
+            ORDER BY hour_of_day, minute_interval;
         """
+
         val distribution = mutableListOf<HourlyUsage>()
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
-                    pstmt.setString(1, dateTimeFormatter.format(startTime))
-                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    checkTimeParamsInStatement(pstmt, startTime, endTime)
+
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val hour = rs.getInt("hour_of_day")
+                            val minute = rs.getInt("minute_interval")
                             val seconds = rs.getLong("total_seconds")
                             distribution.add(
-                                HourlyUsage(hour, Duration.ofSeconds(seconds))
+                                HourlyUsage(hour, minute, Duration.ofSeconds(seconds))
                             )
                         }
                     }

@@ -1,7 +1,8 @@
 // Store all chart instances
 const chartInstances = {
   heatmap: null,
-  dailyHourHeatmap: null
+  dailyHourHeatmap: null,
+  overallHourlyChart: null
 };
 
 /**
@@ -30,8 +31,13 @@ globalThis.renderCharts = function (payload) {
       );
     }
 
-    // Easy to add more charts here in the future
-
+    // Render overall hourly distribution
+    if (jsonPayload.overallHourly) {
+      renderOverallHourlyChart(
+          jsonPayload.overallHourly.data,
+          theme
+      );
+    }
   } catch (e) {
     console.error("Failed to parse or render chart data:", e);
   }
@@ -234,6 +240,124 @@ function renderDailyHourHeatmap(data, theme) {
 }
 
 /**
+ * Renders the overall hourly distribution chart (24-hour coding pattern).
+ * @param {Array<Object>} data - Array of data points with hour and seconds
+ * @param {Object} theme - Theme colors
+ */
+function renderOverallHourlyChart(data, theme) {
+  disposeChart('overallHourlyChart');
+
+  const chartDom = document.getElementById('overallHourlyChart');
+  const chartTheme = theme.isDark ? 'dark' : 'default';
+  chartInstances.overallHourlyChart = echarts.init(chartDom, chartTheme);
+
+  // Create 48 half-hour intervals
+  const intervals = Array.from({length: 48}, (_, i) => {
+    const h = Math.floor(i / 2);
+    const m = (i % 2) * 30;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  });
+
+  const values = new Array(48).fill(0);
+
+  // Fill in the actual data
+  for (const item of data) {
+    const index = item.hour * 2 + (item.minute === 30 ? 1 : 0);
+    values[index] = item.seconds / 3600; // Convert to hours
+  }
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: {
+      text: 'Daily Coding Distribution',
+      left: 'center',
+      top: 0,
+      textStyle: {
+        color: theme.foreground
+      }
+    },
+    tooltip: {
+      trigger: 'axis',
+      formatter: function (params) {
+        const timeLabel = params[0].axisValue;
+        const value = params[0].value.toFixed(3);
+        return `${timeLabel} - ${value} hours`;
+      }
+    },
+    grid: {
+      top: 60,
+      left: 50,
+      right: 30,
+      bottom: 30
+    },
+    xAxis: {
+      type: 'category',
+      data: intervals,
+      axisLabel: {
+        color: theme.secondary,
+        interval: 5
+      },
+      axisLine: {
+        lineStyle: {
+          color: theme.secondary
+        }
+      }
+    },
+    yAxis: {
+      type: 'value',
+      name: 'Hours',
+      nameTextStyle: {
+        color: theme.secondary
+      },
+      axisLabel: {
+        color: theme.secondary,
+        formatter: '{value} h'
+      },
+      splitLine: {
+        lineStyle: {
+          color: theme.isDark ? '#333' : '#e0e0e0'
+        }
+      }
+    },
+    series: [{
+      data: values,
+      type: 'line',
+      smooth: true,
+      showSymbol: false,
+      smoothMonotone: 'x',
+      sampling: 'lttb',
+      areaStyle: {
+        opacity: 0.3,
+        color: {
+          type: 'linear',
+          x: 0,
+          y: 0,
+          x2: 0,
+          y2: 1,
+          colorStops: [{
+            offset: 0, color: 'rgba(64, 196, 99, 0.3)'
+          }, {
+            offset: 1, color: 'rgba(64, 196, 99, 0.05)'
+          }]
+        }
+      },
+      lineStyle: {
+        width: 2.5,
+        color: '#40c463'
+      },
+      emphasis: {
+        focus: 'series',
+        lineStyle: {
+          width: 3
+        }
+      }
+    }]
+  };
+
+  chartInstances.overallHourlyChart.setOption(option);
+}
+
+/**
  * Disposes a chart instance if it exists.
  * @param {string} chartKey - The key of the chart in chartInstances.
  */
@@ -248,9 +372,9 @@ function disposeChart(chartKey) {
  * Resize all active charts when window is resized.
  */
 window.addEventListener('resize', function () {
-  Object.values(chartInstances).forEach(chart => {
+  for (const chart of Object.values(chartInstances)) {
     if (chart) {
       chart.resize();
     }
-  });
+  }
 });
