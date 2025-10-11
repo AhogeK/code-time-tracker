@@ -110,6 +110,9 @@ object DatabaseManager {
             
             -- The user's operating system (e.g., "macOS Sonoma").
             platform TEXT NOT NULL,
+
+            -- The JetBrains IDE product being used (e.g., "IntelliJ IDEA", "PyCharm").
+            ide_name TEXT NOT NULL,
             
             -- The session's start time, in ISO-8601 format.
             start_time TEXT NOT NULL,
@@ -147,9 +150,9 @@ object DatabaseManager {
         databaseExecutor.execute {
             val sql = """
             INSERT INTO coding_sessions(
-                session_uuid, user_id, project_name, language, platform,
+                session_uuid, user_id, project_name, language, platform, ide_name,
                 start_time, end_time, last_modified
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
 
             try {
@@ -165,9 +168,10 @@ object DatabaseManager {
                         pstmt.setString(3, session.projectName)
                         pstmt.setString(4, session.language)
                         pstmt.setString(5, session.platform)
-                        pstmt.setString(6, dateTimeFormatter.format(session.startTime))
-                        pstmt.setString(7, dateTimeFormatter.format(session.endTime))
-                        pstmt.setString(8, currentTimestamp)
+                        pstmt.setString(6, session.ideName)
+                        pstmt.setString(7, dateTimeFormatter.format(session.startTime))
+                        pstmt.setString(8, dateTimeFormatter.format(session.endTime))
+                        pstmt.setString(9, currentTimestamp)
                         pstmt.addBatch()
                     }
                     pstmt.executeBatch()

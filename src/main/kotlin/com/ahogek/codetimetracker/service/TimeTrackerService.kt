@@ -4,6 +4,7 @@ import com.ahogek.codetimetracker.database.DatabaseManager
 import com.ahogek.codetimetracker.model.CodingSession
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
@@ -34,7 +35,10 @@ class TimeTrackerService : Disposable {
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val activeSessions: MutableMap<String, MutableMap<String, CodingSession>> = ConcurrentHashMap()
     private val lastActivityTime: AtomicReference<LocalDateTime> = AtomicReference(LocalDateTime.now().minusHours(1))
-    private val platform: String = "${SystemInfo.OS_NAME} | ${SystemInfo.OS_VERSION} | ${SystemInfo.OS_ARCH}"
+    private val platform: String = SystemInfo.OS_NAME
+    private val ideName: String by lazy {
+        ApplicationInfo.getInstance().versionName ?: "IntelliJ IDEA"
+    }
     private val isUserActive = AtomicBoolean(false)
 
     fun getLastActivityTime(): LocalDateTime {
@@ -92,7 +96,7 @@ class TimeTrackerService : Disposable {
         // Start a new session or update the end time of the existing one.
         val session = projectSessions.computeIfAbsent(currentLanguage) {
             log.info("[$projectName] Starting new coding session for $currentLanguage.")
-            CodingSession(projectName, currentLanguage, platform, now, now)
+            CodingSession(projectName, currentLanguage, platform, ideName, now, now)
         }
         session.endTime = now
     }

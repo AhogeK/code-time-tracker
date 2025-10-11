@@ -17,6 +17,7 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 .intellijPlatform
+.idea/data_source_mapping.xml
 
 ### Eclipse ###
 .apt_generated

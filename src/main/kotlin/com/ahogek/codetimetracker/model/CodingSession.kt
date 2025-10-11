@@ -15,6 +15,7 @@ data class CodingSession(
     val projectName: String,
     val language: String,
     val platform: String,
+    val ideName: String,
     val startTime: LocalDateTime,
     var endTime: LocalDateTime
 )
