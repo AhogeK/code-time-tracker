@@ -4,8 +4,10 @@
 pluginVersion = "0.3-SNAPSHOT"
 
 # dependencies versions
-junitVersion = "6.0.0"
+junitVersion = "6.0.1"
 assertjCoreVersion = "4.0.0-M1"
+sqliteJdbcVersion = "3.51.0.0"
+gsonVersion = "2.13.2"
 
 [libraries]
 
@@ -14,9 +16,12 @@ assertj-core = { module = "org.assertj:assertj-core", version.ref = "assertjCore
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junitVersion" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher", version.ref = "junitVersion" }
 junit-vintage-engine = { module = "org.junit.vintage:junit-vintage-engine", version.ref = "junitVersion" }
+sqlite-jdbc = { module = "org.xerial:sqlite-jdbc", version.ref = "sqliteJdbcVersion" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gsonVersion" }
 
 [plugins]
 
 java = { id = "java" }
-jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.1.0" }
-jetbrains-intellij-platform = { id = "org.jetbrains.intellij.platform", version = "2.5.0" }
+jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.3.0-Beta2" }
+jetbrains-intellij-platform = { id = "org.jetbrains.intellij.platform", version = "2.10.4" }
+ben-manes = { id = "com.github.ben-manes.versions", version = "0.53.0" }
