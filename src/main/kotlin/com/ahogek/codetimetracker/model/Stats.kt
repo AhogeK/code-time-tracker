@@ -41,16 +41,40 @@ data class HourlyDistribution(
 )
 
 /**
- * Represents total coding activity within a specific time interval of the day.
+ * Represents the total coding duration for a specific hour of the day.
  *
- * @property hour The hour of the day (0-23).
- * @property minute The starting minute of the interval (0 or 30).
- * @property totalDuration The total time spent during this interval.
+ * This data class is used to store aggregated coding statistics for hourly analysis.
+ * The average is calculated by dividing the total duration by the number of active days.
+ *
+ * @property hour The hour of the day (0-23, where 0 represents midnight and 23 represents 11 PM).
+ * @property minute The starting minute of the interval (0 or 30). Defaults to 0 for full hour.
+ *                  In full-hour mode, this is always 0. In half-hour mode, this can be 30.
+ * @property totalDuration The average time spent coding during this hour across all active days.
+ *                         This is calculated as: total_seconds_for_this_hour / total_active_days
  */
 data class HourlyUsage(
     val hour: Int,
     val minute: Int = 0,
     val totalDuration: Duration
+)
+
+/**
+ * Represents the complete result of hourly distribution analysis including metadata.
+ *
+ * This class combines the hourly coding statistics with information about the dataset,
+ * allowing consumers to understand the context of the distribution data (e.g., how many
+ * days of data the average is based on).
+ *
+ * @property distribution A list of [HourlyUsage] objects, each containing coding duration
+ *                        for a specific hour of the day. The list should contain 24 entries
+ *                        (one for each hour) when using full-hour granularity.
+ * @property totalDays The total number of active days (days with at least one coding session)
+ *                     used to calculate the averages in the distribution. This value is at
+ *                     least 1 to prevent division by zero errors.
+ */
+data class HourlyDistributionResult(
+    val distribution: List<HourlyUsage>,
+    val totalDays: Int
 )
 
 /**

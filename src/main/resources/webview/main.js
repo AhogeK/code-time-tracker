@@ -1,4 +1,6 @@
-// Store all chart instances
+/**
+ * Store all chart instances
+ */
 const chartInstances = {
   heatmap: null,
   dailyHourHeatmap: null,
@@ -35,6 +37,7 @@ globalThis.renderCharts = function (payload) {
     if (jsonPayload.overallHourly) {
       renderOverallHourlyChart(
           jsonPayload.overallHourly.data,
+          jsonPayload.overallHourly.totalDays,
           theme
       );
     }
@@ -241,61 +244,74 @@ function renderDailyHourHeatmap(data, theme) {
 
 /**
  * Renders the overall hourly distribution chart (24-hour coding pattern).
+ * Shows average coding duration for each hour of the day.
  * @param {Array<Object>} data - Array of data points with hour and seconds
+ * @param {number} totalDays - Total number of active days for averaging
  * @param {Object} theme - Theme colors
  */
-function renderOverallHourlyChart(data, theme) {
+function renderOverallHourlyChart(data, totalDays, theme) {
   disposeChart('overallHourlyChart');
 
   const chartDom = document.getElementById('overallHourlyChart');
   const chartTheme = theme.isDark ? 'dark' : 'default';
   chartInstances.overallHourlyChart = echarts.init(chartDom, chartTheme);
 
-  // Create 48 half-hour intervals
-  const intervals = Array.from({length: 48}, (_, i) => {
-    const h = Math.floor(i / 2);
-    const m = (i % 2) * 30;
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-  });
+  // Create 24 full hours
+  const hours = Array.from({length: 24}, (_, i) =>
+      `${i.toString().padStart(2, '0')}:00`
+  );
 
-  const values = new Array(48).fill(0);
+  const values = new Array(24).fill(0);
 
   // Fill in the actual data
   for (const item of data) {
-    const index = item.hour * 2 + (item.minute === 30 ? 1 : 0);
-    values[index] = item.seconds / 3600; // Convert to hours
+    values[item.hour] = item.seconds / 3600; // Convert to hours
   }
 
   const option = {
     backgroundColor: 'transparent',
     title: {
-      text: 'Daily Coding Distribution',
+      text: 'Average Hourly Coding Duration',
+      subtext: `Based on ${totalDays} active days`,
       left: 'center',
       top: 0,
       textStyle: {
         color: theme.foreground
+      },
+      subtextStyle: {
+        color: theme.secondary,
+        fontSize: 12
       }
     },
     tooltip: {
       trigger: 'axis',
       formatter: function (params) {
+        if (!params || params.length === 0) return '';
         const timeLabel = params[0].axisValue;
-        const value = params[0].value.toFixed(3);
-        return `${timeLabel} - ${value} hours`;
+        const hours = Math.floor(params[0].value);
+        const minutes = Math.round((params[0].value - hours) * 60);
+        const seconds = Math.round(((params[0].value - hours) * 60 - minutes) * 60);
+
+        let timeStr = '';
+        if (hours > 0) timeStr += `${hours}h `;
+        if (minutes > 0) timeStr += `${minutes}m `;
+        if (seconds > 0 || timeStr === '') timeStr += `${seconds}s`;
+
+        return `${timeLabel}<br/>Average: ${timeStr}`;
       }
     },
     grid: {
-      top: 60,
+      top: 80,
       left: 50,
       right: 30,
       bottom: 30
     },
     xAxis: {
       type: 'category',
-      data: intervals,
+      data: hours,
       axisLabel: {
         color: theme.secondary,
-        interval: 5
+        interval: 1
       },
       axisLine: {
         lineStyle: {
@@ -305,13 +321,13 @@ function renderOverallHourlyChart(data, theme) {
     },
     yAxis: {
       type: 'value',
-      name: 'Hours',
+      name: 'Average Duration (hours)',
       nameTextStyle: {
         color: theme.secondary
       },
       axisLabel: {
         color: theme.secondary,
-        formatter: '{value} h'
+        formatter: '{value}h'
       },
       splitLine: {
         lineStyle: {
@@ -321,34 +337,16 @@ function renderOverallHourlyChart(data, theme) {
     },
     series: [{
       data: values,
-      type: 'line',
-      smooth: true,
-      showSymbol: false,
-      smoothMonotone: 'x',
-      sampling: 'lttb',
-      areaStyle: {
-        opacity: 0.3,
-        color: {
-          type: 'linear',
-          x: 0,
-          y: 0,
-          x2: 0,
-          y2: 1,
-          colorStops: [{
-            offset: 0, color: 'rgba(64, 196, 99, 0.3)'
-          }, {
-            offset: 1, color: 'rgba(64, 196, 99, 0.05)'
-          }]
-        }
-      },
-      lineStyle: {
-        width: 2.5,
-        color: '#40c463'
+      type: 'bar',
+      itemStyle: {
+        color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+          {offset: 0, color: '#83bff6'},
+          {offset: 1, color: '#188df0'}
+        ])
       },
       emphasis: {
-        focus: 'series',
-        lineStyle: {
-          width: 3
+        itemStyle: {
+          color: '#188df0'
         }
       }
     }]

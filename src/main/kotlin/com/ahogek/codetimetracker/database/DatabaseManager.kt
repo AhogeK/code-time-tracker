@@ -470,45 +470,56 @@ object DatabaseManager {
 
     /**
      * Fetches the total coding time distribution by hour, aggregated across all days in a given period.
-     * This is ideal for generating a "typical day" activity chart.
+     * This method calculates the average coding duration for each hour of the day and provides metadata
+     * about the dataset for context (total number of active days).
      *
-     * @param startTime The start of the time range.
-     * @param endTime The end of the time range.
-     * @return A list of HourlyUsage objects.
+     * Sessions that span multiple hours are split at hour boundaries, with each segment attributed
+     * to its corresponding hour. The final values represent averages across all active days in the
+     * specified time range.
+     *
+     * Example: If a session runs from 14:45 to 16:15 across 10 active days:
+     * - Hour 14: 15 minutes (14:45 to 15:00)
+     * - Hour 15: 60 minutes (15:00 to 16:00)
+     * - Hour 16: 15 minutes (16:00 to 16:15)
+     * Then the averages would be: 14h -> 1.5m/day, 15h -> 6m/day, 16h -> 1.5m/day
+     *
+     * @param startTime The start of the time range (inclusive). If null, includes all historical data.
+     * @param endTime The end of the time range (exclusive). If null, includes all data to the present.
+     * @return A [HourlyDistributionResult] containing a list of [HourlyUsage] objects (one per hour 0-23)
+     *         with average coding durations and the total number of active days used for calculation.
      */
-    fun getOverallHourlyDistribution(
+    fun getOverallHourlyDistributionWithTotalDays(
         startTime: LocalDateTime? = null,
         endTime: LocalDateTime? = null
-    ): List<HourlyUsage> {
+    ): HourlyDistributionResult {
         val conditions = mutableListOf("is_deleted = 0")
-
         checkTimeParams(conditions, startTime, endTime)
 
         val sql = """
-            SELECT
-                CAST(strftime('%H', start_time) AS INTEGER) as hour_of_day,
-                CASE WHEN CAST(strftime('%M', start_time) AS INTEGER) >= 30 THEN 30 ELSE 0 END as minute_interval,
-                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
-            FROM coding_sessions
-            WHERE ${conditions.joinToString(" AND ")}
-            GROUP BY hour_of_day, minute_interval
-            ORDER BY hour_of_day, minute_interval;
-        """
+        SELECT 
+            start_time,
+            end_time
+        FROM coding_sessions 
+        WHERE ${conditions.joinToString(" AND ")}
+    """
 
-        val distribution = mutableListOf<HourlyUsage>()
+        val hourlyMap = mutableMapOf<Int, Long>()
+        val activeDays = mutableSetOf<LocalDate>()
+
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     checkTimeParamsInStatement(pstmt, startTime, endTime)
-
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val hour = rs.getInt("hour_of_day")
-                            val minute = rs.getInt("minute_interval")
-                            val seconds = rs.getLong("total_seconds")
-                            distribution.add(
-                                HourlyUsage(hour, minute, Duration.ofSeconds(seconds))
-                            )
+                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+
+                            // Split each session by hour boundaries and accumulate durations
+                            splitSessionByFullHour(start, end).forEach { (hour, duration, dates) ->
+                                hourlyMap[hour] = hourlyMap.getOrDefault(hour, 0L) + duration.toSeconds()
+                                activeDays.addAll(dates)
+                            }
                         }
                     }
                 }
@@ -516,8 +527,73 @@ object DatabaseManager {
         } catch (e: Exception) {
             log.error("Failed to get overall hourly distribution.", e)
         }
-        return distribution
+
+        val totalDays = activeDays.size.coerceAtLeast(1)
+
+        // Calculate average for each hour
+        val distribution = hourlyMap.map { (hour, totalSeconds) ->
+            val avgSeconds = totalSeconds / totalDays
+            HourlyUsage(hour, 0, Duration.ofSeconds(avgSeconds))
+        }.sortedBy { it.hour }
+
+        return HourlyDistributionResult(distribution, totalDays)
     }
+
+    /**
+     * Splits a coding session into segments, one for each full hour the session spans.
+     *
+     * This helper method breaks down sessions that cross hour boundaries into multiple segments,
+     * ensuring that each segment belongs entirely to a single hour. For example, a session from
+     * 14:30 to 16:20 is split into three segments:
+     * - 14:30 to 15:00 (in hour 14)
+     * - 15:00 to 16:00 (in hour 15)
+     * - 16:00 to 16:20 (in hour 16)
+     *
+     * @param start The start time of the session.
+     * @param end The end time of the session.
+     * @return A list of triples, each containing:
+     *         - hour: The hour of the day (0-23) for this segment
+     *         - duration: The time spent during this segment
+     *         - dates: A set of dates that this segment spans (usually a single date, but may include
+     *                  multiple dates if the segment crosses a day boundary at midnight)
+     */
+    private fun splitSessionByFullHour(
+        start: LocalDateTime,
+        end: LocalDateTime
+    ): List<Triple<Int, Duration, Set<LocalDate>>> {
+        val result = mutableListOf<Triple<Int, Duration, Set<LocalDate>>>()
+        var current = start
+
+        while (current.isBefore(end)) {
+            val hour = current.hour
+
+            // Calculate the next hour boundary (00:00 of the next hour)
+            val nextHour = current.withMinute(0).withSecond(0).withNano(0).plusHours(1)
+
+            // The segment ends at either the next hour boundary or the session end time, whichever comes first
+            val segmentEnd = if (nextHour.isAfter(end)) end else nextHour
+
+            val duration = Duration.between(current, segmentEnd)
+            if (!duration.isZero) {
+                // Collect all dates this segment spans (relevant for cross-midnight sessions)
+                val dates = mutableSetOf<LocalDate>()
+                var temp = current
+                while (temp.isBefore(segmentEnd)) {
+                    dates.add(temp.toLocalDate())
+                    // Move to the start of the next day
+                    temp = temp.plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
+                    if (temp.isAfter(segmentEnd)) break
+                }
+
+                result.add(Triple(hour, duration, dates))
+            }
+
+            current = segmentEnd
+        }
+
+        return result
+    }
+
 
     /**
      * Fetches the total coding time for each programming language within a given time range.

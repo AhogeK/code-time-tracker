@@ -12,9 +12,8 @@ import java.time.LocalDateTime
  */
 class OverallHourlyDataProvider : ChartDataProvider {
     override fun prepareData(startTime: LocalDateTime?, endTime: LocalDateTime?): Map<String, Any> {
-        val distribution = DatabaseManager.getOverallHourlyDistribution()
-
-        val chartData = distribution.map {
+        val result = DatabaseManager.getOverallHourlyDistributionWithTotalDays(startTime, endTime)
+        val chartData = result.distribution.map {
             mapOf(
                 "hour" to it.hour,
                 "minute" to it.minute,
@@ -22,7 +21,10 @@ class OverallHourlyDataProvider : ChartDataProvider {
             )
         }
 
-        return mapOf("data" to chartData)
+        return mapOf(
+            "data" to chartData,
+            "totalDays" to result.totalDays
+        )
     }
 
     override fun getChartKey(): String = "overallHourly"

@@ -2,6 +2,8 @@
 <project version="4">
   <component name="SqlDialectMappings">
     <file url="file://$PROJECT_DIR$/src/main/kotlin/com/ahogek/codetimetracker/database/DatabaseManager.kt" dialect="SQLite" />
+    <file url="file://$PROJECT_DIR$/src/main/kotlin/com/ahogek/codetimetracker/statistics/OverallHourlyDataProvider.kt" dialect="GenericSQL" />
     <file url="file://$PROJECT_DIR$/src/test/kotlin/com/ahogek/codetimetracker/database/DatabaseManagerTest.kt" dialect="SQLite" />
+    <file url="PROJECT" dialect="SQLite" />
   </component>
 </project>
