@@ -25,8 +25,7 @@ import java.util.concurrent.TimeUnit
 object DatabaseManager {
 
     private data class DbConfig(
-        val url: String,
-        val factory: ConnectionFactory
+        val url: String, val factory: ConnectionFactory
     )
 
     @Volatile
@@ -51,8 +50,7 @@ object DatabaseManager {
         dbFile.parentFile.mkdirs()
         val dbUrl = "jdbc:sqlite:${dbFile.absolutePath}"
         config = DbConfig(
-            url = dbUrl,
-            factory = DriverManagerConnectionFactory(dbUrl)
+            url = dbUrl, factory = DriverManagerConnectionFactory(dbUrl)
         )
         log.info("Database initialized at official shared location: ${config.url}")
 
@@ -64,8 +62,7 @@ object DatabaseManager {
         val normalizedUrl = normalizeJdbcUrl(newUrl)
 
         config = DbConfig(
-            url = normalizedUrl,
-            factory = factory
+            url = normalizedUrl, factory = factory
         )
 
         createTableIfNotExists()
@@ -273,9 +270,7 @@ object DatabaseManager {
      * @return The total duration of coding activities within the specified range
      */
     fun getCodingTimeForPeriod(
-        startTime: LocalDateTime,
-        endTime: LocalDateTime,
-        projectName: String? = null
+        startTime: LocalDateTime, endTime: LocalDateTime, projectName: String? = null
     ): Duration {
         // The SQL query now includes a WHERE clause to filter sessions based on their start time.
         val baseSql = """
@@ -306,7 +301,8 @@ object DatabaseManager {
     }
 
     /**
-     * Fetches daily coding time for a specific time range, suitable for a heatmap
+     * Fetches daily coding time for a specific time range, suitable for a heatmap.
+     * Sessions that span across midnight are split and attributed to each day accordingly.
      *
      * @param startTime The start of the time range
      * @param endTime The end of the time range
@@ -315,14 +311,16 @@ object DatabaseManager {
     fun getDailyCodingTimeForHeatmap(startTime: LocalDateTime, endTime: LocalDateTime): List<DailySummary> {
         val sql = """
             SELECT
-                DATE(start_time) as coding_date,
-                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+                start_time,
+                end_time
             FROM coding_sessions
-            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
-            GROUP BY coding_date
-            ORDER BY coding_date;
-        """
-        val dailySummaries = mutableListOf<DailySummary>()
+            WHERE is_deleted = 0
+                AND start_time >= ?
+                AND start_time < ?
+        """.trimIndent()
+
+        val dailyMap = mutableMapOf<LocalDate, Long>()
+
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
@@ -330,9 +328,13 @@ object DatabaseManager {
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val date = LocalDate.parse(rs.getString("coding_date"))
-                            val totalSeconds = rs.getLong("total_seconds")
-                            dailySummaries.add(DailySummary(date, Duration.ofSeconds(totalSeconds)))
+                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+
+                            // Split session by day boundaries
+                            splitSessionByDay(start, end).forEach { (date, duration) ->
+                                dailyMap[date] = dailyMap.getOrDefault(date, 0L) + duration.toSeconds()
+                            }
                         }
                     }
                 }
@@ -340,7 +342,51 @@ object DatabaseManager {
         } catch (e: Exception) {
             log.error("Failed to get daily coding time for heatmap.", e)
         }
-        return dailySummaries
+
+        return dailyMap.map { (date, totalSeconds) ->
+            DailySummary(date, Duration.ofSeconds(totalSeconds))
+        }.sortedBy { it.date }
+    }
+
+    /**
+     * Splits a coding session into segments, one for each day the session spans.
+     *
+     * This helper method breaks down sessions that cross day boundaries (midnight) into
+     * multiple segments, ensuring accurate daily statistics.
+     *
+     * Example: A session from 23:30 on 2025-01-01 to 01:20 on 2025-01-02:
+     * - 2025-01-01: 30 minutes (23:30 to 00:00)
+     * - 2025-01-02: 80 minutes (00:00 to 01:20)
+     *
+     * @param start The start time of the session
+     * @param end The end time of the session
+     * @return A list of pairs, each containing a date and the duration spent on that date
+     */
+    private fun splitSessionByDay(
+        start: LocalDateTime,
+        end: LocalDateTime
+    ): List<Pair<LocalDate, Duration>> {
+        val result = mutableListOf<Pair<LocalDate, Duration>>()
+        var current = start
+
+        while (current.isBefore(end)) {
+            val currentDate = current.toLocalDate()
+
+            // Calculate the next day boundary (00:00 of the next day)
+            val nextDayStart = current.plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
+
+            // The segment ends at either the next day boundary or the session end time
+            val segmentEnd = if (nextDayStart.isAfter(end)) end else nextDayStart
+
+            val duration = Duration.between(current, segmentEnd)
+            if (!duration.isZero) {
+                result.add(Pair(currentDate, duration))
+            }
+
+            current = segmentEnd
+        }
+
+        return result
     }
 
     /**
@@ -397,8 +443,7 @@ object DatabaseManager {
      * @return A list of HourlyDistribution objects.
      */
     fun getDailyHourDistribution(
-        startTime: LocalDateTime? = null,
-        endTime: LocalDateTime? = null
+        startTime: LocalDateTime? = null, endTime: LocalDateTime? = null
     ): List<HourlyDistribution> {
         val conditions = mutableListOf("is_deleted = 0")
 
@@ -442,9 +487,7 @@ object DatabaseManager {
     }
 
     private fun checkTimeParamsInStatement(
-        pstmt: PreparedStatement,
-        startTime: LocalDateTime?,
-        endTime: LocalDateTime?
+        pstmt: PreparedStatement, startTime: LocalDateTime?, endTime: LocalDateTime?
     ) {
         var paramIndex = 1
         if (startTime != null) {
@@ -456,9 +499,7 @@ object DatabaseManager {
     }
 
     private fun checkTimeParams(
-        conditions: MutableList<String>,
-        startTime: LocalDateTime?,
-        endTime: LocalDateTime?
+        conditions: MutableList<String>, startTime: LocalDateTime?, endTime: LocalDateTime?
     ) {
         if (startTime != null) {
             conditions.add("start_time >= ?")
@@ -489,8 +530,7 @@ object DatabaseManager {
      *         with average coding durations and the total number of active days used for calculation.
      */
     fun getOverallHourlyDistributionWithTotalDays(
-        startTime: LocalDateTime? = null,
-        endTime: LocalDateTime? = null
+        startTime: LocalDateTime? = null, endTime: LocalDateTime? = null
     ): HourlyDistributionResult {
         val conditions = mutableListOf("is_deleted = 0")
         checkTimeParams(conditions, startTime, endTime)
@@ -558,8 +598,7 @@ object DatabaseManager {
      *                  multiple dates if the segment crosses a day boundary at midnight)
      */
     private fun splitSessionByFullHour(
-        start: LocalDateTime,
-        end: LocalDateTime
+        start: LocalDateTime, end: LocalDateTime
     ): List<Triple<Int, Duration, Set<LocalDate>>> {
         val result = mutableListOf<Triple<Int, Duration, Set<LocalDate>>>()
         var current = start
@@ -754,9 +793,7 @@ object DatabaseManager {
         // The "current" streak is only valid if the last coding session was today or yesterday.
         // Otherwise, the streak is considered broken.
         val finalCurrentStreak =
-            if (mostRecentCodingDate.isEqual(today) ||
-                mostRecentCodingDate.isEqual(today.minusDays(1))
-            ) {
+            if (mostRecentCodingDate.isEqual(today) || mostRecentCodingDate.isEqual(today.minusDays(1))) {
                 mostRecentStreakLength
             } else {
                 0
