@@ -748,6 +748,7 @@ object DatabaseManager {
     /**
      * Categorizes coding time into four periods of the day and calculates the total duration for each.
      * Periods are: Night (0-5), Morning (6-11), Daytime (12-17), Evening (18-23).
+     * Sessions spanning multiple periods are split accordingly.
      *
      * @param startTime The start of the time range for the query.
      * @param endTime The end of the time range for the query.
@@ -756,18 +757,14 @@ object DatabaseManager {
     fun getTimeOfDayDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<TimeOfDayUsage> {
         val sql = """
             SELECT
-                CASE
-                    WHEN CAST(strftime('%H', start_time) AS INTEGER) BETWEEN 0 AND 5 THEN 'Night'
-                    WHEN CAST(strftime('%H', start_time) AS INTEGER) BETWEEN 6 AND 11 THEN 'Morning'
-                    WHEN CAST(strftime('%H', start_time) AS INTEGER) BETWEEN 12 AND 17 THEN 'Daytime'
-                    ELSE 'Evening'
-                END as time_of_day,
-                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+                start_time,
+                end_time
             FROM coding_sessions
             WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
-            GROUP BY time_of_day;
         """
-        val distribution = mutableListOf<TimeOfDayUsage>()
+
+        val distributionMap = mutableMapOf<String, Long>()
+
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
@@ -775,11 +772,14 @@ object DatabaseManager {
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val timeOfDay = rs.getString("time_of_day")
-                            val seconds = rs.getLong("total_seconds")
-                            distribution.add(
-                                TimeOfDayUsage(timeOfDay, Duration.ofSeconds(seconds))
-                            )
+                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+
+                            // Split session by time of day periods
+                            splitSessionByTimeOfDay(start, end).forEach { (timeOfDay, duration) ->
+                                distributionMap[timeOfDay] =
+                                    distributionMap.getOrDefault(timeOfDay, 0L) + duration.toSeconds()
+                            }
                         }
                     }
                 }
@@ -787,7 +787,60 @@ object DatabaseManager {
         } catch (e: Exception) {
             log.error("Failed to get time of day distribution.", e)
         }
-        return distribution
+        return distributionMap.map { (timeOfDay, seconds) ->
+            TimeOfDayUsage(timeOfDay, Duration.ofSeconds(seconds))
+        }
+    }
+
+    /**
+     * Splits a coding session by time-of-day periods.
+     * Periods: Night (0-5), Morning (6-11), Daytime (12-17), Evening (18-23)
+     *
+     * @param start The start time of the session
+     * @param end The end time of the session
+     * @return A list of pairs containing time period name and duration
+     */
+    private fun splitSessionByTimeOfDay(
+        start: LocalDateTime,
+        end: LocalDateTime
+    ): List<Pair<String, Duration>> {
+        val result = mutableListOf<Pair<String, Duration>>()
+        var current = start
+
+        while (current.isBefore(end)) {
+            val hour = current.hour
+            val timeOfDay = when (hour) {
+                in 0..5 -> "Night"
+                in 6..11 -> "Morning"
+                in 12..17 -> "Daytime"
+                else -> "Evening"
+            }
+
+            // Calculate the next period boundary
+            val nextBoundaryHour = when (hour) {
+                in 0..5 -> 6
+                in 6..11 -> 12
+                in 12..17 -> 18
+                else -> 24
+            }
+
+            val nextBoundary = if (nextBoundaryHour == 24) {
+                current.plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
+            } else {
+                current.withHour(nextBoundaryHour).withMinute(0).withSecond(0).withNano(0)
+            }
+
+            val segmentEnd = if (nextBoundary.isAfter(end)) end else nextBoundary
+
+            val duration = Duration.between(current, segmentEnd)
+            if (!duration.isZero) {
+                result.add(Pair(timeOfDay, duration))
+            }
+
+            current = segmentEnd
+        }
+
+        return result
     }
 
     private fun calculateCodingStreaks(codingDates: List<LocalDate>): CodingStreaks {
