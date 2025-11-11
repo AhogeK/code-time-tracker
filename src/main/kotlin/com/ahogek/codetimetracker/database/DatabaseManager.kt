@@ -261,35 +261,57 @@ object DatabaseManager {
     }
 
     /**
-     * Calculates the total coding duration within a  specific time range.
-     * This method is versatile and can be used for daily, weekly, monthly, or any custom period reports.
+     * Calculates the total coding duration that overlaps with the given time period.
      *
-     * @param startTime The beginning of the time period (inclusive)
-     * @param endTime The end of the time period (exclusive)
-     * @param projectName Optional project name to filter by.
-     * @return The total duration of coding activities within the specified range
+     * This method supports sessions that span multiple periods, such as those crossing
+     * midnight or month boundaries. Only the overlapping part of each session is counted.
+     *
+     * Example scenario:
+     *  - Session: 2025-10-01 23:30 ~ 2025-10-02 00:30
+     *  - Period:  2025-10-02 00:00 ~ 2025-10-03 00:00
+     *  - Only the portion from 00:00 to 00:30 on 2025-10-02 will be included.
+     *
+     * @param startTime    The beginning of the time range (inclusive)
+     * @param endTime      The end of the time range (exclusive)
+     * @param projectName  Optional project name filter
+     * @return Duration    Total overlapping coding time during the period
      */
     fun getCodingTimeForPeriod(
-        startTime: LocalDateTime, endTime: LocalDateTime, projectName: String? = null
+        startTime: LocalDateTime,
+        endTime: LocalDateTime,
+        projectName: String? = null
     ): Duration {
-        // The SQL query now includes a WHERE clause to filter sessions based on their start time.
+        // SQL will fetch all coding sessions that overlap with the target period.
+        // Any session whose end_time is after the period's start, and whose start_time is before the period's end.
         val baseSql = """
-        SELECT SUM(strftime('%s', end_time) - strftime('%s', start_time))
-        FROM coding_sessions
-        WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            SELECT start_time, end_time
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """
+        // Optional project filter
         val sql = if (projectName != null) "$baseSql AND project_name = ?" else baseSql
         var totalSeconds = 0L
+
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
-                    // Set the start and end time parameters in the query.
                     pstmt.setString(1, dateTimeFormatter.format(startTime))
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
                     projectName?.let { pstmt.setString(3, it) }
+
                     pstmt.executeQuery().use { rs ->
-                        if (rs.next()) {
-                            totalSeconds = rs.getLong(1)
+                        while (rs.next()) {
+                            // Parse session times from database
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            // The latest possible session start for overlap
+                            val effectiveStart = maxOf(sessionStart, startTime)
+                            // The earliest possible session end for overlap
+                            val effectiveEnd = minOf(sessionEnd, endTime)
+                            // If there's a valid overlapping range, add its duration
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                totalSeconds += Duration.between(effectiveStart, effectiveEnd).toSeconds()
+                            }
                         }
                     }
                 }
