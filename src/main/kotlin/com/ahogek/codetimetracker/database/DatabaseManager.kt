@@ -437,6 +437,7 @@ object DatabaseManager {
 
     /**
      * Fetches the coding time distribution by hour for each day of the week, for a given period.
+     * Sessions that span across hour or day boundaries are split accordingly.
      *
      * @param startTime The start of the time range.
      * @param endTime The end of the time range.
@@ -446,36 +447,31 @@ object DatabaseManager {
         startTime: LocalDateTime? = null, endTime: LocalDateTime? = null
     ): List<HourlyDistribution> {
         val conditions = mutableListOf("is_deleted = 0")
-
         checkTimeParams(conditions, startTime, endTime)
 
         val sql = """
             SELECT
-                CAST(strftime('%w', start_time) AS INTEGER) as day_of_week,
-                CAST(strftime('%H', start_time) AS INTEGER) as hour_of_day,
-                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+                start_time,
+                end_time
             FROM coding_sessions
             WHERE ${conditions.joinToString(" AND ")}
-            GROUP BY day_of_week, hour_of_day;
         """
 
-        val distribution = mutableListOf<HourlyDistribution>()
+        val distributionMap = mutableMapOf<Pair<Int, Int>, Long>()
+
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     checkTimeParamsInStatement(pstmt, startTime, endTime)
-
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            var dayOfWeek = rs.getInt("day_of_week")
-                            if (dayOfWeek == 0) {
-                                dayOfWeek = 7
+                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+
+                            splitSessionByDayAndHour(start, end).forEach { (dayOfWeek, hour, duration) ->
+                                val key = Pair(dayOfWeek, hour)
+                                distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
                             }
-                            val hour = rs.getInt("hour_of_day")
-                            val seconds = rs.getLong("total_seconds")
-                            distribution.add(
-                                HourlyDistribution(dayOfWeek, hour, Duration.ofSeconds(seconds))
-                            )
                         }
                     }
                 }
@@ -483,7 +479,42 @@ object DatabaseManager {
         } catch (e: Exception) {
             log.error("Failed to get daily hour distribution.", e)
         }
-        return distribution
+        return distributionMap.map { (key, seconds) ->
+            HourlyDistribution(key.first, key.second, Duration.ofSeconds(seconds))
+        }
+    }
+
+    /**
+     * Splits a coding session into segments by day of week and hour.
+     *
+     * @param start The start time of the session
+     * @param end The end time of the session
+     * @return A list of triples containing dayOfWeek, hour, and duration
+     */
+    private fun splitSessionByDayAndHour(
+        start: LocalDateTime,
+        end: LocalDateTime
+    ): List<Triple<Int, Int, Duration>> {
+        val result = mutableListOf<Triple<Int, Int, Duration>>()
+        var current = start
+
+        while (current.isBefore(end)) {
+            val hour = current.hour
+            val dayOfWeek = current.dayOfWeek.value // 1=Monday, 7=Sunday
+
+            // Calculate the next hour boundary
+            val nextHour = current.withMinute(0).withSecond(0).withNano(0).plusHours(1)
+            val segmentEnd = if (nextHour.isAfter(end)) end else nextHour
+
+            val duration = Duration.between(current, segmentEnd)
+            if (!duration.isZero) {
+                result.add(Triple(dayOfWeek, hour, duration))
+            }
+
+            current = segmentEnd
+        }
+
+        return result
     }
 
     private fun checkTimeParamsInStatement(
