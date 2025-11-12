@@ -323,24 +323,19 @@ object DatabaseManager {
     }
 
     /**
-     * Fetches daily coding time for a specific time range, suitable for a heatmap.
-     * Sessions that span across midnight are split and attributed to each day accordingly.
+     * Calculates daily coding duration for a specific time period, suitable for heatmap display.
+     * Sessions overlapping the target range are split per day, with every part counted on the respective day.
      *
-     * @param startTime The start of the time range
-     * @param endTime The end of the time range
-     * @return A list of DailySummary objects, each representing a day with coding activity.
+     * @param startTime The beginning of the period (inclusive)
+     * @param endTime   The end of the period (exclusive)
+     * @return List of DailySummary with total coding duration for each day
      */
     fun getDailyCodingTimeForHeatmap(startTime: LocalDateTime, endTime: LocalDateTime): List<DailySummary> {
         val sql = """
-            SELECT
-                start_time,
-                end_time
+            SELECT start_time, end_time
             FROM coding_sessions
-            WHERE is_deleted = 0
-                AND start_time >= ?
-                AND start_time < ?
+            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """.trimIndent()
-
         val dailyMap = mutableMapOf<LocalDate, Long>()
 
         try {
@@ -350,21 +345,24 @@ object DatabaseManager {
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
-                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-
-                            // Split session by day boundaries
-                            splitSessionByDay(start, end).forEach { (date, duration) ->
-                                dailyMap[date] = dailyMap.getOrDefault(date, 0L) + duration.toSeconds()
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            // Compute overlap
+                            val effectiveStart = maxOf(sessionStart, startTime)
+                            val effectiveEnd = minOf(sessionEnd, endTime)
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                // Split session by day, count only the overlapping part
+                                splitSessionByDay(effectiveStart, effectiveEnd).forEach { (date, duration) ->
+                                    dailyMap[date] = dailyMap.getOrDefault(date, 0L) + duration.toSeconds()
+                                }
                             }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            log.error("Failed to get daily coding time for heatmap.", e)
+            log.error("Failed to compute daily coding time for heatmap.", e)
         }
-
         return dailyMap.map { (date, totalSeconds) ->
             DailySummary(date, Duration.ofSeconds(totalSeconds))
         }.sortedBy { it.date }
