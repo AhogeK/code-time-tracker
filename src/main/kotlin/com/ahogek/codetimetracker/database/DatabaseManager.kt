@@ -654,10 +654,17 @@ object DatabaseManager {
                             val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
                             val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
 
-                            // Split each session by hour boundaries and accumulate durations
-                            splitSessionByFullHour(start, end).forEach { (hour, duration, dates) ->
-                                hourlyMap[hour] = hourlyMap.getOrDefault(hour, 0L) + duration.toSeconds()
-                                activeDays.addAll(dates)
+                            val effectiveStart = if (startTime != null) maxOf(start, startTime) else start
+                            val effectiveEnd = if (endTime != null) minOf(end, endTime) else end
+
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                splitSessionByFullHour(
+                                    effectiveStart,
+                                    effectiveEnd
+                                ).forEach { (hour, duration, dates) ->
+                                    hourlyMap[hour] = hourlyMap.getOrDefault(hour, 0L) + duration.toSeconds()
+                                    activeDays.addAll(dates)
+                                }
                             }
                         }
                     }
