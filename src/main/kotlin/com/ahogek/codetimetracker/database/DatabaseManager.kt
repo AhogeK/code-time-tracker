@@ -38,6 +38,13 @@ object DatabaseManager {
     // This executor will handle all database write operations sequentially on a background thread
     private val databaseExecutor = Executors.newSingleThreadExecutor()
 
+    // SQL query constants
+    private const val SQL_SELECT_SESSIONS_IN_RANGE = """
+        SELECT start_time, end_time
+        FROM coding_sessions
+        WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
+    """
+
     init {
         try {
             Class.forName("org.sqlite.JDBC")
@@ -284,13 +291,12 @@ object DatabaseManager {
     ): Duration {
         // SQL will fetch all coding sessions that overlap with the target period.
         // Any session whose end_time is after the period's start, and whose start_time is before the period's end.
-        val baseSql = """
-            SELECT start_time, end_time
-            FROM coding_sessions
-            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
-        """
         // Optional project filter
-        val sql = if (projectName != null) "$baseSql AND project_name = ?" else baseSql
+        val sql = if (projectName != null) {
+            "$SQL_SELECT_SESSIONS_IN_RANGE AND project_name = ?"
+        } else {
+            SQL_SELECT_SESSIONS_IN_RANGE
+        }
         var totalSeconds = 0L
 
         try {
@@ -332,11 +338,7 @@ object DatabaseManager {
      * @return List of DailySummary with total coding duration for each day
      */
     fun getDailyCodingTimeForHeatmap(startTime: LocalDateTime, endTime: LocalDateTime): List<DailySummary> {
-        val sql = """
-            SELECT start_time, end_time
-            FROM coding_sessions
-            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
-        """.trimIndent()
+        val sql = SQL_SELECT_SESSIONS_IN_RANGE.trimIndent()
         val dailyMap = mutableMapOf<LocalDate, Long>()
 
         try {
@@ -419,11 +421,7 @@ object DatabaseManager {
      * @return CodingStreaks object showing current and max streaks
      */
     fun getCodingStreaks(startTime: LocalDateTime, endTime: LocalDateTime): CodingStreaks {
-        val sql = """
-            SELECT start_time, end_time
-            FROM coding_sessions
-            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
-        """
+        val sql = SQL_SELECT_SESSIONS_IN_RANGE
         val codingDates = mutableSetOf<LocalDate>()
         try {
             withConnection { conn ->
@@ -504,11 +502,7 @@ object DatabaseManager {
         // Query coding sessions and split
         try {
             withConnection { conn ->
-                val sql = """
-                    SELECT start_time, end_time
-                    FROM coding_sessions
-                    WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
-                """
+                val sql = SQL_SELECT_SESSIONS_IN_RANGE
                 conn.prepareStatement(sql).use { pstmt ->
                     pstmt.setString(1, formatter.format(actualStart))
                     pstmt.setString(2, formatter.format(actualEnd))
@@ -844,11 +838,7 @@ object DatabaseManager {
      * @return List of TimeOfDayUsage objects for each time slot
      */
     fun getTimeOfDayDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<TimeOfDayUsage> {
-        val sql = """
-            SELECT start_time, end_time
-            FROM coding_sessions
-            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
-        """
+        val sql = SQL_SELECT_SESSIONS_IN_RANGE
         val distributionMap = mutableMapOf<String, Long>()
         try {
             withConnection { conn ->
