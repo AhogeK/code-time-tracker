@@ -686,23 +686,20 @@ object DatabaseManager {
 
 
     /**
-     * Fetches the total coding time for each programming language within a given time range.
+     * Calculates coding time distribution by language during a given period.
+     * Correctly accounts for only segments of sessions that overlap the period.
      *
-     * @param startTime The start of the time range.
-     * @param endTime The end of the time range.
-     * @return A list of LanguageUsage objects, typically ordered from the most used to the least.
+     * @param startTime The beginning of the period (inclusive)
+     * @param endTime   The end of the period (exclusive)
+     * @return List of LanguageUsage objects sorted by usage
      */
     fun getLanguageDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<LanguageUsage> {
         val sql = """
-            SELECT
-                language,
-                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+            SELECT language, start_time, end_time
             FROM coding_sessions
-            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
-            GROUP BY language
-            ORDER BY total_seconds DESC;
+            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """
-        val distribution = mutableListOf<LanguageUsage>()
+        val map = mutableMapOf<String, Long>()
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
@@ -711,19 +708,26 @@ object DatabaseManager {
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val language = rs.getString("language")
-                            val seconds = rs.getLong("total_seconds")
-                            distribution.add(
-                                LanguageUsage(language, Duration.ofSeconds(seconds))
-                            )
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            val effectiveStart = maxOf(sessionStart, startTime)
+                            val effectiveEnd = minOf(sessionEnd, endTime)
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                map[language] = map.getOrDefault(language, 0L) +
+                                        Duration.between(effectiveStart, effectiveEnd).toSeconds()
+                            }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            log.error("Failed to get language distribution.", e)
+            log.error("Failed to compute language distribution.", e)
         }
-        return distribution
+        return map.map { (language, totalSeconds) ->
+            LanguageUsage(language, Duration.ofSeconds(totalSeconds))
+        }.sortedByDescending { it.totalDuration }
     }
+
 
     /**
      * Fetches the total coding time for each project within a given time range.
