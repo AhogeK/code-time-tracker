@@ -11,6 +11,7 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -635,12 +636,12 @@ object DatabaseManager {
         checkTimeParams(conditions, startTime, endTime)
 
         val sql = """
-        SELECT 
-            start_time,
-            end_time
-        FROM coding_sessions 
-        WHERE ${conditions.joinToString(" AND ")}
-    """
+            SELECT 
+                start_time,
+                end_time
+            FROM coding_sessions 
+            WHERE ${conditions.joinToString(" AND ")}
+        """
 
         val hourlyMap = mutableMapOf<Int, Long>()
         val activeDays = mutableSetOf<LocalDate>()
@@ -674,7 +675,14 @@ object DatabaseManager {
             log.error("Failed to get overall hourly distribution.", e)
         }
 
-        val totalDays = activeDays.size.coerceAtLeast(1)
+        val totalDays = if (startTime != null && endTime != null) {
+            ChronoUnit.DAYS.between(
+                startTime.toLocalDate(),
+                endTime.toLocalDate()
+            ).toInt().coerceAtLeast(1)
+        } else {
+            activeDays.size.coerceAtLeast(1)
+        }
 
         // Calculate average for each hour
         val distribution = hourlyMap.map { (hour, totalSeconds) ->
