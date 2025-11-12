@@ -624,21 +624,37 @@ object DatabaseManager {
      *         with average coding durations and the total number of active days used for calculation.
      */
     fun getOverallHourlyDistributionWithTotalDays(
-        startTime: LocalDateTime? = null, endTime: LocalDateTime? = null
+        startTime: LocalDateTime? = null,
+        endTime: LocalDateTime? = null
     ): HourlyDistributionResult {
+        val hourlyMap = mutableMapOf<Int, Long>()
+        val activeDays = mutableSetOf<LocalDate>()
+
+        fetchAndProcessHourlySessions(startTime, endTime, hourlyMap, activeDays)
+
+        val totalDays = calculateTotalDays(startTime, endTime, activeDays)
+        val distribution = buildHourlyDistribution(hourlyMap, totalDays)
+
+        return HourlyDistributionResult(distribution, totalDays)
+    }
+
+    /**
+     * Fetches coding sessions and processes them into hourly buckets.
+     */
+    private fun fetchAndProcessHourlySessions(
+        startTime: LocalDateTime?,
+        endTime: LocalDateTime?,
+        hourlyMap: MutableMap<Int, Long>,
+        activeDays: MutableSet<LocalDate>
+    ) {
         val conditions = mutableListOf("is_deleted = 0")
         checkTimeParams(conditions, startTime, endTime)
 
         val sql = """
-            SELECT 
-                start_time,
-                end_time
+            SELECT start_time, end_time
             FROM coding_sessions 
             WHERE ${conditions.joinToString(" AND ")}
         """
-
-        val hourlyMap = mutableMapOf<Int, Long>()
-        val activeDays = mutableSetOf<LocalDate>()
 
         try {
             withConnection { conn ->
@@ -646,21 +662,14 @@ object DatabaseManager {
                     checkTimeParamsInStatement(pstmt, startTime, endTime)
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
-                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-
-                            val effectiveStart = if (startTime != null) maxOf(start, startTime) else start
-                            val effectiveEnd = if (endTime != null) minOf(end, endTime) else end
-
-                            if (effectiveStart.isBefore(effectiveEnd)) {
-                                splitSessionByFullHour(
-                                    effectiveStart,
-                                    effectiveEnd
-                                ).forEach { (hour, duration, dates) ->
-                                    hourlyMap[hour] = hourlyMap.getOrDefault(hour, 0L) + duration.toSeconds()
-                                    activeDays.addAll(dates)
-                                }
-                            }
+                            processSessionForHourly(
+                                rs.getString("start_time"),
+                                rs.getString("end_time"),
+                                startTime,
+                                endTime,
+                                hourlyMap,
+                                activeDays
+                            )
                         }
                     }
                 }
@@ -668,23 +677,61 @@ object DatabaseManager {
         } catch (e: Exception) {
             log.error("Failed to get overall hourly distribution.", e)
         }
+    }
 
-        val totalDays = if (startTime != null && endTime != null) {
-            ChronoUnit.DAYS.between(
-                startTime.toLocalDate(),
-                endTime.toLocalDate()
-            ).toInt().coerceAtLeast(1)
+    /**
+     * Processes a single session and adds its hourly segments to the map.
+     */
+    private fun processSessionForHourly(
+        startTimeStr: String,
+        endTimeStr: String,
+        rangeStart: LocalDateTime?,
+        rangeEnd: LocalDateTime?,
+        hourlyMap: MutableMap<Int, Long>,
+        activeDays: MutableSet<LocalDate>
+    ) {
+        val start = LocalDateTime.parse(startTimeStr, dateTimeFormatter)
+        val end = LocalDateTime.parse(endTimeStr, dateTimeFormatter)
+
+        val effectiveStart = if (rangeStart != null) maxOf(start, rangeStart) else start
+        val effectiveEnd = if (rangeEnd != null) minOf(end, rangeEnd) else end
+
+        if (effectiveStart.isBefore(effectiveEnd)) {
+            splitSessionByFullHour(effectiveStart, effectiveEnd).forEach { (hour, duration, dates) ->
+                hourlyMap[hour] = hourlyMap.getOrDefault(hour, 0L) + duration.toSeconds()
+                activeDays.addAll(dates)
+            }
+        }
+    }
+
+    /**
+     * Calculates the total number of days to use as denominator.
+     */
+    private fun calculateTotalDays(
+        startTime: LocalDateTime?,
+        endTime: LocalDateTime?,
+        activeDays: Set<LocalDate>
+    ): Int {
+        return if (startTime != null && endTime != null) {
+            ChronoUnit.DAYS.between(startTime.toLocalDate(), endTime.toLocalDate())
+                .toInt()
+                .coerceAtLeast(1)
         } else {
             activeDays.size.coerceAtLeast(1)
         }
+    }
 
-        // Calculate average for each hour
-        val distribution = hourlyMap.map { (hour, totalSeconds) ->
+    /**
+     * Builds the final hourly distribution list with averaged durations.
+     */
+    private fun buildHourlyDistribution(
+        hourlyMap: Map<Int, Long>,
+        totalDays: Int
+    ): List<HourlyUsage> {
+        return hourlyMap.map { (hour, totalSeconds) ->
             val avgSeconds = totalSeconds / totalDays
             HourlyUsage(hour, 0, Duration.ofSeconds(avgSeconds))
         }.sortedBy { it.hour }
-
-        return HourlyDistributionResult(distribution, totalDays)
     }
 
     /**
