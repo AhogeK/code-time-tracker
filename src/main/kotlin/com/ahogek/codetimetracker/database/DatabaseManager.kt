@@ -464,60 +464,105 @@ object DatabaseManager {
     }
 
     /**
-     * Fetches the coding time distribution by hour for each day of the week, for a given period.
-     * Sessions that span across hour or day boundaries are split accordingly.
+     * Computes the average coding duration for each hour of each weekday in the specified interval.
+     * Sessions crossing day/hour boundaries are split accurately.
      *
-     * @param startTime The start of the time range.
-     * @param endTime The end of the time range.
-     * @return A list of HourlyDistribution objects.
+     * @param startTime The start of the time range (inclusive). If null, uses earliest session.
+     * @param endTime The end of the time range (exclusive). If null, uses latest session.
+     * @return List of HourlyDistribution, one entry for each (weekday, hour).
      */
     fun getDailyHourDistribution(
-        startTime: LocalDateTime? = null, endTime: LocalDateTime? = null
+        startTime: LocalDateTime? = null,
+        endTime: LocalDateTime? = null
     ): List<HourlyDistribution> {
-        val conditions = mutableListOf("is_deleted = 0")
-        checkTimeParams(conditions, startTime, endTime)
+        val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
-        val sql = """
-            SELECT
-                start_time,
-                end_time
-            FROM coding_sessions
-            WHERE ${conditions.joinToString(" AND ")}
-        """
+        // Determine final interval if any param is null
+        var actualStart = startTime
+        var actualEnd = endTime
+        if (startTime == null || endTime == null) {
+            withConnection { conn ->
+                conn.prepareStatement(
+                    "SELECT MIN(start_time), MAX(end_time) FROM coding_sessions WHERE is_deleted=0"
+                ).use { pstmt ->
+                    pstmt.executeQuery().use { rs ->
+                        if (rs.next()) {
+                            if (actualStart == null && rs.getString(1) != null)
+                                actualStart = LocalDateTime.parse(rs.getString(1), formatter)
+                            if (actualEnd == null && rs.getString(2) != null)
+                                actualEnd = LocalDateTime.parse(rs.getString(2), formatter)
+                        }
+                    }
+                }
+            }
+        }
+        if (actualStart == null || actualEnd == null) return emptyList()
 
         val distributionMap = mutableMapOf<Pair<Int, Int>, Long>()
 
+        // Query coding sessions and split
         try {
             withConnection { conn ->
+                val sql = """
+                    SELECT start_time, end_time
+                    FROM coding_sessions
+                    WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
+                """
                 conn.prepareStatement(sql).use { pstmt ->
-                    checkTimeParamsInStatement(pstmt, startTime, endTime)
+                    pstmt.setString(1, formatter.format(actualStart))
+                    pstmt.setString(2, formatter.format(actualEnd))
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
-                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-
-                            splitSessionByDayAndHour(start, end).forEach { (dayOfWeek, hour, duration) ->
-                                val key = Pair(dayOfWeek, hour)
-                                distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), formatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), formatter)
+                            val effectiveStart = maxOf(sessionStart, actualStart)
+                            val effectiveEnd = minOf(sessionEnd, actualEnd)
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                splitSessionByDayAndHour(
+                                    effectiveStart,
+                                    effectiveEnd
+                                ).forEach { (weekday, hour, duration) ->
+                                    val key = Pair(weekday, hour)
+                                    distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
+                                }
                             }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            log.error("Failed to get daily hour distribution.", e)
+            log.error("Failed to compute daily hour distribution.", e)
         }
-        return distributionMap.map { (key, seconds) ->
-            HourlyDistribution(key.first, key.second, Duration.ofSeconds(seconds))
+
+        // Compute weekday appearance count
+        val weekdayCount = mutableMapOf<Int, Int>()
+        var date = actualStart.toLocalDate()
+        val endDate = actualEnd.toLocalDate()
+        while (date.isBefore(endDate)) {
+            val weekday = date.dayOfWeek.value // 1=Monday, 7=Sunday
+            weekdayCount[weekday] = weekdayCount.getOrDefault(weekday, 0) + 1
+            date = date.plusDays(1)
         }
+
+        // Calculate average for each (weekday, hour) by strict weekday appearances
+        return distributionMap.map { (key, totalSeconds) ->
+            val weekday = key.first
+            val hour = key.second
+            val appearances = weekdayCount[weekday]?.coerceAtLeast(1) ?: 1
+            val avgSeconds = totalSeconds.toDouble() / appearances
+            HourlyDistribution(weekday, hour, Duration.ofSeconds(avgSeconds.toLong()))
+        }.sortedWith(
+            compareBy<HourlyDistribution> { it.dayOfWeek }
+                .thenBy { it.hourOfDay }
+        )
     }
 
     /**
      * Splits a coding session into segments by day of week and hour.
      *
-     * @param start The start time of the session
-     * @param end The end time of the session
-     * @return A list of triples containing dayOfWeek, hour, and duration
+     * @param start Start time of the session.
+     * @param end End time of the session.
+     * @return List of triples containing weekday, hour, and duration.
      */
     private fun splitSessionByDayAndHour(
         start: LocalDateTime,
@@ -525,25 +570,20 @@ object DatabaseManager {
     ): List<Triple<Int, Int, Duration>> {
         val result = mutableListOf<Triple<Int, Int, Duration>>()
         var current = start
-
         while (current.isBefore(end)) {
             val hour = current.hour
-            val dayOfWeek = current.dayOfWeek.value // 1=Monday, 7=Sunday
-
-            // Calculate the next hour boundary
-            val nextHour = current.withMinute(0).withSecond(0).withNano(0).plusHours(1)
+            val weekday = current.dayOfWeek.value // 1=Monday, ..., 7=Sunday
+            val nextHour = current.plusHours(1).withMinute(0).withSecond(0).withNano(0)
             val segmentEnd = if (nextHour.isAfter(end)) end else nextHour
-
             val duration = Duration.between(current, segmentEnd)
             if (!duration.isZero) {
-                result.add(Triple(dayOfWeek, hour, duration))
+                result.add(Triple(weekday, hour, duration))
             }
-
             current = segmentEnd
         }
-
         return result
     }
+
 
     private fun checkTimeParamsInStatement(
         pstmt: PreparedStatement, startTime: LocalDateTime?, endTime: LocalDateTime?
