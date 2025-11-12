@@ -730,23 +730,20 @@ object DatabaseManager {
 
 
     /**
-     * Fetches the total coding time for each project within a given time range.
+     * Calculates coding time distribution by project during a given period.
+     * Accurately splits sessions so that only overlapping parts are counted.
      *
-     * @param startTime The start of the time range.
-     * @param endTime The end of the time range.
-     * @return A list of ProjectUsage objects, ordered from the most worked-on to the least.
+     * @param startTime The beginning of the period (inclusive)
+     * @param endTime   The end of the period (exclusive)
+     * @return List of ProjectUsage objects sorted by usage
      */
     fun getProjectDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<ProjectUsage> {
         val sql = """
-            SELECT
-                project_name,
-                SUM(strftime('%s', end_time) - strftime('%s', start_time)) as total_seconds
+            SELECT project_name, start_time, end_time
             FROM coding_sessions
-            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
-            GROUP BY project_name
-            ORDER BY total_seconds DESC;
+            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """
-        val distribution = mutableListOf<ProjectUsage>()
+        val map = mutableMapOf<String, Long>()
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
@@ -755,18 +752,24 @@ object DatabaseManager {
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val projectName = rs.getString("project_name")
-                            val seconds = rs.getLong("total_seconds")
-                            distribution.add(
-                                ProjectUsage(projectName, Duration.ofSeconds(seconds))
-                            )
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            val effectiveStart = maxOf(sessionStart, startTime)
+                            val effectiveEnd = minOf(sessionEnd, endTime)
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                map[projectName] = map.getOrDefault(projectName, 0L) +
+                                        Duration.between(effectiveStart, effectiveEnd).toSeconds()
+                            }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            log.error("Failed to get project distribution.", e)
+            log.error("Failed to compute project distribution.", e)
         }
-        return distribution
+        return map.map { (projectName, totalSeconds) ->
+            ProjectUsage(projectName, Duration.ofSeconds(totalSeconds))
+        }.sortedByDescending { it.totalDuration }
     }
 
     /**
