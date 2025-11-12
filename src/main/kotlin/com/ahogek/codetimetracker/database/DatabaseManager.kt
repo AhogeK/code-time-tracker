@@ -46,6 +46,9 @@ object DatabaseManager {
         WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
     """
 
+    private const val SQL_SELECT_MIN_MAX_TIME =
+        "SELECT MIN(start_time), MAX(end_time) FROM coding_sessions WHERE is_deleted=0"
+
     init {
         try {
             Class.forName("org.sqlite.JDBC")
@@ -498,9 +501,7 @@ object DatabaseManager {
 
         return try {
             withConnection { conn ->
-                conn.prepareStatement(
-                    "SELECT MIN(start_time), MAX(end_time) FROM coding_sessions WHERE is_deleted=0"
-                ).use { pstmt ->
+                conn.prepareStatement(SQL_SELECT_MIN_MAX_TIME).use { pstmt ->
                     pstmt.executeQuery().use { rs ->
                         if (rs.next()) {
                             val minTime = rs.getString(1)?.let {
@@ -645,7 +646,6 @@ object DatabaseManager {
         }
         return result
     }
-
 
     private fun checkTimeParamsInStatement(
         pstmt: PreparedStatement, startTime: LocalDateTime?, endTime: LocalDateTime?
