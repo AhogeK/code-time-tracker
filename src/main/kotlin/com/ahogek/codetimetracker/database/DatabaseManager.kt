@@ -410,20 +410,20 @@ object DatabaseManager {
     }
 
     /**
-     * Calculates the current and maximum consecutive coding streaks within a given time range.
+     * Calculates coding streaks (current and max consecutive active days) in a time interval.
+     * Counts all days with any session overlap in the interval for precise streak detection.
      *
-     * @param startTime The start of the time range.
-     * @param endTime The end of the time range.
-     * @return A CodingStreaks object containing the current and maximum streaks.
+     * @param startTime The beginning of the period (inclusive)
+     * @param endTime   The end of the period (exclusive)
+     * @return CodingStreaks object showing current and max streaks
      */
     fun getCodingStreaks(startTime: LocalDateTime, endTime: LocalDateTime): CodingStreaks {
         val sql = """
-            SELECT DISTINCT DATE(start_time) as coding_date
+            SELECT start_time, end_time
             FROM coding_sessions
-            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
-            ORDER BY coding_date DESC;
+            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """
-        val codingDates = mutableListOf<LocalDate>()
+        val codingDates = mutableSetOf<LocalDate>()
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
@@ -431,18 +431,26 @@ object DatabaseManager {
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            codingDates.add(LocalDate.parse(rs.getString("coding_date")))
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            val effectiveStart = maxOf(sessionStart, startTime)
+                            val effectiveEnd = minOf(sessionEnd, endTime)
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                // Split session by day, collect all days covered by its overlapping fragment
+                                splitSessionByDay(effectiveStart, effectiveEnd).forEach { (date, _) ->
+                                    codingDates.add(date)
+                                }
+                            }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            log.error("Failed to get coding dates for streaks.", e)
-            return CodingStreaks(0, 0)
+            log.error("Failed to compute coding streaks.", e)
         }
-
-        return calculateCodingStreaks(codingDates)
+        return calculateCodingStreaks(codingDates.sortedDescending())
     }
+
 
     /**
      * Calculates the current and maximum consecutive coding streaks
