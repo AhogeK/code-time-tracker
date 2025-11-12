@@ -474,53 +474,77 @@ object DatabaseManager {
         startTime: LocalDateTime? = null,
         endTime: LocalDateTime? = null
     ): List<HourlyDistribution> {
-        val formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+        val (actualStart, actualEnd) = determineTimeRange(startTime, endTime)
+            ?: return emptyList()
 
-        // Determine final interval if any param is null
-        var actualStart = startTime
-        var actualEnd = endTime
-        if (startTime == null || endTime == null) {
+        val distributionMap = fetchDailyHourlyData(actualStart, actualEnd)
+        val weekdayCount = calculateWeekdayCount(actualStart, actualEnd)
+
+        return buildDailyHourlyDistribution(distributionMap, weekdayCount)
+    }
+
+    /**
+     * Determines the actual time range to use for the query.
+     * If parameters are null, queries the database for min/max times.
+     */
+    private fun determineTimeRange(
+        startTime: LocalDateTime?,
+        endTime: LocalDateTime?
+    ): Pair<LocalDateTime, LocalDateTime>? {
+        if (startTime != null && endTime != null) {
+            return Pair(startTime, endTime)
+        }
+
+        return try {
             withConnection { conn ->
                 conn.prepareStatement(
                     "SELECT MIN(start_time), MAX(end_time) FROM coding_sessions WHERE is_deleted=0"
                 ).use { pstmt ->
                     pstmt.executeQuery().use { rs ->
                         if (rs.next()) {
-                            if (actualStart == null && rs.getString(1) != null)
-                                actualStart = LocalDateTime.parse(rs.getString(1), formatter)
-                            if (actualEnd == null && rs.getString(2) != null)
-                                actualEnd = LocalDateTime.parse(rs.getString(2), formatter)
-                        }
+                            val minTime = rs.getString(1)?.let {
+                                LocalDateTime.parse(it, dateTimeFormatter)
+                            } ?: startTime
+                            val maxTime = rs.getString(2)?.let {
+                                LocalDateTime.parse(it, dateTimeFormatter)
+                            } ?: endTime
+
+                            if (minTime != null && maxTime != null) {
+                                Pair(minTime, maxTime)
+                            } else null
+                        } else null
                     }
                 }
             }
+        } catch (e: Exception) {
+            log.error("Failed to determine time range.", e)
+            null
         }
-        if (actualStart == null || actualEnd == null) return emptyList()
+    }
 
+    /**
+     * Fetches and processes all sessions in the range, splitting by day and hour.
+     */
+    private fun fetchDailyHourlyData(
+        actualStart: LocalDateTime,
+        actualEnd: LocalDateTime
+    ): Map<Pair<Int, Int>, Long> {
         val distributionMap = mutableMapOf<Pair<Int, Int>, Long>()
 
-        // Query coding sessions and split
         try {
             withConnection { conn ->
-                val sql = SQL_SELECT_SESSIONS_IN_RANGE
-                conn.prepareStatement(sql).use { pstmt ->
-                    pstmt.setString(1, formatter.format(actualStart))
-                    pstmt.setString(2, formatter.format(actualEnd))
+                conn.prepareStatement(SQL_SELECT_SESSIONS_IN_RANGE).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(actualStart))
+                    pstmt.setString(2, dateTimeFormatter.format(actualEnd))
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), formatter)
-                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), formatter)
-                            val effectiveStart = maxOf(sessionStart, actualStart)
-                            val effectiveEnd = minOf(sessionEnd, actualEnd)
-                            if (effectiveStart.isBefore(effectiveEnd)) {
-                                splitSessionByDayAndHour(
-                                    effectiveStart,
-                                    effectiveEnd
-                                ).forEach { (weekday, hour, duration) ->
-                                    val key = Pair(weekday, hour)
-                                    distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
-                                }
-                            }
+                            processDailyHourlySession(
+                                rs.getString("start_time"),
+                                rs.getString("end_time"),
+                                actualStart,
+                                actualEnd,
+                                distributionMap
+                            )
                         }
                     }
                 }
@@ -529,17 +553,59 @@ object DatabaseManager {
             log.error("Failed to compute daily hour distribution.", e)
         }
 
-        // Compute weekday appearance count
+        return distributionMap
+    }
+
+    /**
+     * Processes a single session for daily hourly distribution.
+     */
+    private fun processDailyHourlySession(
+        startTimeStr: String,
+        endTimeStr: String,
+        rangeStart: LocalDateTime,
+        rangeEnd: LocalDateTime,
+        distributionMap: MutableMap<Pair<Int, Int>, Long>
+    ) {
+        val sessionStart = LocalDateTime.parse(startTimeStr, dateTimeFormatter)
+        val sessionEnd = LocalDateTime.parse(endTimeStr, dateTimeFormatter)
+        val effectiveStart = maxOf(sessionStart, rangeStart)
+        val effectiveEnd = minOf(sessionEnd, rangeEnd)
+
+        if (effectiveStart.isBefore(effectiveEnd)) {
+            splitSessionByDayAndHour(effectiveStart, effectiveEnd).forEach { (weekday, hour, duration) ->
+                val key = Pair(weekday, hour)
+                distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
+            }
+        }
+    }
+
+    /**
+     * Calculates how many times each weekday appears in the given range.
+     */
+    private fun calculateWeekdayCount(
+        startTime: LocalDateTime,
+        endTime: LocalDateTime
+    ): Map<Int, Int> {
         val weekdayCount = mutableMapOf<Int, Int>()
-        var date = actualStart.toLocalDate()
-        val endDate = actualEnd.toLocalDate()
+        var date = startTime.toLocalDate()
+        val endDate = endTime.toLocalDate()
+
         while (date.isBefore(endDate)) {
-            val weekday = date.dayOfWeek.value // 1=Monday, 7=Sunday
+            val weekday = date.dayOfWeek.value
             weekdayCount[weekday] = weekdayCount.getOrDefault(weekday, 0) + 1
             date = date.plusDays(1)
         }
 
-        // Calculate average for each (weekday, hour) by strict weekday appearances
+        return weekdayCount
+    }
+
+    /**
+     * Builds the final distribution list with averaged values per weekday.
+     */
+    private fun buildDailyHourlyDistribution(
+        distributionMap: Map<Pair<Int, Int>, Long>,
+        weekdayCount: Map<Int, Int>
+    ): List<HourlyDistribution> {
         return distributionMap.map { (key, totalSeconds) ->
             val weekday = key.first
             val hour = key.second
