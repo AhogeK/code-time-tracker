@@ -601,7 +601,7 @@ object DatabaseManager {
         conditions: MutableList<String>, startTime: LocalDateTime?, endTime: LocalDateTime?
     ) {
         if (startTime != null) {
-            conditions.add("start_time >= ?")
+            conditions.add("end_time > ?")
         }
         if (endTime != null) {
             conditions.add("start_time < ?")
