@@ -7,6 +7,7 @@ import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
 import java.sql.Connection
 import java.sql.PreparedStatement
+import java.sql.ResultSet
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -878,14 +879,7 @@ object DatabaseManager {
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val language = rs.getString("language")
-                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
-                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-                            val effectiveStart = maxOf(sessionStart, startTime)
-                            val effectiveEnd = minOf(sessionEnd, endTime)
-                            if (effectiveStart.isBefore(effectiveEnd)) {
-                                map[language] = map.getOrDefault(language, 0L) +
-                                        Duration.between(effectiveStart, effectiveEnd).toSeconds()
-                            }
+                            sessionOp(rs, startTime, endTime, map, language)
                         }
                     }
                 }
@@ -922,14 +916,7 @@ object DatabaseManager {
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val projectName = rs.getString("project_name")
-                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
-                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-                            val effectiveStart = maxOf(sessionStart, startTime)
-                            val effectiveEnd = minOf(sessionEnd, endTime)
-                            if (effectiveStart.isBefore(effectiveEnd)) {
-                                map[projectName] = map.getOrDefault(projectName, 0L) +
-                                        Duration.between(effectiveStart, effectiveEnd).toSeconds()
-                            }
+                            sessionOp(rs, startTime, endTime, map, projectName)
                         }
                     }
                 }
@@ -940,6 +927,23 @@ object DatabaseManager {
         return map.map { (projectName, totalSeconds) ->
             ProjectUsage(projectName, Duration.ofSeconds(totalSeconds))
         }.sortedByDescending { it.totalDuration }
+    }
+
+    private fun sessionOp(
+        rs: ResultSet,
+        startTime: LocalDateTime,
+        endTime: LocalDateTime,
+        map: MutableMap<String, Long>,
+        language: String
+    ) {
+        val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+        val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+        val effectiveStart = maxOf(sessionStart, startTime)
+        val effectiveEnd = minOf(sessionEnd, endTime)
+        if (effectiveStart.isBefore(effectiveEnd)) {
+            map[language] = map.getOrDefault(language, 0L) +
+                    Duration.between(effectiveStart, effectiveEnd).toSeconds()
+        }
     }
 
     /**
