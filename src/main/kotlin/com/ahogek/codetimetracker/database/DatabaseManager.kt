@@ -773,25 +773,20 @@ object DatabaseManager {
     }
 
     /**
-     * Categorizes coding time into four periods of the day and calculates the total duration for each.
-     * Periods are: Night (0-5), Morning (6-11), Daytime (12-17), Evening (18-23).
-     * Sessions spanning multiple periods are split accordingly.
+     * Calculates coding time distribution across time-of-day periods within a date range.
+     * Ensures only overlapping segments are assigned and counted for each period.
      *
-     * @param startTime The start of the time range for the query.
-     * @param endTime The end of the time range for the query.
-     * @return A list of TimeOfDayUsage objects.
+     * @param startTime The beginning of the period (inclusive)
+     * @param endTime   The end of the period (exclusive)
+     * @return List of TimeOfDayUsage objects for each time slot
      */
     fun getTimeOfDayDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<TimeOfDayUsage> {
         val sql = """
-            SELECT
-                start_time,
-                end_time
+            SELECT start_time, end_time
             FROM coding_sessions
-            WHERE is_deleted = 0 AND start_time >= ? AND start_time < ?
+            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """
-
         val distributionMap = mutableMapOf<String, Long>()
-
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
@@ -799,25 +794,28 @@ object DatabaseManager {
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
-                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-
-                            // Split session by time of day periods
-                            splitSessionByTimeOfDay(start, end).forEach { (timeOfDay, duration) ->
-                                distributionMap[timeOfDay] =
-                                    distributionMap.getOrDefault(timeOfDay, 0L) + duration.toSeconds()
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            val effectiveStart = maxOf(sessionStart, startTime)
+                            val effectiveEnd = minOf(sessionEnd, endTime)
+                            if (effectiveStart.isBefore(effectiveEnd)) {
+                                splitSessionByTimeOfDay(effectiveStart, effectiveEnd).forEach { (timeOfDay, duration) ->
+                                    distributionMap[timeOfDay] =
+                                        distributionMap.getOrDefault(timeOfDay, 0L) + duration.toSeconds()
+                                }
                             }
                         }
                     }
                 }
             }
         } catch (e: Exception) {
-            log.error("Failed to get time of day distribution.", e)
+            log.error("Failed to compute time of day distribution.", e)
         }
         return distributionMap.map { (timeOfDay, seconds) ->
             TimeOfDayUsage(timeOfDay, Duration.ofSeconds(seconds))
         }
     }
+
 
     /**
      * Splits a coding session by time-of-day periods.
