@@ -16,6 +16,8 @@ globalThis.renderCharts = function (payload) {
     const jsonPayload = JSON.parse(payload);
     const theme = jsonPayload.theme;
 
+    applyScrollbarTheme(theme);
+
     // Render yearly activity heatmap
     if (jsonPayload.yearlyActivity) {
       renderYearlyActivityHeatmap(
@@ -45,6 +47,24 @@ globalThis.renderCharts = function (payload) {
     console.error("Failed to parse or render chart data:", e);
   }
 };
+
+/**
+ * Applies scrollbar theme based on the current theme colors.
+ * @param {Object} theme - Theme colors
+ */
+function applyScrollbarTheme(theme) {
+  const root = document.documentElement;
+
+  if (theme.isDark) {
+    root.style.setProperty('--scrollbar-thumb-color', 'rgba(255, 255, 255, 0.2)');
+    root.style.setProperty('--scrollbar-thumb-hover-color', 'rgba(255, 255, 255, 0.3)');
+    root.style.setProperty('--scrollbar-thumb-active-color', 'rgba(255, 255, 255, 0.4)');
+  } else {
+    root.style.setProperty('--scrollbar-thumb-color', 'rgba(0, 0, 0, 0.2)');
+    root.style.setProperty('--scrollbar-thumb-hover-color', 'rgba(0, 0, 0, 0.3)');
+    root.style.setProperty('--scrollbar-thumb-active-color', 'rgba(0, 0, 0, 0.4)');
+  }
+}
 
 /**
  * Renders the yearly activity contribution heatmap.
