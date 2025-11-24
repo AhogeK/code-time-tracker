@@ -202,10 +202,11 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
     private fun startTicker() {
         if (tickerTask == null || tickerTask!!.isDone) {
             tickerTask = scheduler.scheduleAtFixedRate({
-                displayDuration.getAndUpdate { it?.plusSeconds(1) }
-                // 直接在 UI 线程更新 label
-                ApplicationManager.getApplication().invokeLater {
-                    updateLabelText()
+                val lastActivity = timeTrackerService.getLastActivityTime()
+                val idleSeconds = ChronoUnit.SECONDS.between(lastActivity, LocalDateTime.now())
+                if (idleSeconds <= TimeTrackerService.IDLE_THRESHOLD_SECONDS) {
+                    displayDuration.getAndUpdate { it?.plusSeconds(1) }
+                    ApplicationManager.getApplication().invokeLater { updateLabelText() }
                 }
             }, 1, 1, TimeUnit.SECONDS)
         }

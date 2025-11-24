@@ -20,9 +20,6 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
-private const val IDLE_THRESHOLD_SECONDS = 60L
-private const val IDLE_CHECK_INTERVAL_SECONDS = 5L
-
 /**
  * Manage all timing logic
  *
@@ -31,6 +28,12 @@ private const val IDLE_CHECK_INTERVAL_SECONDS = 5L
  */
 @Service(Service.Level.APP)
 class TimeTrackerService : Disposable {
+
+    companion object {
+        const val IDLE_THRESHOLD_SECONDS = 60L
+        const val IDLE_CHECK_INTERVAL_SECONDS = 5L
+    }
+
     private val log = Logger.getInstance(TimeTrackerService::class.java)
     private val scheduler: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val activeSessions: MutableMap<String, MutableMap<String, CodingSession>> = ConcurrentHashMap()
