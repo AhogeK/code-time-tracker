@@ -11,6 +11,7 @@ import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.editor.Editor
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.util.SystemInfo
+import kotlinx.collections.immutable.toImmutableList
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
@@ -184,6 +185,24 @@ class TimeTrackerService : Disposable {
             log.info("Persisted sessions task submitted for: $sessionsToStore")
         } else {
             onSaveComplete()
+        }
+    }
+
+    /**
+     * Stop tracking for a specific project immediately.
+     * Called when a project is closed.
+     */
+    fun stopProjectTracking(projectPath: String) {
+        val projectSessions = activeSessions.remove(projectPath)
+
+        if (!projectSessions.isNullOrEmpty()) {
+            val sessionsToStore = projectSessions.values.toImmutableList()
+            log.info("Stopping tracking for closed project: $projectPath. Saving ${sessionsToStore.size} sessions.")
+            DatabaseManager.saveSessions(sessionsToStore) {}
+        }
+
+        if (activeSessions.isEmpty()) {
+            isUserActive.set(false)
         }
     }
 

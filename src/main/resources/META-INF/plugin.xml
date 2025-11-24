@@ -41,6 +41,9 @@
         <listener
                 class="com.ahogek.codetimetracker.listeners.GlobalActionListener"
                 topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
+        <listener
+                class="com.ahogek.codetimetracker.listeners.ProjectCloseListener"
+                topic="com.intellij.openapi.project.ProjectManagerListener"/>
     </applicationListeners>
 
 </idea-plugin>

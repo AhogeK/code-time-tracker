@@ -133,11 +133,6 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
                 updateTimeFromDatabase()
             }
         })
-
-        val lastActivity = timeTrackerService.getLastActivityTime()
-        if (ChronoUnit.SECONDS.between(lastActivity, LocalDateTime.now()) < 5L) {
-            startTicker()
-        }
     }
 
     private fun createActionGroup(): ActionGroup {
