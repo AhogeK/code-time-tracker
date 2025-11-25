@@ -2,6 +2,7 @@ package com.ahogek.codetimetracker.service
 
 import com.ahogek.codetimetracker.database.DatabaseManager
 import com.ahogek.codetimetracker.model.CodingSession
+import com.ahogek.codetimetracker.model.TimePeriod
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationInfo
@@ -19,6 +20,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -44,6 +46,9 @@ class TimeTrackerService : Disposable {
         ApplicationInfo.getInstance().versionName ?: "IntelliJ IDEA"
     }
     private val isUserActive = AtomicBoolean(false)
+    private val periodManager = PeriodManager()
+    private val uiDisplayTime = ConcurrentHashMap<TimePeriod, AtomicLong>()
+    private val totalSessionTime = AtomicLong(0)
 
     fun getLastActivityTime(): LocalDateTime {
         return lastActivityTime.get()
@@ -51,6 +56,18 @@ class TimeTrackerService : Disposable {
 
     init {
         log.info("TimeTrackerService initialized on platform: $platform")
+
+        TimePeriod.entries.forEach { period ->
+            uiDisplayTime[period] = AtomicLong(0)
+        }
+
+        scheduler.scheduleAtFixedRate(
+            ::checkPeriodChanges,
+            1,
+            1,
+            TimeUnit.MINUTES
+        )
+
         // Start a unique, periodic task to check for idle state
         scheduler.scheduleAtFixedRate(
             ::checkIdleStatus,
@@ -103,6 +120,13 @@ class TimeTrackerService : Disposable {
             CodingSession(projectName, currentLanguage, platform, ideName, now, now)
         }
         session.endTime = now
+
+        // Calculate time delta since last activity and add to tracking time
+        val previousActivity = lastActivityTime.get()
+        val timeDelta = ChronoUnit.MILLIS.between(previousActivity, now)
+        if (timeDelta > 0 && timeDelta < IDLE_THRESHOLD_SECONDS * 1000) {
+            addTrackingTime(timeDelta)
+        }
     }
 
     /**
@@ -185,6 +209,57 @@ class TimeTrackerService : Disposable {
             log.info("Persisted sessions task submitted for: $sessionsToStore")
         } else {
             onSaveComplete()
+        }
+    }
+
+    /**
+     * Periodically check if any time period has changed
+     * If a period boundary is crossed, reset the UI display time for that period
+     * and notify all listeners
+     */
+    private fun checkPeriodChanges() {
+        TimePeriod.entries.forEach { period ->
+            if (periodManager.isPeriodChanged(period)) {
+                log.info("Period $period has changed, resetting UI display time")
+
+                // Reset UI display time to zero
+                uiDisplayTime[period]?.set(0)
+
+                // Update period manager
+                periodManager.resetPeriod(period)
+
+                // Notify UI components to refresh
+                ApplicationManager.getApplication().messageBus
+                    .syncPublisher(TimeTrackerTopics.PERIOD_RESET_TOPIC)
+                    .onPeriodReset(period)
+            }
+        }
+    }
+
+    /**
+     * Get the UI display time for a specific period
+     * This time resets when the period changes (e.g., new day starts)
+     *
+     * @param period The time period to query
+     * @return The accumulated time in milliseconds for UI display
+     */
+    fun getUIDisplayTime(period: TimePeriod): Long {
+        return uiDisplayTime[period]?.get() ?: 0L
+    }
+
+    /**
+     * Add time to both UI display and total session time
+     * Called when tracking activity is detected
+     *
+     * @param milliseconds The amount of time to add
+     */
+    fun addTrackingTime(milliseconds: Long) {
+        // Add to total session time (for persistence)
+        totalSessionTime.addAndGet(milliseconds)
+
+        // Add to all period UI display times
+        TimePeriod.entries.forEach { period ->
+            uiDisplayTime[period]?.addAndGet(milliseconds)
         }
     }
 

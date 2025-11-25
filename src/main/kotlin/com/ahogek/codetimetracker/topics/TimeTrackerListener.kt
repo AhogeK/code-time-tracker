@@ -25,4 +25,7 @@ interface TimeTrackerListener {
 object TimeTrackerTopics {
     val ACTIVITY_TOPIC: Topic<TimeTrackerListener> =
         Topic.create("Code Time Tracker Activity", TimeTrackerListener::class.java)
+
+    val PERIOD_RESET_TOPIC: Topic<PeriodResetListener> =
+        Topic.create("Period Reset Events", PeriodResetListener::class.java)
 }

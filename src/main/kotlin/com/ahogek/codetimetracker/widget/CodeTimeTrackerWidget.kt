@@ -1,7 +1,9 @@
 package com.ahogek.codetimetracker.widget
 
 import com.ahogek.codetimetracker.database.DatabaseManager
+import com.ahogek.codetimetracker.model.TimePeriod
 import com.ahogek.codetimetracker.service.TimeTrackerService
+import com.ahogek.codetimetracker.topics.PeriodResetListener
 import com.ahogek.codetimetracker.topics.TimeTrackerListener
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
 import com.intellij.icons.AllIcons
@@ -54,7 +56,10 @@ private fun readCachedDuration(): Duration {
  */
 class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, CustomStatusBarWidget {
 
-    private enum class TimePeriod(val displayName: String) {
+    /**
+     * Internal enum for widget display, includes TOTAL which is not a time period
+     */
+    private enum class DisplayPeriod(val displayName: String) {
         TOTAL("Total"),
         TODAY("Today"),
         THIS_WEEK("This Week"),
@@ -62,7 +67,18 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
         THIS_YEAR("This Year");
 
         companion object {
-            fun fromString(name: String?): TimePeriod = entries.find { it.name == name } ?: TOTAL
+            fun fromString(name: String?): DisplayPeriod = entries.find { it.name == name } ?: TOTAL
+        }
+
+        /**
+         * Convert DisplayPeriod to model TimePeriod (excludes TOTAL)
+         */
+        fun toModelPeriod(): TimePeriod? = when (this) {
+            TODAY -> TimePeriod.TODAY
+            THIS_WEEK -> TimePeriod.THIS_WEEK
+            THIS_MONTH -> TimePeriod.THIS_MONTH
+            THIS_YEAR -> TimePeriod.THIS_YEAR
+            TOTAL -> null  // TOTAL is not a time period with reset boundary
         }
     }
 
@@ -72,8 +88,8 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
 
     private var tickerTask: ScheduledFuture<*>? = null
     private var statusBar: StatusBar? = null
-    private var selectedPeriod: TimePeriod =
-        TimePeriod.fromString(PropertiesComponent.getInstance().getValue(SELECTED_PERIOD_KEY))
+    private var selectedPeriod: DisplayPeriod =
+        DisplayPeriod.fromString(PropertiesComponent.getInstance().getValue(SELECTED_PERIOD_KEY))
     private var trackCurrentProjectOnly: Boolean =
         PropertiesComponent.getInstance().getBoolean(TRACK_CURRENT_PROJECT_ONLY_KEY, false)
 
@@ -122,7 +138,7 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
         })
         label.toolTipText = "Click to change tracked time period"
 
-        displayDuration.set(if (selectedPeriod == TimePeriod.TOTAL) readCachedDuration() else Duration.ZERO)
+        displayDuration.set(if (selectedPeriod == DisplayPeriod.TOTAL) readCachedDuration() else Duration.ZERO)
         updateTimeFromDatabase()
 
         val connection = ApplicationManager.getApplication().messageBus.connect(this)
@@ -130,6 +146,16 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
             override fun onActivityStarted() = startTicker()
             override fun onActivityStopped() {
                 stopTicker()
+                updateTimeFromDatabase()
+            }
+        })
+
+        // Subscribe to period reset events for automatic UI refresh
+        connection.subscribe(TimeTrackerTopics.PERIOD_RESET_TOPIC, PeriodResetListener { period ->
+            // Check if the reset period matches current selected period
+            val currentModelPeriod = selectedPeriod.toModelPeriod()
+            if (currentModelPeriod == period) {
+                // Period boundary crossed, refresh from database
                 updateTimeFromDatabase()
             }
         })
@@ -158,7 +184,7 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
 
         group.add(Separator.getInstance())
 
-        TimePeriod.entries.forEach { period ->
+        DisplayPeriod.entries.forEach { period ->
             group.add(object : AnAction(period.displayName), DumbAware {
                 override fun actionPerformed(e: AnActionEvent) {
                     if (selectedPeriod != period) {
@@ -212,52 +238,99 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
         tickerTask = null
     }
 
+    /**
+     * Update the displayed time from database or service
+     * Queries appropriate data source based on selected period
+     */
     private fun updateTimeFromDatabase() {
         // Immediately update UI with the current state (which might be 00:00:00).
         updateLabelText()
 
         ApplicationManager.getApplication().executeOnPooledThread {
-            val now = LocalDateTime.now()
-            val startOfToday = now.with(LocalTime.MIN)
             val projectName = if (trackCurrentProjectOnly) project.name else null
+            val dbValue = calculateDurationForPeriod(projectName)
 
-            val dbValue = when (selectedPeriod) {
-                TimePeriod.TOTAL -> DatabaseManager.getTotalCodingTime(projectName)
-                TimePeriod.TODAY -> DatabaseManager.getCodingTimeForPeriod(
-                    startOfToday, startOfToday.plusDays(1), projectName
-                )
+            updateDisplayDuration(dbValue)
+        }
+    }
 
-                TimePeriod.THIS_WEEK -> {
-                    val weekFields = WeekFields.of(Locale.getDefault())
-                    val startOfWeek = startOfToday.with(weekFields.dayOfWeek(), 1L)
-                    DatabaseManager.getCodingTimeForPeriod(startOfWeek, startOfWeek.plusWeeks(1), projectName)
-                }
-
-                TimePeriod.THIS_MONTH -> {
-                    val startOfMonth = startOfToday.withDayOfMonth(1)
-                    DatabaseManager.getCodingTimeForPeriod(startOfMonth, startOfMonth.plusMonths(1), projectName)
-                }
-
-                TimePeriod.THIS_YEAR -> {
-                    val startOfYear = startOfToday.withDayOfYear(1)
-                    DatabaseManager.getCodingTimeForPeriod(startOfYear, startOfYear.plusYears(1), projectName)
-                }
+    /**
+     * Calculate duration for the currently selected period
+     *
+     * @param projectName Optional project name filter (null for all projects)
+     * @return Duration representing the accumulated time
+     */
+    private fun calculateDurationForPeriod(projectName: String?): Duration {
+        return when (selectedPeriod) {
+            DisplayPeriod.TOTAL -> DatabaseManager.getTotalCodingTime(projectName)
+            DisplayPeriod.TODAY -> getTimeForPeriod(TimePeriod.TODAY) { startOfToday ->
+                DatabaseManager.getCodingTimeForPeriod(startOfToday, startOfToday.plusDays(1), projectName)
             }
 
-            ApplicationManager.getApplication().invokeLater {
-                displayDuration.set(dbValue)
-                if (selectedPeriod == TimePeriod.TOTAL && !trackCurrentProjectOnly) {
-                    PropertiesComponent.getInstance().setValue(CACHED_TOTAL_SECONDS_KEY, dbValue.toSeconds().toString())
-                }
-                updateLabelText()
+            DisplayPeriod.THIS_WEEK -> getTimeForPeriod(TimePeriod.THIS_WEEK) { startOfToday ->
+                val weekFields = WeekFields.of(Locale.getDefault())
+                val startOfWeek = startOfToday.with(weekFields.dayOfWeek(), 1L)
+                DatabaseManager.getCodingTimeForPeriod(startOfWeek, startOfWeek.plusWeeks(1), projectName)
             }
+
+            DisplayPeriod.THIS_MONTH -> getTimeForPeriod(TimePeriod.THIS_MONTH) { startOfToday ->
+                val startOfMonth = startOfToday.withDayOfMonth(1)
+                DatabaseManager.getCodingTimeForPeriod(startOfMonth, startOfMonth.plusMonths(1), projectName)
+            }
+
+            DisplayPeriod.THIS_YEAR -> getTimeForPeriod(TimePeriod.THIS_YEAR) { startOfToday ->
+                val startOfYear = startOfToday.withDayOfYear(1)
+                DatabaseManager.getCodingTimeForPeriod(startOfYear, startOfYear.plusYears(1), projectName)
+            }
+        }
+    }
+
+    /**
+     * Get time for a specific period, preferring service UI time over database query
+     *
+     * @param modelPeriod The time period from the model
+     * @param dbQueryFallback Lambda to query database if service time is not available
+     * @return Duration representing the accumulated time
+     */
+    private fun getTimeForPeriod(
+        modelPeriod: TimePeriod,
+        dbQueryFallback: (LocalDateTime) -> Duration
+    ): Duration {
+        // First try to get time from service (real-time accumulation)
+        val serviceTime = timeTrackerService.getUIDisplayTime(modelPeriod)
+        if (serviceTime > 0) {
+            return Duration.ofMillis(serviceTime)
+        }
+
+        // Fallback to database query
+        val now = LocalDateTime.now()
+        val startOfToday = now.with(LocalTime.MIN)
+        return dbQueryFallback(startOfToday)
+    }
+
+    /**
+     * Update the display duration and refresh UI on EDT
+     *
+     * @param duration The new duration to display
+     */
+    private fun updateDisplayDuration(duration: Duration) {
+        ApplicationManager.getApplication().invokeLater {
+            displayDuration.set(duration)
+
+            // Cache total time if displaying total for all projects
+            if (selectedPeriod == DisplayPeriod.TOTAL && !trackCurrentProjectOnly) {
+                PropertiesComponent.getInstance()
+                    .setValue(CACHED_TOTAL_SECONDS_KEY, duration.toSeconds().toString())
+            }
+
+            updateLabelText()
         }
     }
 
     override fun dispose() {
         stopTicker()
         // Persist the current "Total" time to cache when closing.
-        if (selectedPeriod == TimePeriod.TOTAL && !trackCurrentProjectOnly) {
+        if (selectedPeriod == DisplayPeriod.TOTAL && !trackCurrentProjectOnly) {
             displayDuration.get()?.let {
                 PropertiesComponent.getInstance().setValue(CACHED_TOTAL_SECONDS_KEY, it.toSeconds().toString())
             }
