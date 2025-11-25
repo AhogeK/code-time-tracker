@@ -1,4 +1,4 @@
-package com.ahogek.codetimetracker.topics
+package com.ahogek.codetimetracker.listeners
 
 import com.ahogek.codetimetracker.model.TimePeriod
 

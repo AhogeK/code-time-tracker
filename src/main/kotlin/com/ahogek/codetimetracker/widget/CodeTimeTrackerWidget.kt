@@ -1,10 +1,10 @@
 package com.ahogek.codetimetracker.widget
 
 import com.ahogek.codetimetracker.database.DatabaseManager
+import com.ahogek.codetimetracker.listeners.PeriodResetListener
+import com.ahogek.codetimetracker.listeners.TimeTrackerListener
 import com.ahogek.codetimetracker.model.TimePeriod
 import com.ahogek.codetimetracker.service.TimeTrackerService
-import com.ahogek.codetimetracker.topics.PeriodResetListener
-import com.ahogek.codetimetracker.topics.TimeTrackerListener
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
 import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
