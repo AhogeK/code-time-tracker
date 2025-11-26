@@ -49,6 +49,7 @@ class TimeTrackerService : Disposable {
     private val periodManager = PeriodManager()
     private val uiDisplayTime = ConcurrentHashMap<TimePeriod, AtomicLong>()
     private val totalSessionTime = AtomicLong(0)
+    private var lastCheckedMinute = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
 
     fun getLastActivityTime(): LocalDateTime {
         return lastActivityTime.get()
@@ -61,12 +62,13 @@ class TimeTrackerService : Disposable {
             uiDisplayTime[period] = AtomicLong(0)
         }
 
-        scheduler.scheduleAtFixedRate(
-            ::checkPeriodChanges,
-            1,
-            1,
-            TimeUnit.MINUTES
-        )
+        scheduler.scheduleAtFixedRate({
+            val currentMinute = LocalDateTime.now().truncatedTo(ChronoUnit.MINUTES)
+            if (!currentMinute.isEqual(lastCheckedMinute)) {
+                lastCheckedMinute = currentMinute
+                checkPeriodChanges()
+            }
+        }, 0, 1, TimeUnit.SECONDS)
 
         // Start a unique, periodic task to check for idle state
         scheduler.scheduleAtFixedRate(
