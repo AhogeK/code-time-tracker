@@ -2,8 +2,8 @@ package com.ahogek.codetimetracker.database
 
 import com.ahogek.codetimetracker.model.*
 import com.ahogek.codetimetracker.user.UserManager
+import com.ahogek.codetimetracker.util.PathUtils
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
 import java.sql.Connection
 import java.sql.PreparedStatement
@@ -56,10 +56,9 @@ object DatabaseManager {
             log.error("Failed to load SQLite JDBC driver.", e)
         }
 
-        val commonDataPath = PathManager.getCommonDataPath()
-        val dbPath = commonDataPath.resolve("code-time-tracker-data")
-        val dbFile = dbPath.resolve("coding_data.db").toFile()
-        dbFile.parentFile.mkdirs()
+        val dbPath = PathUtils.getDatabasePath()
+        val dbFile = dbPath.toFile()
+        dbFile.parentFile?.mkdirs()
         val dbUrl = "jdbc:sqlite:${dbFile.absolutePath}"
         config = DbConfig(
             url = dbUrl, factory = DriverManagerConnectionFactory(dbUrl)
