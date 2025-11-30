@@ -410,10 +410,6 @@ function renderLanguageDistribution(data, theme) {
   const chartTheme = theme.isDark ? 'dark' : 'default';
   chartInstances.languageDistributionChart = echarts.init(chartDom, chartTheme);
 
-  // Get responsive configuration
-  const containerWidth = chartDom.offsetWidth;
-  const config = getResponsiveConfig(containerWidth);
-
   // Transform data for chart: convert seconds to hours
   const allData = data.map(item => ({
     name: item.language,
@@ -467,16 +463,26 @@ function renderLanguageDistribution(data, theme) {
         return `${params.name}<br/>Time: ${hours}h (${percentage}%)`;
       }
     },
+    // Adjust grid to make chart more compact
+    grid: {
+      left: '5%',
+      right: '5%',
+      top: 60,
+      bottom: 20,
+      containLabel: true
+    },
     legend: {
       type: 'scroll',
-      orient: config.legendOrient,
-      top: config.legendTop,
-      left: config.legendLeft,
-      right: config.legendRight,
-      bottom: config.legendOrient === 'horizontal' ? 20 : null,
+      orient: 'vertical',
+      right: '5%',  // Closer to edge
+      top: 'middle',  // Vertically centered
       textStyle: {
-        color: theme.secondary
+        color: theme.secondary,
+        fontSize: 12
       },
+      itemWidth: 14,  // Smaller legend icon
+      itemHeight: 14,
+      itemGap: 8,  // Smaller gap between items
       formatter: function (name) {
         const item = pieData.find(d => d.name === name);
         if (item) {
@@ -489,11 +495,11 @@ function renderLanguageDistribution(data, theme) {
     series: [
       {
         type: 'pie',
-        radius: config.pieRadius,
-        center: config.pieCenter,
+        radius: ['45%', '70%'],  // Slightly larger
+        center: ['40%', '55%'],  // Adjusted position - more centered with legend
         avoidLabelOverlap: false,
         itemStyle: {
-          borderRadius: 10,
+          borderRadius: 8,  // Slightly smaller border radius
           borderColor: theme.isDark ? '#333' : '#fff',
           borderWidth: 2
         },
@@ -504,7 +510,7 @@ function renderLanguageDistribution(data, theme) {
         emphasis: {
           label: {
             show: true,
-            fontSize: 20,
+            fontSize: 18,  // Slightly smaller
             fontWeight: 'bold',
             formatter: function (params) {
               return params.name;
@@ -539,10 +545,6 @@ function renderProjectDistribution(data, theme) {
 
   const chartTheme = theme.isDark ? 'dark' : 'default';
   chartInstances.projectDistributionChart = echarts.init(chartDom, chartTheme);
-
-  // Get responsive configuration
-  const containerWidth = chartDom.offsetWidth;
-  const config = getResponsiveConfig(containerWidth);
 
   // Transform data for chart
   const allData = data.map(item => ({
@@ -596,16 +598,25 @@ function renderProjectDistribution(data, theme) {
         return `${params.name}<br/>Time: ${hours}h (${percentage}%)`;
       }
     },
+    grid: {
+      left: '5%',
+      right: '5%',
+      top: 60,
+      bottom: 20,
+      containLabel: true
+    },
     legend: {
       type: 'scroll',
-      orient: config.legendOrient,
-      top: config.legendTop,
-      left: config.legendLeft,
-      right: config.legendRight,
-      bottom: config.legendOrient === 'horizontal' ? 20 : null,
+      orient: 'vertical',
+      right: '5%',
+      top: 'middle',
       textStyle: {
-        color: theme.secondary
+        color: theme.secondary,
+        fontSize: 12
       },
+      itemWidth: 14,
+      itemHeight: 14,
+      itemGap: 8,
       formatter: function (name) {
         const item = pieData.find(d => d.name === name);
         if (item) {
@@ -618,11 +629,11 @@ function renderProjectDistribution(data, theme) {
     series: [
       {
         type: 'pie',
-        radius: config.pieRadius,
-        center: config.pieCenter,
+        radius: ['45%', '70%'],
+        center: ['40%', '55%'],
         avoidLabelOverlap: false,
         itemStyle: {
-          borderRadius: 10,
+          borderRadius: 8,
           borderColor: theme.isDark ? '#333' : '#fff',
           borderWidth: 2
         },
@@ -633,7 +644,7 @@ function renderProjectDistribution(data, theme) {
         emphasis: {
           label: {
             show: true,
-            fontSize: 20,
+            fontSize: 18,
             fontWeight: 'bold',
             formatter: function (params) {
               return params.name;
@@ -650,41 +661,6 @@ function renderProjectDistribution(data, theme) {
   };
 
   chartInstances.projectDistributionChart.setOption(option);
-}
-
-/**
- * Get responsive chart configuration based on container width
- * @param {number} width - Container width in pixels
- * @returns {Object} Responsive configuration
- */
-function getResponsiveConfig(width) {
-  if (width < 600) {
-    return {
-      legendOrient: 'horizontal',
-      legendTop: 'bottom',
-      legendLeft: 'center',
-      pieCenter: ['50%', '40%'],
-      pieRadius: ['30%', '50%']
-    };
-  } else if (width < 900) {
-    return {
-      legendOrient: 'vertical',
-      legendTop: 60,
-      legendLeft: 'left',
-      legendRight: null,
-      pieCenter: ['60%', '50%'],
-      pieRadius: ['35%', '60%']
-    };
-  } else {
-    return {
-      legendOrient: 'vertical',
-      legendTop: 60,
-      legendLeft: null,
-      legendRight: 10,
-      pieCenter: ['35%', '50%'],
-      pieRadius: ['40%', '70%']
-    };
-  }
 }
 
 /**
