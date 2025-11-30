@@ -6,7 +6,8 @@ const chartInstances = {
   dailyHourHeatmap: null,
   overallHourlyChart: null,
   languageDistributionChart: null,
-  projectDistributionChart: null
+  projectDistributionChart: null,
+  timeOfDayDistributionChart: null
 };
 
 /**
@@ -58,6 +59,14 @@ globalThis.renderCharts = function (payload) {
     if (jsonPayload.projectDistribution) {
       renderProjectDistribution(
           jsonPayload.projectDistribution.data,
+          theme
+      );
+    }
+
+    // Render time of day distribution chart
+    if (jsonPayload.timeOfDayDistribution) {
+      renderTimeOfDayDistribution(
+          jsonPayload.timeOfDayDistribution.data,
           theme
       );
     }
@@ -661,6 +670,158 @@ function renderProjectDistribution(data, theme) {
   };
 
   chartInstances.projectDistributionChart.setOption(option);
+}
+
+/**
+ * Renders the time of day distribution chart showing coding time by time periods.
+ * Displays as a horizontal bar chart for better readability.
+ * @param {Array<Object>} data - Array of time of day usage data
+ * @param {Object} theme - Theme colors
+ */
+function renderTimeOfDayDistribution(data, theme) {
+  disposeChart('timeOfDayDistributionChart');
+
+  const chartDom = document.getElementById('timeOfDayDistributionChart');
+  if (!chartDom) {
+    console.warn('Time of day distribution chart container not found');
+    return;
+  }
+
+  const chartTheme = theme.isDark ? 'dark' : 'default';
+  chartInstances.timeOfDayDistributionChart = echarts.init(chartDom, chartTheme);
+
+  // Define time period order (from morning to night) and labels with emojis
+  const timePeriodOrder = ['Morning', 'Daytime', 'Evening', 'Night'];
+  const timePeriodLabels = {
+    'Morning': '🌞 Morning (06:00-11:59)',
+    'Daytime': '🌆 Daytime (12:00-17:59)',
+    'Evening': '🌃 Evening (18:00-23:59)',
+    'Night': '🌙 Night (00:00-05:59)'
+  };
+
+  // Define colors for each time period (by index order)
+  const timePeriodColors = ['#91cc75', '#fac858', '#ee6666', '#5470c6'];
+
+  // Create data map and calculate total
+  const dataMap = {};
+  let totalSeconds = 0;
+  data.forEach(item => {
+    const seconds = item.seconds || 0;
+    dataMap[item.timeOfDay] = seconds;
+    totalSeconds += seconds;
+  });
+
+  const totalHours = totalSeconds / 3600;
+
+  // Prepare chart data in correct order
+  const chartData = timePeriodOrder.map((period, index) => {
+    const seconds = dataMap[period] || 0;
+    const hours = seconds / 3600;
+    const percentage = totalSeconds > 0 ? (seconds / totalSeconds) * 100 : 0;
+    return {
+      name: timePeriodLabels[period],
+      value: hours,
+      percentage: percentage,
+      color: timePeriodColors[index]
+    };
+  });
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: {
+      text: 'Time of Day Distribution',
+      subtext: `Total: ${totalHours.toFixed(2)} hours`,
+      left: 'center',
+      top: 0,
+      textStyle: {
+        color: theme.foreground
+      },
+      subtextStyle: {
+        color: theme.secondary,
+        fontSize: 12
+      }
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'shadow'
+      },
+      formatter: function (params) {
+        if (!params || params.length === 0) return '';
+        const data = params[0];
+        const hours = data.value.toFixed(2);
+        const percentage = chartData[data.dataIndex].percentage.toFixed(2);
+        return `${data.name}<br/>Time: ${hours}h (${percentage}%)`;
+      }
+    },
+    grid: {
+      left: '20%',
+      right: '10%',
+      top: 80,
+      bottom: 30,
+      containLabel: true
+    },
+    xAxis: {
+      type: 'value',
+      name: 'Hours',
+      nameTextStyle: {
+        color: theme.secondary
+      },
+      axisLabel: {
+        color: theme.secondary,
+        formatter: '{value}h'
+      },
+      splitLine: {
+        lineStyle: {
+          color: theme.isDark ? '#333' : '#e0e0e0'
+        }
+      }
+    },
+    yAxis: {
+      type: 'category',
+      data: chartData.map(item => item.name),
+      inverse: true,  // 🔑 Add this line to reverse Y axis order
+      axisLabel: {
+        color: theme.secondary,
+        fontSize: 12
+      },
+      axisLine: {
+        lineStyle: {
+          color: theme.secondary
+        }
+      }
+    },
+    series: [
+      {
+        type: 'bar',
+        data: chartData.map(item => ({
+          value: item.value,
+          itemStyle: {
+            color: item.color
+          }
+        })),
+        barWidth: '60%',
+        label: {
+          show: true,
+          position: 'right',
+          formatter: function (params) {
+            const percentage = chartData[params.dataIndex].percentage;
+            return `${params.value.toFixed(2)}h (${percentage.toFixed(2)}%)`;
+          },
+          color: theme.foreground,
+          fontSize: 11
+        },
+        emphasis: {
+          itemStyle: {
+            shadowBlur: 10,
+            shadowColor: 'rgba(0, 0, 0, 0.5)'
+          }
+        }
+      }
+    ]
+  };
+
+  chartInstances.timeOfDayDistributionChart.setOption(option);
 }
 
 /**

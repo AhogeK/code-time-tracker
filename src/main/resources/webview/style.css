@@ -83,3 +83,9 @@ body {
   height: 400px;
   min-height: 400px;
 }
+
+#timeOfDayDistributionChart {
+  width: 100%;
+  height: 280px;
+  min-height: 280px;
+}

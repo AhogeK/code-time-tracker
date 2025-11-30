@@ -559,7 +559,7 @@ object DatabaseManager {
     }
 
     /**
-     * Processes a single session for daily hourly distribution.
+     * Refactored processDailyHourlySession using the helper method
      */
     private fun processDailyHourlySession(
         startTimeStr: String,
@@ -570,10 +570,8 @@ object DatabaseManager {
     ) {
         val sessionStart = LocalDateTime.parse(startTimeStr, dateTimeFormatter)
         val sessionEnd = LocalDateTime.parse(endTimeStr, dateTimeFormatter)
-        val effectiveStart = maxOf(sessionStart, rangeStart)
-        val effectiveEnd = minOf(sessionEnd, rangeEnd)
 
-        if (effectiveStart.isBefore(effectiveEnd)) {
+        calculateEffectiveRange(sessionStart, sessionEnd, rangeStart, rangeEnd)?.let { (effectiveStart, effectiveEnd) ->
             splitSessionByDayAndHour(effectiveStart, effectiveEnd).forEach { (weekday, hour, duration) ->
                 val key = Pair(weekday, hour)
                 distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
@@ -939,23 +937,21 @@ object DatabaseManager {
         }.sortedByDescending { it.totalDuration }
     }
 
+    /**
+     * Refactored sessionOp using the helper method
+     */
     private fun sessionOp(
         rs: ResultSet,
         startTime: LocalDateTime?,
         endTime: LocalDateTime?,
         map: MutableMap<String, Long>,
-        language: String
+        key: String
     ) {
         val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
         val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
 
-        // Calculate effective range
-        val effectiveStart = if (startTime != null) maxOf(sessionStart, startTime) else sessionStart
-        val effectiveEnd = if (endTime != null) minOf(sessionEnd, endTime) else sessionEnd
-
-        if (effectiveStart.isBefore(effectiveEnd)) {
-            map[language] = map.getOrDefault(language, 0L) +
-                    Duration.between(effectiveStart, effectiveEnd).toSeconds()
+        calculateEffectiveRange(sessionStart, sessionEnd, startTime, endTime)?.let { (effectiveStart, effectiveEnd) ->
+            map[key] = map.getOrDefault(key, 0L) + Duration.between(effectiveStart, effectiveEnd).toSeconds()
         }
     }
 
@@ -963,30 +959,31 @@ object DatabaseManager {
      * Calculates coding time distribution across time-of-day periods within a date range.
      * Ensures only overlapping segments are assigned and counted for each period.
      *
-     * @param startTime The beginning of the period (inclusive)
-     * @param endTime   The end of the period (exclusive)
+     * @param startTime The beginning of the period (inclusive). If null, includes all data.
+     * @param endTime   The end of the period (exclusive). If null, includes all data.
      * @return List of TimeOfDayUsage objects for each time slot
      */
-    fun getTimeOfDayDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<TimeOfDayUsage> {
-        val sql = SQL_SELECT_SESSIONS_IN_RANGE
+    fun getTimeOfDayDistribution(
+        startTime: LocalDateTime? = null,
+        endTime: LocalDateTime? = null
+    ): List<TimeOfDayUsage> {
+        val conditions = mutableListOf(SQL_IS_NOT_DELETED)
+        checkTimeParams(conditions, startTime, endTime)
+
+        val sql = """
+        SELECT start_time, end_time
+        FROM coding_sessions
+        WHERE ${conditions.joinToString(" AND ")}
+    """
         val distributionMap = mutableMapOf<String, Long>()
+
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
-                    pstmt.setString(1, dateTimeFormatter.format(startTime))
-                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    checkTimeParamsInStatement(pstmt, startTime, endTime)
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
-                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-                            val effectiveStart = maxOf(sessionStart, startTime)
-                            val effectiveEnd = minOf(sessionEnd, endTime)
-                            if (effectiveStart.isBefore(effectiveEnd)) {
-                                splitSessionByTimeOfDay(effectiveStart, effectiveEnd).forEach { (timeOfDay, duration) ->
-                                    distributionMap[timeOfDay] =
-                                        distributionMap.getOrDefault(timeOfDay, 0L) + duration.toSeconds()
-                                }
-                            }
+                            processTimeOfDaySession(rs, startTime, endTime, distributionMap)
                         }
                     }
                 }
@@ -994,11 +991,56 @@ object DatabaseManager {
         } catch (e: Exception) {
             log.error("Failed to compute time of day distribution.", e)
         }
+
         return distributionMap.map { (timeOfDay, seconds) ->
             TimeOfDayUsage(timeOfDay, Duration.ofSeconds(seconds))
         }
     }
 
+    /**
+     * Refactored processTimeOfDaySession using the helper method
+     */
+    private fun processTimeOfDaySession(
+        rs: ResultSet,
+        rangeStart: LocalDateTime?,
+        rangeEnd: LocalDateTime?,
+        distributionMap: MutableMap<String, Long>
+    ) {
+        val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+        val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+
+        calculateEffectiveRange(sessionStart, sessionEnd, rangeStart, rangeEnd)?.let { (effectiveStart, effectiveEnd) ->
+            splitSessionByTimeOfDay(effectiveStart, effectiveEnd).forEach { (timeOfDay, duration) ->
+                distributionMap[timeOfDay] = distributionMap.getOrDefault(timeOfDay, 0L) + duration.toSeconds()
+            }
+        }
+    }
+
+    /**
+     * Calculates the effective time range for a session within optional boundaries.
+     * Returns null if the session doesn't overlap with the given range.
+     *
+     * @param sessionStart The start time of the session
+     * @param sessionEnd The end time of the session
+     * @param rangeStart Optional start boundary (inclusive)
+     * @param rangeEnd Optional end boundary (exclusive)
+     * @return Pair of effective start and end times, or null if no overlap
+     */
+    private fun calculateEffectiveRange(
+        sessionStart: LocalDateTime,
+        sessionEnd: LocalDateTime,
+        rangeStart: LocalDateTime?,
+        rangeEnd: LocalDateTime?
+    ): Pair<LocalDateTime, LocalDateTime>? {
+        val effectiveStart = if (rangeStart != null) maxOf(sessionStart, rangeStart) else sessionStart
+        val effectiveEnd = if (rangeEnd != null) minOf(sessionEnd, rangeEnd) else sessionEnd
+
+        return if (effectiveStart.isBefore(effectiveEnd)) {
+            Pair(effectiveStart, effectiveEnd)
+        } else {
+            null
+        }
+    }
 
     /**
      * Splits a coding session by time-of-day periods.

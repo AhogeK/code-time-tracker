@@ -52,7 +52,8 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
         DailyHourDataProvider(),
         OverallHourlyDataProvider(),
         LanguageDistributionDataProvider(),
-        ProjectDistributionDataProvider()
+        ProjectDistributionDataProvider(),
+        TimeOfDayDistributionDataProvider()
     )
 
     init {
