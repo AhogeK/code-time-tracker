@@ -1,5 +1,7 @@
 package com.ahogek.codetimetracker.statistics
 
+import com.ahogek.codetimetracker.action.ExportDataAction
+import com.ahogek.codetimetracker.action.ImportDataAction
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.intellij.icons.AllIcons
@@ -24,11 +26,12 @@ import java.awt.BorderLayout
 import java.awt.Color
 import java.time.Duration
 import java.time.LocalDateTime
+import javax.swing.JComponent
 import javax.swing.JPanel
 
 /**
  * The main UI panel for the statistics tool window.
- * It contains a JCEF browser component to display web-based charts.*
+ * It contains a JCEF browser component to display web-based charts.
  *
  * @author AhogeK ahogek@gmail.com
  * @since 2025-10-05 20:32:16
@@ -57,24 +60,11 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
     )
 
     init {
-        val actionGroup = DefaultActionGroup()
-        val refreshAction = object : AnAction(
-            "Refresh",
-            "Reload statistics data",
-            AllIcons.Actions.Refresh
-        ) {
-            override fun actionPerformed(e: AnActionEvent) {
-                loadAndRenderCharts()
-            }
-        }
-        actionGroup.add(refreshAction)
+        // 1. Setup Toolbar (Updated with Import/Export)
+        val actionToolbar = createToolBar(this)
+        add(actionToolbar, BorderLayout.NORTH)
 
-        val actionToolbar = ActionManager.getInstance()
-            .createActionToolbar("StatisticsToolbar", actionGroup, true)
-        actionToolbar.targetComponent = this
-
-        add(actionToolbar.component, BorderLayout.NORTH)
-
+        // 2. Setup Browser Request Handler
         val requestHandler = object : CefRequestHandlerAdapter() {
             override fun getResourceRequestHandler(
                 browser: CefBrowser,
@@ -92,6 +82,7 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
             }
         }
 
+        // 3. Initialize Browser
         browser = JBCefBrowser.createBuilder()
             .setClient(jbCefClient)
             .setUrl(virtualDomain + "index.html")
@@ -117,6 +108,33 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
         }, browser.cefBrowser)
 
         add(browser.component, BorderLayout.CENTER)
+    }
+
+    /**
+     * Creates the toolbar with Refresh, Import, and Export actions.
+     */
+    private fun createToolBar(content: JComponent): JComponent {
+        val actionGroup = DefaultActionGroup()
+
+        // Refresh Action
+        actionGroup.add(object : AnAction("Refresh", "Reload statistics data", AllIcons.Actions.Refresh) {
+            override fun actionPerformed(e: AnActionEvent) {
+                loadAndRenderCharts()
+            }
+        })
+
+        actionGroup.addSeparator()
+
+        // Import Action
+        actionGroup.add(ImportDataAction())
+
+        // Export Action
+        actionGroup.add(ExportDataAction())
+
+        val actionToolbar = ActionManager.getInstance()
+            .createActionToolbar("StatisticsToolbar", actionGroup, true)
+        actionToolbar.targetComponent = content
+        return actionToolbar.component
     }
 
     fun loadAndRenderCharts() {

@@ -3,19 +3,26 @@ package com.ahogek.codetimetracker.model
 import java.time.LocalDateTime
 
 /**
- * A coding session, representing the coding activities of a specific language over a period of time.
+ * Represents a coding session.
  *
- * @property projectName The display name of the project (e.g., "my-awesome-app").
- * @property language The name of the programming language (e.g., "Kotlin", "Java").
- * @property platform The operating system where the coding activity took place (e.g., "macOS", "Windows 11").
- * @property startTime The timestamp when the session started.
- * @property endTime The timestamp of the last recorded activity in this session.
+ * @property sessionUuid Unique identifier for this session
+ * @property userId User identifier
+ * @property projectName Name of the project
+ * @property language Programming language
+ * @property platform Operating system platform
+ * @property ideName IDE name
+ * @property startTime Session start time
+ * @property endTime Session end time
+ * @property lastModified Last modification timestamp
  */
 data class CodingSession(
+    val sessionUuid: String,
+    val userId: String,
     val projectName: String,
     val language: String,
     val platform: String,
     val ideName: String,
     val startTime: LocalDateTime,
-    var endTime: LocalDateTime
+    val endTime: LocalDateTime,
+    val lastModified: LocalDateTime
 )

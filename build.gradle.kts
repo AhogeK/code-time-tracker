@@ -28,6 +28,7 @@ dependencies {
 
         implementation(libs.sqlite.jdbc)
         implementation(libs.gson)
+        implementation(libs.lgooddatepicker)
     }
 
     testImplementation(libs.junit.jupiter.api)

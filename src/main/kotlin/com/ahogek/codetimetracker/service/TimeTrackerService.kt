@@ -4,6 +4,7 @@ import com.ahogek.codetimetracker.database.DatabaseManager
 import com.ahogek.codetimetracker.model.CodingSession
 import com.ahogek.codetimetracker.model.TimePeriod
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
+import com.ahogek.codetimetracker.user.UserManager
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationInfo
 import com.intellij.openapi.application.ApplicationManager
@@ -15,6 +16,7 @@ import com.intellij.openapi.util.SystemInfo
 import kotlinx.collections.immutable.toImmutableList
 import java.time.LocalDateTime
 import java.time.temporal.ChronoUnit
+import java.util.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
@@ -119,9 +121,25 @@ class TimeTrackerService : Disposable {
         // Start a new session or update the end time of the existing one.
         val session = projectSessions.computeIfAbsent(currentLanguage) {
             log.info("[$projectName] Starting new coding session for $currentLanguage.")
-            CodingSession(projectName, currentLanguage, platform, ideName, now, now)
+            CodingSession(
+                sessionUuid = UUID.randomUUID().toString(), // Generate new UUID
+                userId = UserManager.getUserId(),           // Get current User ID
+                projectName = projectName,
+                language = currentLanguage,
+                platform = platform,
+                ideName = ideName,
+                startTime = now,
+                endTime = now,
+                lastModified = now
+            )
         }
-        session.endTime = now
+        // Update end time and last modified
+        val updatedSession = session.copy(
+            endTime = now,
+            lastModified = now
+        )
+        // Update map with new immutable instance (since data classes are immutable)
+        projectSessions[currentLanguage] = updatedSession
 
         // Calculate time delta since last activity and add to tracking time
         val previousActivity = lastActivityTime.get()
@@ -193,8 +211,7 @@ class TimeTrackerService : Disposable {
 
             activeSessions.values.forEach { projectSessions ->
                 projectSessions.values.forEach { session ->
-                    session.endTime = finalEndTime
-                    sessionsToStore.add(session)
+                    sessionsToStore.add(session.copy(endTime = finalEndTime, lastModified = finalEndTime))
                 }
             }
 

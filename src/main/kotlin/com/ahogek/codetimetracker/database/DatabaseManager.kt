@@ -1135,4 +1135,126 @@ object DatabaseManager {
 
         return CodingStreaks(currentStreak = finalCurrentStreak, maxStreak = maxStreak)
     }
+
+    /**
+     * Retrieves coding sessions from the database, optionally filtered by a time range.
+     *
+     * @param startTime Optional start time (inclusive)
+     * @param endTime Optional end time (exclusive)
+     * @return List of CodingSession objects
+     */
+    fun getSessions(startTime: LocalDateTime? = null, endTime: LocalDateTime? = null): List<CodingSession> {
+        val conditions = mutableListOf(SQL_IS_NOT_DELETED)
+        checkTimeParams(conditions, startTime, endTime)
+        val sql = """
+            SELECT 
+                session_uuid, user_id, project_name, language, platform, ide_name, start_time, end_time, last_modified
+            FROM coding_sessions
+            WHERE ${conditions.joinToString(" AND ")}
+            ORDER BY start_time DESC
+        """.trimIndent()
+        val sessions = mutableListOf<CodingSession>()
+        try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    checkTimeParamsInStatement(pstmt, startTime, endTime)
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            sessions.add(
+                                CodingSession(
+                                    sessionUuid = rs.getString("session_uuid"),
+                                    userId = rs.getString("user_id"),
+                                    projectName = rs.getString("project_name"),
+                                    language = rs.getString("language"),
+                                    platform = rs.getString("platform"),
+                                    ideName = rs.getString("ide_name"),
+                                    startTime = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter),
+                                    endTime = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter),
+                                    lastModified = LocalDateTime.parse(rs.getString("last_modified"), dateTimeFormatter)
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to retrieve sessions", e)
+        }
+        return sessions
+    }
+
+    /**
+     * Retrieves all session UUIDs from the database.
+     * Used for deduplication during import.
+     *
+     * @return Set of session UUIDs
+     */
+    fun getAllSessionUuids(): Set<String> {
+        val sql = "SELECT session_uuid FROM coding_sessions WHERE is_deleted = 0"
+        val uuids = mutableSetOf<String>()
+
+        try {
+            withConnection { conn ->
+                conn.createStatement().executeQuery(sql).use { rs ->
+                    while (rs.next()) {
+                        uuids.add(rs.getString("session_uuid"))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to retrieve session UUIDs", e)
+        }
+
+        return uuids
+    }
+
+    /**
+     * Imports coding sessions into the database.
+     * Only inserts sessions that don't already exist.
+     *
+     * @param sessions List of CodingSession objects to import
+     * @return Number of sessions successfully imported
+     */
+    fun importSessions(sessions: List<CodingSession>): Int {
+        if (sessions.isEmpty()) return 0
+
+        val sql = """
+        INSERT OR IGNORE INTO coding_sessions(
+            session_uuid, user_id, project_name, language, platform, ide_name,
+            start_time, end_time, last_modified, is_deleted
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+    """
+
+        var importedCount = 0
+
+        try {
+            withConnection { conn ->
+                conn.autoCommit = false
+                conn.prepareStatement(sql).use { pstmt ->
+                    for (session in sessions) {
+                        pstmt.setString(1, session.sessionUuid)
+                        pstmt.setString(2, session.userId)
+                        pstmt.setString(3, session.projectName)
+                        pstmt.setString(4, session.language)
+                        pstmt.setString(5, session.platform)
+                        pstmt.setString(6, session.ideName)
+                        pstmt.setString(7, dateTimeFormatter.format(session.startTime))
+                        pstmt.setString(8, dateTimeFormatter.format(session.endTime))
+                        pstmt.setString(9, dateTimeFormatter.format(session.lastModified))
+
+                        val result = pstmt.executeUpdate()
+                        if (result > 0) {
+                            importedCount++
+                        }
+                    }
+                    conn.commit()
+                }
+                log.info("Successfully imported $importedCount sessions")
+            }
+        } catch (e: Exception) {
+            log.error("Failed to import sessions", e)
+        }
+
+        return importedCount
+    }
 }
