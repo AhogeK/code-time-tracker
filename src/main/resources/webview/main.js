@@ -5,7 +5,8 @@ const chartInstances = {
   heatmap: null,
   dailyHourHeatmap: null,
   overallHourlyChart: null,
-  languageDistributionChart: null
+  languageDistributionChart: null,
+  projectDistributionChart: null
 };
 
 /**
@@ -49,6 +50,14 @@ globalThis.renderCharts = function (payload) {
     if (jsonPayload.languageDistribution) {
       renderLanguageDistribution(
           jsonPayload.languageDistribution.data,
+          theme
+      );
+    }
+
+    // Render project distribution chart
+    if (jsonPayload.projectDistribution) {
+      renderProjectDistribution(
+          jsonPayload.projectDistribution.data,
           theme
       );
     }
@@ -401,13 +410,16 @@ function renderLanguageDistribution(data, theme) {
   const chartTheme = theme.isDark ? 'dark' : 'default';
   chartInstances.languageDistributionChart = echarts.init(chartDom, chartTheme);
 
+  // Get responsive configuration
+  const containerWidth = chartDom.offsetWidth;
+  const config = getResponsiveConfig(containerWidth);
+
   // Transform data for chart: convert seconds to hours
   const allData = data.map(item => ({
     name: item.language,
-    value: item.seconds / 3600 // Convert seconds to hours
-  })).sort((a, b) => b.value - a.value); // Sort by usage descending
+    value: item.seconds / 3600
+  })).sort((a, b) => b.value - a.value);
 
-  // Calculate total hours for percentage
   const totalHours = allData.reduce((sum, item) => sum + item.value, 0);
 
   // Filter out languages with less than 0.1% usage
@@ -417,7 +429,6 @@ function renderLanguageDistribution(data, theme) {
     return percentage >= minPercentage;
   });
 
-  // Calculate "Others" category if needed
   const displayedTotal = chartData.reduce((sum, item) => sum + item.value, 0);
   const othersValue = totalHours - displayedTotal;
 
@@ -426,7 +437,6 @@ function renderLanguageDistribution(data, theme) {
     value: item.value
   }));
 
-  // Add "Others" if there are filtered languages
   if (othersValue > 0) {
     pieData.push({
       name: 'Others',
@@ -459,10 +469,11 @@ function renderLanguageDistribution(data, theme) {
     },
     legend: {
       type: 'scroll',
-      orient: 'vertical',
-      right: 10,
-      top: 60,
-      bottom: 20,
+      orient: config.legendOrient,
+      top: config.legendTop,
+      left: config.legendLeft,
+      right: config.legendRight,
+      bottom: config.legendOrient === 'horizontal' ? 20 : null,
       textStyle: {
         color: theme.secondary
       },
@@ -478,8 +489,8 @@ function renderLanguageDistribution(data, theme) {
     series: [
       {
         type: 'pie',
-        radius: ['40%', '70%'],
-        center: ['35%', '50%'],
+        radius: config.pieRadius,
+        center: config.pieCenter,
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
@@ -510,6 +521,170 @@ function renderLanguageDistribution(data, theme) {
   };
 
   chartInstances.languageDistributionChart.setOption(option);
+}
+
+/**
+ * Renders the project distribution chart showing coding time by project.
+ * @param {Array<Object>} data - Array of project usage data with project name and seconds
+ * @param {Object} theme - Theme colors
+ */
+function renderProjectDistribution(data, theme) {
+  disposeChart('projectDistributionChart');
+
+  const chartDom = document.getElementById('projectDistributionChart');
+  if (!chartDom) {
+    console.warn('Project distribution chart container not found');
+    return;
+  }
+
+  const chartTheme = theme.isDark ? 'dark' : 'default';
+  chartInstances.projectDistributionChart = echarts.init(chartDom, chartTheme);
+
+  // Get responsive configuration
+  const containerWidth = chartDom.offsetWidth;
+  const config = getResponsiveConfig(containerWidth);
+
+  // Transform data for chart
+  const allData = data.map(item => ({
+    name: item.project,
+    value: item.seconds / 3600
+  })).sort((a, b) => b.value - a.value);
+
+  const totalHours = allData.reduce((sum, item) => sum + item.value, 0);
+
+  const minPercentage = 0.1;
+  const chartData = allData.filter(item => {
+    const percentage = (item.value / totalHours) * 100;
+    return percentage >= minPercentage;
+  });
+
+  const displayedTotal = chartData.reduce((sum, item) => sum + item.value, 0);
+  const othersValue = totalHours - displayedTotal;
+
+  const pieData = chartData.map(item => ({
+    name: item.name,
+    value: item.value
+  }));
+
+  if (othersValue > 0) {
+    pieData.push({
+      name: 'Others',
+      value: othersValue
+    });
+  }
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: {
+      text: 'Project Distribution',
+      subtext: `Total: ${totalHours.toFixed(2)} hours`,
+      left: 'center',
+      top: 0,
+      textStyle: {
+        color: theme.foreground
+      },
+      subtextStyle: {
+        color: theme.secondary,
+        fontSize: 12
+      }
+    },
+    tooltip: {
+      trigger: 'item',
+      formatter: function (params) {
+        const hours = params.value.toFixed(2);
+        const percentage = ((params.value / totalHours) * 100).toFixed(2);
+        return `${params.name}<br/>Time: ${hours}h (${percentage}%)`;
+      }
+    },
+    legend: {
+      type: 'scroll',
+      orient: config.legendOrient,
+      top: config.legendTop,
+      left: config.legendLeft,
+      right: config.legendRight,
+      bottom: config.legendOrient === 'horizontal' ? 20 : null,
+      textStyle: {
+        color: theme.secondary
+      },
+      formatter: function (name) {
+        const item = pieData.find(d => d.name === name);
+        if (item) {
+          const percentage = ((item.value / totalHours) * 100).toFixed(2);
+          return `${name} (${percentage}%)`;
+        }
+        return name;
+      }
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: config.pieRadius,
+        center: config.pieCenter,
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: theme.isDark ? '#333' : '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 20,
+            fontWeight: 'bold',
+            formatter: function (params) {
+              return params.name;
+            },
+            color: theme.foreground
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: pieData
+      }
+    ]
+  };
+
+  chartInstances.projectDistributionChart.setOption(option);
+}
+
+/**
+ * Get responsive chart configuration based on container width
+ * @param {number} width - Container width in pixels
+ * @returns {Object} Responsive configuration
+ */
+function getResponsiveConfig(width) {
+  if (width < 600) {
+    return {
+      legendOrient: 'horizontal',
+      legendTop: 'bottom',
+      legendLeft: 'center',
+      pieCenter: ['50%', '40%'],
+      pieRadius: ['30%', '50%']
+    };
+  } else if (width < 900) {
+    return {
+      legendOrient: 'vertical',
+      legendTop: 60,
+      legendLeft: 'left',
+      legendRight: null,
+      pieCenter: ['60%', '50%'],
+      pieRadius: ['35%', '60%']
+    };
+  } else {
+    return {
+      legendOrient: 'vertical',
+      legendTop: 60,
+      legendLeft: null,
+      legendRight: 10,
+      pieCenter: ['35%', '50%'],
+      pieRadius: ['40%', '70%']
+    };
+  }
 }
 
 /**
