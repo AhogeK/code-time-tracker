@@ -160,12 +160,23 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
 
     /**
      * Retrieves current theme colors from the IDE.
+     * Uses brighter secondary color (#b0b0b0) for dark theme to improve readability.
      */
     private fun getThemeColors(): Map<String, Any> {
+        val isDark = !JBColor.isBright()
+
+        // For dark theme, use a brighter gray for better readability of axis labels,
+        // legends, and subtitles. The default disabled foreground color is too dark.
+        val secondaryColor = if (isDark) {
+            "#b0b0b0"  // Bright gray (176, 176, 176) - good contrast on dark backgrounds
+        } else {
+            UIUtil.getLabelDisabledForeground().toHex()  // Keep IDE's default for light theme
+        }
+
         return mapOf(
-            "isDark" to !JBColor.isBright(),
+            "isDark" to isDark,
             "foreground" to UIUtil.getLabelForeground().toHex(),
-            "secondary" to UIUtil.getLabelDisabledForeground().toHex()
+            "secondary" to secondaryColor
         )
     }
 
