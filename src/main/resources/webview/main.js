@@ -4,7 +4,8 @@
 const chartInstances = {
   heatmap: null,
   dailyHourHeatmap: null,
-  overallHourlyChart: null
+  overallHourlyChart: null,
+  languageDistributionChart: null
 };
 
 /**
@@ -40,6 +41,14 @@ globalThis.renderCharts = function (payload) {
       renderOverallHourlyChart(
           jsonPayload.overallHourly.data,
           jsonPayload.overallHourly.totalDays,
+          theme
+      );
+    }
+
+    // Render language distribution chart
+    if (jsonPayload.languageDistribution) {
+      renderLanguageDistribution(
+          jsonPayload.languageDistribution.data,
           theme
       );
     }
@@ -373,6 +382,134 @@ function renderOverallHourlyChart(data, totalDays, theme) {
   };
 
   chartInstances.overallHourlyChart.setOption(option);
+}
+
+/**
+ * Renders the language distribution chart showing coding time by programming language.
+ * @param {Array<Object>} data - Array of language usage data with language name and seconds
+ * @param {Object} theme - Theme colors
+ */
+function renderLanguageDistribution(data, theme) {
+  disposeChart('languageDistributionChart');
+
+  const chartDom = document.getElementById('languageDistributionChart');
+  if (!chartDom) {
+    console.warn('Language distribution chart container not found');
+    return;
+  }
+
+  const chartTheme = theme.isDark ? 'dark' : 'default';
+  chartInstances.languageDistributionChart = echarts.init(chartDom, chartTheme);
+
+  // Transform data for chart: convert seconds to hours
+  const allData = data.map(item => ({
+    name: item.language,
+    value: item.seconds / 3600 // Convert seconds to hours
+  })).sort((a, b) => b.value - a.value); // Sort by usage descending
+
+  // Calculate total hours for percentage
+  const totalHours = allData.reduce((sum, item) => sum + item.value, 0);
+
+  // Filter out languages with less than 0.1% usage
+  const minPercentage = 0.1;
+  const chartData = allData.filter(item => {
+    const percentage = (item.value / totalHours) * 100;
+    return percentage >= minPercentage;
+  });
+
+  // Calculate "Others" category if needed
+  const displayedTotal = chartData.reduce((sum, item) => sum + item.value, 0);
+  const othersValue = totalHours - displayedTotal;
+
+  const pieData = chartData.map(item => ({
+    name: item.name,
+    value: item.value
+  }));
+
+  // Add "Others" if there are filtered languages
+  if (othersValue > 0) {
+    pieData.push({
+      name: 'Others',
+      value: othersValue
+    });
+  }
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: {
+      text: 'Language Distribution',
+      subtext: `Total: ${totalHours.toFixed(2)} hours`,
+      left: 'center',
+      top: 0,
+      textStyle: {
+        color: theme.foreground
+      },
+      subtextStyle: {
+        color: theme.secondary,
+        fontSize: 12
+      }
+    },
+    tooltip: {
+      trigger: 'item',
+      formatter: function (params) {
+        const hours = params.value.toFixed(2);
+        const percentage = ((params.value / totalHours) * 100).toFixed(2);
+        return `${params.name}<br/>Time: ${hours}h (${percentage}%)`;
+      }
+    },
+    legend: {
+      type: 'scroll',
+      orient: 'vertical',
+      right: 10,
+      top: 60,
+      bottom: 20,
+      textStyle: {
+        color: theme.secondary
+      },
+      formatter: function (name) {
+        const item = pieData.find(d => d.name === name);
+        if (item) {
+          const percentage = ((item.value / totalHours) * 100).toFixed(2);
+          return `${name} (${percentage}%)`;
+        }
+        return name;
+      }
+    },
+    series: [
+      {
+        type: 'pie',
+        radius: ['40%', '70%'],
+        center: ['35%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: theme.isDark ? '#333' : '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: false,
+          position: 'center'
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 20,
+            fontWeight: 'bold',
+            formatter: function (params) {
+              return params.name;
+            },
+            color: theme.foreground
+          }
+        },
+        labelLine: {
+          show: false
+        },
+        data: pieData
+      }
+    ]
+  };
+
+  chartInstances.languageDistributionChart.setOption(option);
 }
 
 /**

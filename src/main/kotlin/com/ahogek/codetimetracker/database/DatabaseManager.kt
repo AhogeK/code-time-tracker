@@ -45,6 +45,7 @@ object DatabaseManager {
         FROM coding_sessions
         WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
     """
+    private const val SQL_IS_NOT_DELETED = "is_deleted = 0"
 
     private const val SQL_SELECT_MIN_MAX_TIME =
         "SELECT MIN(start_time), MAX(end_time) FROM coding_sessions WHERE is_deleted=0"
@@ -713,7 +714,7 @@ object DatabaseManager {
         hourlyMap: MutableMap<Int, Long>,
         activeDays: MutableSet<LocalDate>
     ) {
-        val conditions = mutableListOf("is_deleted = 0")
+        val conditions = mutableListOf(SQL_IS_NOT_DELETED)
         checkTimeParams(conditions, startTime, endTime)
 
         val sql = """
@@ -859,22 +860,27 @@ object DatabaseManager {
      * Calculates coding time distribution by language during a given period.
      * Correctly accounts for only segments of sessions that overlap the period.
      *
-     * @param startTime The beginning of the period (inclusive)
-     * @param endTime   The end of the period (exclusive)
+     * @param startTime The beginning of the period (inclusive). If null, includes all data.
+     * @param endTime   The end of the period (exclusive). If null, includes all data.
      * @return List of LanguageUsage objects sorted by usage
      */
-    fun getLanguageDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<LanguageUsage> {
+    fun getLanguageDistribution(
+        startTime: LocalDateTime? = null,
+        endTime: LocalDateTime? = null
+    ): List<LanguageUsage> {
+        val conditions = mutableListOf(SQL_IS_NOT_DELETED)
+        checkTimeParams(conditions, startTime, endTime)
+
         val sql = """
             SELECT language, start_time, end_time
             FROM coding_sessions
-            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
+            WHERE ${conditions.joinToString(" AND ")}
         """
         val map = mutableMapOf<String, Long>()
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
-                    pstmt.setString(1, dateTimeFormatter.format(startTime))
-                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    checkTimeParamsInStatement(pstmt, startTime, endTime)
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val language = rs.getString("language")
@@ -896,22 +902,27 @@ object DatabaseManager {
      * Calculates coding time distribution by project during a given period.
      * Accurately splits sessions so that only overlapping parts are counted.
      *
-     * @param startTime The beginning of the period (inclusive)
-     * @param endTime   The end of the period (exclusive)
+     * @param startTime The beginning of the period (inclusive). If null, includes all data.
+     * @param endTime   The end of the period (exclusive). If null, includes all data.
      * @return List of ProjectUsage objects sorted by usage
      */
-    fun getProjectDistribution(startTime: LocalDateTime, endTime: LocalDateTime): List<ProjectUsage> {
+    fun getProjectDistribution(
+        startTime: LocalDateTime? = null,
+        endTime: LocalDateTime? = null
+    ): List<ProjectUsage> {
+        val conditions = mutableListOf(SQL_IS_NOT_DELETED)
+        checkTimeParams(conditions, startTime, endTime)
+
         val sql = """
             SELECT project_name, start_time, end_time
             FROM coding_sessions
-            WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
+            WHERE ${conditions.joinToString(" AND ")}
         """
         val map = mutableMapOf<String, Long>()
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
-                    pstmt.setString(1, dateTimeFormatter.format(startTime))
-                    pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    checkTimeParamsInStatement(pstmt, startTime, endTime)
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val projectName = rs.getString("project_name")
@@ -930,15 +941,18 @@ object DatabaseManager {
 
     private fun sessionOp(
         rs: ResultSet,
-        startTime: LocalDateTime,
-        endTime: LocalDateTime,
+        startTime: LocalDateTime?,
+        endTime: LocalDateTime?,
         map: MutableMap<String, Long>,
         language: String
     ) {
         val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
         val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-        val effectiveStart = maxOf(sessionStart, startTime)
-        val effectiveEnd = minOf(sessionEnd, endTime)
+
+        // Calculate effective range
+        val effectiveStart = if (startTime != null) maxOf(sessionStart, startTime) else sessionStart
+        val effectiveEnd = if (endTime != null) minOf(sessionEnd, endTime) else sessionEnd
+
         if (effectiveStart.isBefore(effectiveEnd)) {
             map[language] = map.getOrDefault(language, 0L) +
                     Duration.between(effectiveStart, effectiveEnd).toSeconds()
