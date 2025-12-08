@@ -119,7 +119,7 @@ object DatabaseManager {
                 
                 -- The user's operating system (e.g., "macOS Sonoma").
                 platform TEXT NOT NULL,
-
+                
                 -- The JetBrains IDE product being used (e.g., "IntelliJ IDEA", "PyCharm").
                 ide_name TEXT NOT NULL,
                 
@@ -133,7 +133,20 @@ object DatabaseManager {
                 last_modified TEXT NOT NULL,
                 
                 -- Soft Delete Flag. A boolean (0 or 1) for marking records as deleted.
-                is_deleted INTEGER NOT NULL DEFAULT 0
+                is_deleted INTEGER NOT NULL DEFAULT 0,
+                
+                -- Cloud Sync State Flag. 0 = not synced, 1 = synced to cloud.
+                -- Used for incremental sync to identify local changes that need uploading.
+                is_synced INTEGER NOT NULL DEFAULT 0,
+                
+                -- Cloud Sync Timestamp. Records when this session was last successfully synced.
+                -- NULL if never synced. Used for debugging sync issues and calculating sync lag.
+                synced_at TEXT,
+                
+                -- Sync Version. Incremented on each modification for optimistic locking.
+                -- Prevents lost updates when syncing concurrent changes from multiple devices.
+                -- Example: Device A and B both modify same session; higher version wins.
+                sync_version INTEGER NOT NULL DEFAULT 0
             );
         """.trimIndent()
 
@@ -141,22 +154,29 @@ object DatabaseManager {
         val indexes = mapOf(
             // Unique constraint for UUID-based deduplication during sync
             "idx_session_uuid" to """
-                CREATE UNIQUE INDEX IF NOT EXISTS idx_session_uuid 
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_session_uuid
                 ON coding_sessions(session_uuid)
             """.trimIndent(),
 
             // Composite index for time range queries (most common query pattern)
             // Leading with is_deleted enables efficient filtering of active records
             "idx_sessions_time_range" to """
-                CREATE INDEX IF NOT EXISTS idx_sessions_time_range 
+                CREATE INDEX IF NOT EXISTS idx_sessions_time_range
                 ON coding_sessions(is_deleted, start_time, end_time)
             """.trimIndent(),
 
             // Optimized for finding the first coding session date
             // Used in daily average calculations
             "idx_sessions_min_time" to """
-                CREATE INDEX IF NOT EXISTS idx_sessions_min_time 
+                CREATE INDEX IF NOT EXISTS idx_sessions_min_time
                 ON coding_sessions(is_deleted, start_time)
+            """.trimIndent(),
+
+            // Index for sync state queries (incremental cloud sync)
+            // Optimizes: SELECT * FROM coding_sessions WHERE is_synced = 0 ORDER BY last_modified
+            "idx_sessions_sync_state" to """
+                CREATE INDEX IF NOT EXISTS idx_sessions_sync_state
+                ON coding_sessions(is_synced, last_modified)
             """.trimIndent()
         )
 
@@ -181,7 +201,6 @@ object DatabaseManager {
                         log.warn("Failed to create index '$indexName'. Query performance may be degraded.", e)
                     }
                 }
-
                 log.info("Database schema initialization completed with ${indexes.size} indexes.")
             }
         } catch (e: Exception) {
@@ -198,15 +217,14 @@ object DatabaseManager {
 
         databaseExecutor.execute {
             val sql = """
-            INSERT INTO coding_sessions(
-                session_uuid, user_id, project_name, language, platform, ide_name,
-                start_time, end_time, last_modified
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO coding_sessions(
+                    session_uuid, user_id, project_name, language, platform, ide_name,
+                    start_time, end_time, last_modified, is_synced, synced_at, sync_version
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
-
             try {
                 withConnection { conn ->
-                    conn.autoCommit = false // Use a transaction for batch inserts
+                    conn.autoCommit = false
                     val pstmt = conn.prepareStatement(sql)
                     val currentTimestamp = dateTimeFormatter.format(LocalDateTime.now())
                     val userId = UserManager.getUserId()
@@ -221,8 +239,12 @@ object DatabaseManager {
                         pstmt.setString(7, dateTimeFormatter.format(session.startTime))
                         pstmt.setString(8, dateTimeFormatter.format(session.endTime))
                         pstmt.setString(9, currentTimestamp)
+                        pstmt.setInt(10, if (session.isSynced) 1 else 0)
+                        pstmt.setString(11, session.syncedAt?.let { dateTimeFormatter.format(it) })
+                        pstmt.setInt(12, session.syncVersion)
                         pstmt.addBatch()
                     }
+
                     pstmt.executeBatch()
                     conn.commit()
                     log.info("Successfully saved ${sessions.size} sessions to the database.")
@@ -236,6 +258,7 @@ object DatabaseManager {
             }
         }
     }
+
 
     /**
      * Shuts down the database executor gracefully
@@ -1186,13 +1209,16 @@ object DatabaseManager {
     fun getSessions(startTime: LocalDateTime? = null, endTime: LocalDateTime? = null): List<CodingSession> {
         val conditions = mutableListOf(SQL_IS_NOT_DELETED)
         checkTimeParams(conditions, startTime, endTime)
+
         val sql = """
-            SELECT 
-                session_uuid, user_id, project_name, language, platform, ide_name, start_time, end_time, last_modified
+            SELECT
+                session_uuid, user_id, project_name, language, platform, ide_name, 
+                start_time, end_time, last_modified, is_synced, synced_at, sync_version
             FROM coding_sessions
             WHERE ${conditions.joinToString(" AND ")}
             ORDER BY start_time DESC
         """.trimIndent()
+
         val sessions = mutableListOf<CodingSession>()
         try {
             withConnection { conn ->
@@ -1210,7 +1236,15 @@ object DatabaseManager {
                                     ideName = rs.getString("ide_name"),
                                     startTime = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter),
                                     endTime = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter),
-                                    lastModified = LocalDateTime.parse(rs.getString("last_modified"), dateTimeFormatter)
+                                    lastModified = LocalDateTime.parse(
+                                        rs.getString("last_modified"),
+                                        dateTimeFormatter
+                                    ),
+                                    isSynced = rs.getInt("is_synced") == 1,
+                                    syncedAt = rs.getString("synced_at")?.let {
+                                        LocalDateTime.parse(it, dateTimeFormatter)
+                                    },
+                                    syncVersion = rs.getInt("sync_version")
                                 )
                             )
                         }
@@ -1220,6 +1254,7 @@ object DatabaseManager {
         } catch (e: Exception) {
             log.error("Failed to retrieve sessions", e)
         }
+
         return sessions
     }
 
