@@ -63,6 +63,12 @@ tasks {
     withType<Test> {
         useJUnitPlatform()
     }
+
+    processResources {
+        from(project.layout.projectDirectory.file("LICENSE")) {
+            into(".")
+        }
+    }
 }
 
 // Configure dependency updates task following official best practices

@@ -12,9 +12,17 @@
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
-    <description>This plugin is mainly used to record the time users spend writing various types of code,
-        which is convenient for statistical analysis of their code time distribution.
-    </description>
+    <description><![CDATA[
+    This plugin is mainly used to record the time users spend writing various types of code,
+    which is convenient for statistical analysis of their code time distribution.
+
+    <br/>
+    <h2>License</h2>
+    <p>
+        This project is open-source and licensed under the
+        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.
+    </p>
+    ]]></description>
 
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
