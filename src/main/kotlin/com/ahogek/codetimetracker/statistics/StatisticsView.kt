@@ -59,6 +59,8 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
         TimeOfDayDistributionDataProvider()
     )
 
+    private val summaryProvider = SummaryDataProvider()
+
     init {
         // 1. Setup Toolbar (Updated with Import/Export)
         val actionToolbar = createToolBar(this)
@@ -142,8 +144,24 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
             val endTime = LocalDateTime.now()
             val startTime = endTime.minusYears(1)
 
+            // Compute summary statistics for header display
+            val summaryData = summaryProvider.computeSummary()
+
             val payload = buildMap {
                 put("theme", getThemeColors())
+
+                // Add summary data (convert Duration to seconds for JSON)
+                put(
+                    "summaryData", mapOf(
+                        "today" to summaryData.today.toSeconds(),
+                        "dailyAverage" to summaryData.dailyAverage.toSeconds(),
+                        "thisWeek" to summaryData.thisWeek.toSeconds(),
+                        "thisMonth" to summaryData.thisMonth.toSeconds(),
+                        "thisYear" to summaryData.thisYear.toSeconds(),
+                        "total" to summaryData.total.toSeconds()
+                    )
+                )
+
                 dataProvides.forEach { provider ->
                     val data = if (provider.requiresTimeRange()) {
                         provider.prepareData(startTime, endTime)

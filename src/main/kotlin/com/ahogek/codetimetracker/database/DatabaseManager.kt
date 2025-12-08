@@ -100,53 +100,93 @@ object DatabaseManager {
     }
 
     private fun createTableIfNotExists() {
-        val sql = """
+        val tableCreationSql = """
             CREATE TABLE IF NOT EXISTS coding_sessions (
-            -- Primary Key. A simple auto-incrementing integer for local use.
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            
-            -- Globally Unique ID. A UUID for the session record itself. Critical for merging and syncing.
-            session_uuid TEXT NOT NULL UNIQUE,
-            
-            -- The unique ID of the user/installation. Prevents data contamination between different users.
-            user_id TEXT NOT NULL,
-            
-            -- The display name of the project.
-            project_name TEXT NOT NULL,
-            
-            -- The programming language used.
-            language TEXT NOT NULL,
-            
-            -- The user's operating system (e.g., "macOS Sonoma").
-            platform TEXT NOT NULL,
+                -- Primary Key. A simple auto-incrementing integer for local use.
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                
+                -- Globally Unique ID. A UUID for the session record itself. Critical for merging and syncing.
+                session_uuid TEXT NOT NULL UNIQUE,
+                
+                -- The unique ID of the user/installation. Prevents data contamination between different users.
+                user_id TEXT NOT NULL,
+                
+                -- The display name of the project.
+                project_name TEXT NOT NULL,
+                
+                -- The programming language used.
+                language TEXT NOT NULL,
+                
+                -- The user's operating system (e.g., "macOS Sonoma").
+                platform TEXT NOT NULL,
 
-            -- The JetBrains IDE product being used (e.g., "IntelliJ IDEA", "PyCharm").
-            ide_name TEXT NOT NULL,
-            
-            -- The session's start time, in ISO-8601 format.
-            start_time TEXT NOT NULL,
-            
-            -- The session's end time, in ISO-8601 format.
-            end_time TEXT NOT NULL,
-            
-            -- Timestamp for syncing. Used for conflict resolution during merges.
-            last_modified TEXT NOT NULL,
-            
-            -- Soft Delete Flag. A boolean (0 or 1) for marking records as deleted.
-            is_deleted INTEGER NOT NULL DEFAULT 0
-        );
-        """
+                -- The JetBrains IDE product being used (e.g., "IntelliJ IDEA", "PyCharm").
+                ide_name TEXT NOT NULL,
+                
+                -- The session's start time, in ISO-8601 format.
+                start_time TEXT NOT NULL,
+                
+                -- The session's end time, in ISO-8601 format.
+                end_time TEXT NOT NULL,
+                
+                -- Timestamp for syncing. Used for conflict resolution during merges.
+                last_modified TEXT NOT NULL,
+                
+                -- Soft Delete Flag. A boolean (0 or 1) for marking records as deleted.
+                is_deleted INTEGER NOT NULL DEFAULT 0
+            );
+        """.trimIndent()
 
-        val indexSql = "CREATE UNIQUE INDEX IF NOT EXISTS idx_session_uuid ON coding_sessions(session_uuid);"
+        // Index definitions organized by purpose
+        val indexes = mapOf(
+            // Unique constraint for UUID-based deduplication during sync
+            "idx_session_uuid" to """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_session_uuid 
+                ON coding_sessions(session_uuid)
+            """.trimIndent(),
+
+            // Composite index for time range queries (most common query pattern)
+            // Leading with is_deleted enables efficient filtering of active records
+            "idx_sessions_time_range" to """
+                CREATE INDEX IF NOT EXISTS idx_sessions_time_range 
+                ON coding_sessions(is_deleted, start_time, end_time)
+            """.trimIndent(),
+
+            // Optimized for finding the first coding session date
+            // Used in daily average calculations
+            "idx_sessions_min_time" to """
+                CREATE INDEX IF NOT EXISTS idx_sessions_min_time 
+                ON coding_sessions(is_deleted, start_time)
+            """.trimIndent()
+        )
 
         try {
             withConnection { conn ->
-                conn.createStatement().execute(sql)
-                conn.createStatement().execute(indexSql)
-                log.info("Database table 'coding_sessions' is ready.")
+                // Create table first
+                conn.createStatement().use { stmt ->
+                    stmt.execute(tableCreationSql)
+                    log.info("Database table 'coding_sessions' is ready.")
+                }
+
+                // Create indexes sequentially with individual error handling
+                indexes.forEach { (indexName, indexSql) ->
+                    try {
+                        conn.createStatement().use { stmt ->
+                            stmt.execute(indexSql)
+                            log.debug("Index '$indexName' created successfully.")
+                        }
+                    } catch (e: Exception) {
+                        // Non-fatal: Index creation failure doesn't prevent table usage
+                        // but will impact query performance
+                        log.warn("Failed to create index '$indexName'. Query performance may be degraded.", e)
+                    }
+                }
+
+                log.info("Database schema initialization completed with ${indexes.size} indexes.")
             }
         } catch (e: Exception) {
             log.error("Failed to create database table.", e)
+            throw e // Re-throw to prevent system from continuing with broken schema
         }
     }
 
@@ -1256,5 +1296,105 @@ object DatabaseManager {
         }
 
         return importedCount
+    }
+
+    /**
+     * Retrieves the total number of active (non-deleted) coding sessions.
+     * Used for adaptive query strategy selection.
+     *
+     * @return Total count of active sessions
+     */
+    fun getRecordCount(): Long {
+        val sql = "SELECT COUNT(*) as total FROM coding_sessions WHERE $SQL_IS_NOT_DELETED"
+
+        return try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.executeQuery().use { rs ->
+                        if (rs.next()) rs.getLong("total") else 0L
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to get record count", e)
+            0L
+        }
+    }
+
+    /**
+     * Retrieves lightweight session summaries for in-memory time calculations.
+     * Returns only start/end times to minimize memory usage.
+     *
+     * Use this method instead of getAllActiveSessions() when only temporal data is needed.
+     * For operations requiring full session details (project, language, etc.),
+     * use the standard query methods.
+     *
+     * Performance optimization: By selecting only 2 columns instead of 9,
+     * this reduces memory usage by ~78% for large datasets.
+     *
+     * @return List of session time ranges
+     */
+    fun getAllActiveSessionTimes(): List<SessionSummaryDTO> {
+        val sql = """
+        SELECT start_time, end_time
+        FROM coding_sessions
+        WHERE $SQL_IS_NOT_DELETED
+        ORDER BY start_time
+    """.trimIndent()
+
+        val sessions = mutableListOf<SessionSummaryDTO>()
+
+        try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            sessions.add(
+                                SessionSummaryDTO(
+                                    startTime = LocalDateTime.parse(
+                                        rs.getString("start_time"),
+                                        dateTimeFormatter
+                                    ),
+                                    endTime = LocalDateTime.parse(
+                                        rs.getString("end_time"),
+                                        dateTimeFormatter
+                                    )
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to load session times", e)
+        }
+
+        return sessions
+    }
+
+    /**
+     * Retrieves the date of the first coding record.
+     * Optimized with MIN() aggregate function.
+     */
+    fun getFirstRecordDate(): LocalDate? {
+        val sql = "SELECT MIN(start_time) as first_date FROM coding_sessions WHERE $SQL_IS_NOT_DELETED"
+
+        return try {
+            withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.executeQuery().use { rs ->
+                        if (rs.next()) {
+                            val timestamp = rs.getString("first_date")
+                            timestamp?.let {
+                                LocalDateTime.parse(it, dateTimeFormatter).toLocalDate()
+                            }
+                        } else null
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to retrieve first record date", e)
+            null
+        }
     }
 }

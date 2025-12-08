@@ -8,6 +8,57 @@
   <script src="echarts.min.js"></script>
 </head>
 <body>
+<!-- Summary Dashboard Header -->
+<div class="summary-container" id="summary-dashboard">
+  <div class="summary-card" data-metric="today">
+    <div class="metric-icon">📅</div>
+    <div class="metric-content">
+      <div class="metric-label">Today</div>
+      <div class="metric-value" id="metric-today">--</div>
+    </div>
+  </div>
+
+  <div class="summary-card" data-metric="dailyAverage">
+    <div class="metric-icon">📊</div>
+    <div class="metric-content">
+      <div class="metric-label">Daily Avg</div>
+      <div class="metric-value" id="metric-dailyAverage">--</div>
+    </div>
+  </div>
+
+  <div class="summary-card" data-metric="thisWeek">
+    <div class="metric-icon">📆</div>
+    <div class="metric-content">
+      <div class="metric-label">This Week</div>
+      <div class="metric-value" id="metric-thisWeek">--</div>
+    </div>
+  </div>
+
+  <div class="summary-card" data-metric="thisMonth">
+    <div class="metric-icon">📌</div>
+    <div class="metric-content">
+      <div class="metric-label">This Month</div>
+      <div class="metric-value" id="metric-thisMonth">--</div>
+    </div>
+  </div>
+
+  <div class="summary-card" data-metric="thisYear">
+    <div class="metric-icon">🗓️</div>
+    <div class="metric-content">
+      <div class="metric-label">This Year</div>
+      <div class="metric-value" id="metric-thisYear">--</div>
+    </div>
+  </div>
+
+  <div class="summary-card" data-metric="total">
+    <div class="metric-icon">⏱️</div>
+    <div class="metric-content">
+      <div class="metric-label">Total</div>
+      <div class="metric-value" id="metric-total">--</div>
+    </div>
+  </div>
+</div>
+
 <div class="card">
   <div id="heatmap"></div>
 </div>

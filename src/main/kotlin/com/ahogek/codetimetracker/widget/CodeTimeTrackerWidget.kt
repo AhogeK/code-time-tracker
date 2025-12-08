@@ -6,6 +6,7 @@ import com.ahogek.codetimetracker.listeners.TimeTrackerListener
 import com.ahogek.codetimetracker.model.TimePeriod
 import com.ahogek.codetimetracker.service.TimeTrackerService
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
+import com.ahogek.codetimetracker.util.TimeRangeUtils
 import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
 import com.intellij.ide.util.PropertiesComponent
@@ -30,8 +31,6 @@ import java.time.Duration
 import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.temporal.ChronoUnit
-import java.time.temporal.WeekFields
-import java.util.*
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
@@ -263,24 +262,27 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
     private fun calculateDurationForPeriod(projectName: String?): Duration {
         return when (selectedPeriod) {
             DisplayPeriod.TOTAL -> DatabaseManager.getTotalCodingTime(projectName)
+
             DisplayPeriod.TODAY -> getTimeForPeriod(TimePeriod.TODAY) { startOfToday ->
                 DatabaseManager.getCodingTimeForPeriod(startOfToday, startOfToday.plusDays(1), projectName)
             }
 
             DisplayPeriod.THIS_WEEK -> getTimeForPeriod(TimePeriod.THIS_WEEK) { startOfToday ->
-                val weekFields = WeekFields.of(Locale.getDefault())
-                val startOfWeek = startOfToday.with(weekFields.dayOfWeek(), 1L)
-                DatabaseManager.getCodingTimeForPeriod(startOfWeek, startOfWeek.plusWeeks(1), projectName)
+                val startOfWeek = TimeRangeUtils.getWeekStart(startOfToday.toLocalDate())
+                val endOfWeek = TimeRangeUtils.getWeekEnd(startOfToday.toLocalDate())
+                DatabaseManager.getCodingTimeForPeriod(startOfWeek, endOfWeek, projectName)
             }
 
             DisplayPeriod.THIS_MONTH -> getTimeForPeriod(TimePeriod.THIS_MONTH) { startOfToday ->
-                val startOfMonth = startOfToday.withDayOfMonth(1)
-                DatabaseManager.getCodingTimeForPeriod(startOfMonth, startOfMonth.plusMonths(1), projectName)
+                val startOfMonth = TimeRangeUtils.getMonthStart(startOfToday.toLocalDate())
+                val endOfMonth = TimeRangeUtils.getMonthEnd(startOfToday.toLocalDate())
+                DatabaseManager.getCodingTimeForPeriod(startOfMonth, endOfMonth, projectName)
             }
 
             DisplayPeriod.THIS_YEAR -> getTimeForPeriod(TimePeriod.THIS_YEAR) { startOfToday ->
-                val startOfYear = startOfToday.withDayOfYear(1)
-                DatabaseManager.getCodingTimeForPeriod(startOfYear, startOfYear.plusYears(1), projectName)
+                val startOfYear = TimeRangeUtils.getYearStart(startOfToday.toLocalDate())
+                val endOfYear = TimeRangeUtils.getYearEnd(startOfToday.toLocalDate())
+                DatabaseManager.getCodingTimeForPeriod(startOfYear, endOfYear, projectName)
             }
         }
     }

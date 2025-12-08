@@ -21,6 +21,11 @@ globalThis.renderCharts = function (payload) {
 
     applyScrollbarTheme(theme);
 
+    // Render summary dashboard FIRST for better UX
+    if (jsonPayload.summaryData) {
+      renderSummary(jsonPayload.summaryData);
+    }
+
     // Render yearly activity heatmap
     if (jsonPayload.yearlyActivity) {
       renderYearlyActivityHeatmap(
@@ -76,6 +81,37 @@ globalThis.renderCharts = function (payload) {
 };
 
 /**
+ * Renders summary statistics in the dashboard header with smooth animations.
+ * Uses theme-aware colors to ensure visibility in all IDE themes.
+ *
+ * @param {Object} summaryData - Object containing metric values in seconds
+ */
+function renderSummary(summaryData) {
+  const metrics = ['today', 'dailyAverage', 'thisWeek', 'thisMonth', 'thisYear', 'total'];
+
+  metrics.forEach(metric => {
+    const element = document.getElementById(`metric-${metric}`);
+    if (element && summaryData[metric] !== undefined) {
+      const formattedValue = formatDuration(summaryData[metric]);
+
+      // Apply value with animation
+      element.style.opacity = '0';
+      element.style.transform = 'scale(0.8)';
+
+      // Use RAF for smooth animation timing
+      requestAnimationFrame(() => {
+        element.textContent = formattedValue;
+        element.style.transition = 'all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+        requestAnimationFrame(() => {
+          element.style.opacity = '1';
+          element.style.transform = 'scale(1)';
+        });
+      });
+    }
+  });
+}
+
+/**
  * Applies scrollbar theme based on the current theme colors.
  * @param {Object} theme - Theme colors
  */
@@ -91,6 +127,10 @@ function applyScrollbarTheme(theme) {
     root.style.setProperty('--scrollbar-thumb-hover-color', 'rgba(0, 0, 0, 0.3)');
     root.style.setProperty('--scrollbar-thumb-active-color', 'rgba(0, 0, 0, 0.4)');
   }
+
+  // Text colors from IDE theme - critical for dark theme visibility
+  root.style.setProperty('--text-primary', theme.foreground);
+  root.style.setProperty('--text-secondary', theme.secondary);
 }
 
 /**
@@ -833,6 +873,50 @@ function disposeChart(chartKey) {
     chartInstances[chartKey].dispose();
     chartInstances[chartKey] = null;
   }
+}
+
+/**
+ * Formats duration in seconds to human-readable format with high precision.
+ *
+ * Display rules:
+ * - Shows days, hours, minutes, and seconds for comprehensive accuracy
+ * - Omits leading zero components (e.g., 0d is skipped)
+ * - Always shows at least the minute component
+ *
+ * Examples:
+ * - 37 seconds → "37s"
+ * - 3097 seconds (51m 37s) → "51m 37s"
+ * - 7337 seconds (2h 2m 17s) → "2h 2m 17s"
+ * - 90061 seconds (1d 1h 1m 1s) → "1d 1h 1m 1s"
+ *
+ * @param {number} seconds - Duration in seconds
+ * @returns {string} Formatted duration string
+ */
+function formatDuration(seconds) {
+  if (seconds === 0) return '0s';
+
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  const parts = [];
+
+  if (days > 0) {
+    parts.push(`${days}d`);
+  }
+  if (hours > 0) {
+    parts.push(`${hours}h`);
+  }
+  if (minutes > 0) {
+    parts.push(`${minutes}m`);
+  }
+  if (secs > 0) {
+    parts.push(`${secs}s`);
+  }
+
+  // Fallback: if all components are zero (shouldn't happen), return "0s"
+  return parts.length > 0 ? parts.join(' ') : '0s';
 }
 
 /**
