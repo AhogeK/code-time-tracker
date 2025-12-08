@@ -1,12 +1,12 @@
 [versions]
 
 # Plugin versioning
-pluginVersion = "0.6.0-SNAPSHOT"
+pluginVersion = "0.6.1-SNAPSHOT"
 
 # dependencies versions
 junitVersion = "6.0.1"
 assertjCoreVersion = "3.27.6"
-sqliteJdbcVersion = "3.51.0.0"
+sqliteJdbcVersion = "3.51.1.0"
 gsonVersion = "2.13.2"
 lGoodDatePickerVersion = "11.2.1"
 
