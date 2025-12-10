@@ -187,39 +187,29 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 **GitHub**: [@AhogeK](https://github.com/AhogeK)  
 **Website**: [ahogek.com](https://www.ahogek.com)
 
----
-
 <div align="center">
 
-<h2>💖 Support This Project</h2>
+## 💖 Support This Project
 
-<table align="center">
-  <tr>
-    <td align="center" style="padding: 15px">
-      <a href="https://ko-fi.com/ahogek">
-        <img width="360" src="https://img.shields.io/badge/☕_Buy_Me_a_Coffee-Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white&labelColor=434B57" alt="Ko-fi"/>
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" style="padding: 15px">
-      <a href="https://afdian.com/a/AhogeK">
-        <img width="360" src="https://img.shields.io/badge/💰_赞助我-爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white&labelColor=434B57" alt="Afdian"/>
-      </a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" style="padding: 15px">
-      <img width="360" src="https://img.shields.io/badge/Solana_Address-14F195?style=for-the-badge&logo=solana&logoColor=white&labelColor=434B57" alt="Solana"/>
-      <br/>
-      <code>55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys</code>
-    </td>
-  </tr>
-</table>
+<p>
+  <a href="https://ko-fi.com/ahogek">
+    <img style="border-radius: 8px;" src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"/>
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://afdian.com/a/AhogeK">
+    <img style="border-radius: 8px;" src="https://img.shields.io/badge/爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white" alt="Afdian"/>
+  </a>
+  &nbsp;&nbsp;
+  <a href="https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys">
+    <img style="border-radius: 8px;" src="https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=solana&logoColor=white" alt="Solana"/>
+  </a>
+</p>
 
 <sub>Your support helps maintain and improve this project 🙏</sub>
 
 </div>
+
+---
 
 <p align="center">
 Made with ❤️ for developers who value their time
