@@ -187,13 +187,11 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 **GitHub**: [@AhogeK](https://github.com/AhogeK)  
 **Website**: [ahogek.com](https://www.ahogek.com)
 
----
-
-<div style="text-align: center">
+<div align="center">
 
 ## 💖 Support This Project
 
-<table>
+<table align="center">
   <tr>
     <td style="text-align: center; padding: 15px;">
       <a href="https://ko-fi.com/ahogek">
@@ -221,8 +219,6 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 </div>
 
----
-
-<p style="text-align: center;">
+<p align="center">
 Made with ❤️ for developers who value their time
 </p>
