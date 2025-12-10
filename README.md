@@ -15,25 +15,6 @@ A professional IntelliJ Platform plugin for automatic coding time tracking and a
 - **💾 Data Management** - Export/import sessions in JSON format
 - **🔒 Privacy First** - All data stored locally in SQLite
 
-## Quick Start
-
-### Installation
-
-```bash
-# Build from source
-git clone https://github.com/AhogeK/code-time-tracker.git
-cd code-time-tracker
-./gradlew buildPlugin
-```
-
-# Install: build/distributions/code-time-tracker-*.zip
-
-### Usage
-
-1. **Status Bar Widget** - Click to switch between Today/Week/Month/Year/Total
-2. **Statistics View** - Open via `View → Tool Windows → Code Statistics`
-3. **Export Data** - Right-click widget → Export to JSON
-
 ## Architecture
 
 ```text
@@ -50,71 +31,6 @@ cd code-time-tracker
 │  - Adaptive Query Strategy          │
 │  - Batch Operations                 │
 └─────────────────────────────────────┘
-```
-
-### Database Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS coding_sessions
-(
-    -- Primary Key. A simple auto-incrementing integer for local use.
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    -- Globally Unique ID. A UUID for the session record itself. Critical for merging and syncing.
-    session_uuid  TEXT    NOT NULL UNIQUE,
-
-    -- The unique ID of the user/installation. Prevents data contamination between different users.
-    user_id       TEXT    NOT NULL,
-
-    -- The display name of the project.
-    project_name  TEXT    NOT NULL,
-
-    -- The programming language used.
-    language      TEXT    NOT NULL,
-
-    -- The user's operating system (e.g., "macOS Sonoma").
-    platform      TEXT    NOT NULL,
-
-    -- The JetBrains IDE product being used (e.g., "IntelliJ IDEA", "PyCharm").
-    ide_name      TEXT    NOT NULL,
-
-    -- The session's start time, in ISO-8601 format.
-    start_time    TEXT    NOT NULL,
-
-    -- The session's end time, in ISO-8601 format.
-    end_time      TEXT    NOT NULL,
-
-    -- Timestamp for syncing. Used for conflict resolution during merges.
-    last_modified TEXT    NOT NULL,
-
-    -- Soft Delete Flag. A boolean (0 or 1) for marking records as deleted.
-    is_deleted    INTEGER NOT NULL DEFAULT 0,
-
-    -- Cloud Sync State Flag. 0 = not synced, 1 = synced to cloud.
-    -- Used for incremental sync to identify local changes that need uploading.
-    is_synced     INTEGER NOT NULL DEFAULT 0,
-
-    -- Cloud Sync Timestamp. Records when this session was last successfully synced.
-    -- NULL if never synced. Used for debugging sync issues and calculating sync lag.
-    synced_at     TEXT,
-
-    -- Sync Version. Incremented on each modification for optimistic locking.
-    -- Prevents lost updates when syncing concurrent changes from multiple devices.
-    -- Example: Device A and B both modify same session; higher version wins.
-    sync_version  INTEGER NOT NULL DEFAULT 0
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS idx_session_uuid
-    ON coding_sessions (session_uuid);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_time_range
-    ON coding_sessions (is_deleted, start_time, end_time);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_min_time
-    ON coding_sessions (is_deleted, start_time);
-
-CREATE INDEX IF NOT EXISTS idx_sessions_sync_state
-    ON coding_sessions (is_synced, last_modified);
 ```
 
 ## Technical Stack
@@ -134,39 +50,6 @@ CREATE INDEX IF NOT EXISTS idx_sessions_sync_state
 - JDK 21+
 - IntelliJ IDEA 2025.2+
 - Gradle 9.2+
-
-### Setup
-
-```bash
-# Run in sandbox IDE
-./gradlew runIde
-
-# Run tests
-./gradlew test
-
-# Check for updates
-./gradlew dependencyUpdates
-```
-
-### Project Structure
-
-```text
-src/main/kotlin/com/ahogek/codetimetracker/
-├── action/           # Actions
-├── activity/         # Activity detection
-├── database/         # Data access layer
-├── handler/          # Event handlers
-├── listeners/        # Event listeners
-├── model/            # Data models
-├── service/          # Core business logic
-├── statistics/       # Analytics engine
-├── toolwindow/       # Tool windows
-├── topics/           # Topics
-├── ui/               # Dialogs & forms
-├── user/             # User manager configuration
-├── util/             # Utilities
-└── widget/           # Status bar UI
-```
 
 ## Contributing
 
@@ -191,11 +74,11 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ## 💖 Support This Project
 
-[![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/ahogek)
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?style=plastic&logo=ko-fi&logoColor=white)](https://ko-fi.com/ahogek)
 &nbsp;&nbsp;
-[![Afdian](https://img.shields.io/badge/爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://afdian.com/a/AhogeK)
+[![Afdian](https://img.shields.io/badge/爱发电-946ce6?style=plastic&logo=github-sponsors&logoColor=white)](https://afdian.com/a/AhogeK)
 &nbsp;&nbsp;
-[![Solana](https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=solana&logoColor=white)](https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys)
+[![Solana](https://img.shields.io/badge/Solana-14F195?style=plastic&logo=solana&logoColor=white)](https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys)
 
 <sub>Your support helps maintain and improve this project 🙏</sub>
 
