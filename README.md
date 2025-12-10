@@ -191,25 +191,15 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ## 💖 Support This Project
 
-<p>
-  <a href="https://ko-fi.com/ahogek">
-    <img src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"/>
-  </a>
-  &nbsp;&nbsp;
-  <a href="https://afdian.com/a/AhogeK">
-    <img src="https://img.shields.io/badge/爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white" alt="Afdian"/>
-  </a>
-  &nbsp;&nbsp;
-  <a href="https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys">
-    <img src="https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=solana&logoColor=white" alt="Solana"/>
-  </a>
-</p>
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/ahogek)
+&nbsp;&nbsp;
+[![Afdian](https://img.shields.io/badge/爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white)](https://afdian.com/a/AhogeK)
+&nbsp;&nbsp;
+[![Solana](https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=solana&logoColor=white)](https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys)
 
 <sub>Your support helps maintain and improve this project 🙏</sub>
 
 </div>
-
----
 
 <p align="center">
 Made with ❤️ for developers who value their time
