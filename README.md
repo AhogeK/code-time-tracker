@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-IntelliJ%202025.2%2B-orange.svg)](https://plugins.jetbrains.com/)
 
-A professional IntelliJ Platform plugin for automatic coding time tracking and analytics.
+A JetBrains Platform plugin for automatic coding time tracking and analytics.
 
 ## Features
 
