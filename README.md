@@ -15,42 +15,6 @@ A professional IntelliJ Platform plugin for automatic coding time tracking and a
 - **💾 Data Management** - Export/import sessions in JSON format
 - **🔒 Privacy First** - All data stored locally in SQLite
 
-## Architecture
-
-```text
-┌─────────────────────────────────────┐
-│  Widget / ToolWindow (UI Layer)     │
-├─────────────────────────────────────┤
-│  TimeTrackerService (Core Logic)    │
-│  - Activity Detection               │
-│  - Session Management               │
-│  - Idle Timeout (60s)               │
-├─────────────────────────────────────┤
-│  DatabaseManager (Persistence)      │
-│  - SQLite with Optimized Indexes    │
-│  - Adaptive Query Strategy          │
-│  - Batch Operations                 │
-└─────────────────────────────────────┘
-```
-
-## Technical Stack
-
-| Component         | Version  | Purpose          |
-|-------------------|----------|------------------|
-| Kotlin            | 2.2.21   | Primary language |
-| Java              | 21       | Target platform  |
-| Gradle            | 9.2.1    | Build tool       |
-| SQLite            | 3.51.1.0 | Local database   |
-| IntelliJ Platform | 2025.2+  | Plugin SDK       |
-
-## Development
-
-### Prerequisites
-
-- JDK 21+
-- IntelliJ IDEA 2025.2+
-- Gradle 9.2+
-
 ## Contributing
 
 Contributions welcome! Please follow:
