@@ -202,7 +202,7 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
     </td>
   </tr>
   <tr>
-    <td align="center"style="padding: 15px">
+    <td align="center" style="padding: 15px">
       <a href="https://afdian.com/a/AhogeK">
         <img width="360" src="https://img.shields.io/badge/💰_赞助我-爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white&labelColor=434B57" alt="Afdian"/>
       </a>
