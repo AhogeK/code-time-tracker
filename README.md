@@ -193,15 +193,15 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 <p>
   <a href="https://ko-fi.com/ahogek">
-    <img style="border-radius: 8px;" src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"/>
+    <img src="https://img.shields.io/badge/Ko--fi-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Ko-fi"/>
   </a>
   &nbsp;&nbsp;
   <a href="https://afdian.com/a/AhogeK">
-    <img style="border-radius: 8px;" src="https://img.shields.io/badge/爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white" alt="Afdian"/>
+    <img src="https://img.shields.io/badge/爱发电-946ce6?style=for-the-badge&logo=github-sponsors&logoColor=white" alt="Afdian"/>
   </a>
   &nbsp;&nbsp;
   <a href="https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys">
-    <img style="border-radius: 8px;" src="https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=solana&logoColor=white" alt="Solana"/>
+    <img src="https://img.shields.io/badge/Solana-14F195?style=for-the-badge&logo=solana&logoColor=white" alt="Solana"/>
   </a>
 </p>
 
