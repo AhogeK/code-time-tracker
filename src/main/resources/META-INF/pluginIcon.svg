@@ -1,12 +1,60 @@
-<svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M32.0845 7.94025V4H24.0203V7.9896H16.029V4H7.91553V7.94025H4V36H16.0044V32.0045C16.0058 30.9457 16.4274 29.9308 17.1766 29.1826C17.9258 28.4345 18.9412 28.0143 20 28.0143C21.0588 28.0143 22.0743 28.4345 22.8234 29.1826C23.5726 29.9308 23.9942 30.9457 23.9956 32.0045V36H36V7.94025H32.0845Z"
-          fill="url(#paint0_linear)"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" width="40" height="40">
     <defs>
-        <linearGradient id="paint0_linear" x1="2.94192" y1="4.89955" x2="37.7772" y2="39.7345"
-                        gradientUnits="userSpaceOnUse">
-            <stop offset="0.15937" stop-color="#3BEA62"/>
-            <stop offset="0.5404" stop-color="#3C99CC"/>
-            <stop offset="0.93739" stop-color="#6B57FF"/>
+        <linearGradient id="primaryGradDark" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#38BDF8;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#A78BFA;stop-opacity:1"/>
         </linearGradient>
+
+        <linearGradient id="accentGradDark" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" style="stop-color:#34D399;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#22D3EE;stop-opacity:1"/>
+        </linearGradient>
+
+        <radialGradient id="timerBgDark">
+            <stop offset="0%" style="stop-color:#374151;stop-opacity:1"/>
+            <stop offset="100%" style="stop-color:#1F2937;stop-opacity:0.98"/>
+        </radialGradient>
     </defs>
+
+    <!-- Code editor window background -->
+    <rect x="4" y="6" width="32" height="28" rx="3" fill="url(#primaryGradDark)" opacity="0.15"/>
+    <rect x="4" y="6" width="32" height="28" rx="3" fill="none" stroke="url(#primaryGradDark)" stroke-width="2"/>
+
+    <!-- Window title bar -->
+    <line x1="4" y1="12" x2="36" y2="12" stroke="url(#primaryGradDark)" stroke-width="2"/>
+    <circle cx="8" cy="9" r="1.2" fill="url(#primaryGradDark)"/>
+    <circle cx="12" cy="9" r="1.2" fill="url(#primaryGradDark)"/>
+    <circle cx="16" cy="9" r="1.2" fill="url(#primaryGradDark)"/>
+
+    <!-- Code lines with syntax highlighting effect -->
+    <line x1="8" y1="17" x2="20" y2="17" stroke="url(#primaryGradDark)" stroke-width="1.8" stroke-linecap="round"
+          opacity="0.9"/>
+    <line x1="8" y1="21" x2="24" y2="21" stroke="url(#primaryGradDark)" stroke-width="1.8" stroke-linecap="round"
+          opacity="0.7"/>
+    <line x1="8" y1="25" x2="16" y2="25" stroke="url(#primaryGradDark)" stroke-width="1.8" stroke-linecap="round"
+          opacity="0.9"/>
+
+    <!-- Blinking cursor -->
+    <rect x="26" y="20" width="2" height="6" fill="url(#accentGradDark)" rx="1"/>
+
+    <!-- Stopwatch/timer icon overlay (bottom right) -->
+    <g transform="translate(22, 22)">
+        <!-- Timer circle with solid but subtle background -->
+        <circle cx="8" cy="8" r="7" fill="url(#timerBgDark)"/>
+        <circle cx="8" cy="8" r="7" fill="none" stroke="url(#primaryGradDark)" stroke-width="2"/>
+
+        <!-- Timer crown/button -->
+        <rect x="7" y="2" width="2" height="2" rx="0.5" fill="url(#primaryGradDark)"/>
+
+        <!-- Timer hands -->
+        <line x1="8" y1="8" x2="8" y2="5" stroke="url(#primaryGradDark)" stroke-width="1.5" stroke-linecap="round"/>
+        <line x1="8" y1="8" x2="11" y2="8" stroke="url(#primaryGradDark)" stroke-width="1.2" stroke-linecap="round"/>
+
+        <!-- Center dot -->
+        <circle cx="8" cy="8" r="1" fill="url(#primaryGradDark)"/>
+
+        <!-- Subtle arc to show "running" -->
+        <path d="M 8 3 A 5 5 0 0 1 13 8" fill="none" stroke="url(#accentGradDark)" stroke-width="1.5"
+              stroke-linecap="round" opacity="0.8"/>
+    </g>
 </svg>
