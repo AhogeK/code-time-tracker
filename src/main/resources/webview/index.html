@@ -8,7 +8,6 @@
   <script src="echarts.min.js"></script>
 </head>
 <body>
-<!-- Summary Dashboard Header -->
 <div class="summary-container" id="summary-dashboard">
   <div class="summary-card" data-metric="today">
     <div class="metric-icon">📅</div>
@@ -17,7 +16,6 @@
       <div class="metric-value" id="metric-today">--</div>
     </div>
   </div>
-
   <div class="summary-card" data-metric="dailyAverage">
     <div class="metric-icon">📊</div>
     <div class="metric-content">
@@ -25,7 +23,6 @@
       <div class="metric-value" id="metric-dailyAverage">--</div>
     </div>
   </div>
-
   <div class="summary-card" data-metric="thisWeek">
     <div class="metric-icon">📆</div>
     <div class="metric-content">
@@ -33,7 +30,6 @@
       <div class="metric-value" id="metric-thisWeek">--</div>
     </div>
   </div>
-
   <div class="summary-card" data-metric="thisMonth">
     <div class="metric-icon">📌</div>
     <div class="metric-content">
@@ -41,7 +37,6 @@
       <div class="metric-value" id="metric-thisMonth">--</div>
     </div>
   </div>
-
   <div class="summary-card" data-metric="thisYear">
     <div class="metric-icon">🗓️</div>
     <div class="metric-content">
@@ -49,7 +44,6 @@
       <div class="metric-value" id="metric-thisYear">--</div>
     </div>
   </div>
-
   <div class="summary-card" data-metric="total">
     <div class="metric-icon">⏱️</div>
     <div class="metric-content">
@@ -59,28 +53,36 @@
   </div>
 </div>
 
-<div class="card">
-  <div id="heatmap"></div>
-</div>
-<div class="card">
-  <div id="dailyHourHeatmap"></div>
-</div>
-<div class="card">
-  <div id="overallHourlyChart"></div>
-</div>
-<div class="card">
-  <div id="languageDistributionChart"></div>
-</div>
-<div class="card">
-  <div id="projectDistributionChart"></div>
-</div>
-<div class="card">
-  <div id="timeOfDayDistributionChart"></div>
+<div class="charts-grid">
+  <div class="card heatmap-card">
+    <div id="heatmap"></div>
+  </div>
+
+  <div class="card daily-heatmap-card">
+    <div id="dailyHourHeatmap"></div>
+  </div>
+
+  <div class="card hourly-card">
+    <div id="overallHourlyChart"></div>
+  </div>
+
+  <div class="card distribution-card">
+    <div id="languageDistributionChart"></div>
+  </div>
+
+  <div class="card distribution-card">
+    <div id="projectDistributionChart"></div>
+  </div>
+
+  <div class="card time-card">
+    <div id="timeOfDayDistributionChart"></div>
+  </div>
 </div>
 
 <footer class="footer">
   <div class="footer-text">
-    Made with <span class="heart-icon">❤️</span> by <a href="https://github.com/AhogeK" style="color: inherit; text-decoration: none;"
+    Made with <span class="heart-icon">❤️</span> by <a href="https://github.com/AhogeK"
+                                                       style="color: inherit; text-decoration: none;"
                                                        target="_blank">AhogeK</a>
   </div>
 

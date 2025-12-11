@@ -14,8 +14,8 @@ body {
   margin: 0;
   padding: 16px;
   box-sizing: border-box;
-  min-width: 800px; /* Add minimum width for body */
   color: var(--text-primary);
+  overflow-x: auto;
 }
 
 ::-webkit-scrollbar {
@@ -47,18 +47,46 @@ body {
   scrollbar-color: var(--scrollbar-thumb-color) transparent;
 }
 
+/* ========== Charts Layout (Flex Grid) ========== */
+
+.charts-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  align-items: flex-start;
+  padding-bottom: 20px;
+}
+
 .card {
   background-color: transparent;
   border-radius: 12px;
   padding: 20px;
-  margin-bottom: 16px;
-  min-width: 760px; /* Add minimum width for cards */
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  width: 800px;
 }
 
-.card:last-child {
-  margin-bottom: 0;
+/* ========== Fixed Optimal Widths ========== */
+
+.heatmap-card {
+  width: 840px;
 }
 
+.daily-heatmap-card {
+  width: 840px;
+}
+
+.distribution-card {
+  width: 800px;
+}
+
+.hourly-card,
+.time-card {
+  width: 800px;
+}
+
+/* Chart container sizes */
 #heatmap {
   width: 100%;
   height: 220px;
@@ -119,7 +147,6 @@ body {
   overflow: hidden;
 }
 
-/* Subtle gradient overlay for depth */
 .summary-card::before {
   content: '';
   position: absolute;
@@ -175,7 +202,6 @@ body {
   color: var(--text-primary, inherit);
 }
 
-/* Responsive adjustments */
 @media (max-width: 1200px) {
   .summary-container {
     grid-template-columns: repeat(3, 1fr);
@@ -245,7 +271,6 @@ body {
   gap: 12px;
 }
 
-/* Base button style */
 .sponsor-btn {
   display: flex;
   align-items: center;
@@ -268,35 +293,27 @@ body {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 
-/* --- Brand Specific Colors (Matches your README badges) --- */
-
-/* GitHub - Neutral/Dark */
 .sponsor-btn.github:hover {
   background-color: #24292e;
   border-color: #24292e;
 }
 
-/* Ko-fi - Red/Pink (#FF5E5B) */
 .sponsor-btn.kofi:hover {
   background-color: #FF5E5B;
   border-color: #FF5E5B;
 }
 
-/* Afdian - Purple (#946ce6) */
 .sponsor-btn.afdian:hover {
   background-color: #946ce6;
   border-color: #946ce6;
 }
 
-/* Solana - Green (#14F195) */
-/* Note: Since this green is very bright, we use dark text for contrast */
 .sponsor-btn.solana:hover {
   background-color: #14F195;
   border-color: #14F195;
   color: #000000;
 }
 
-/* Dark mode adjustments specifically for the Solana text if needed */
 @media (prefers-color-scheme: dark) {
   .sponsor-btn {
     background: rgba(255, 255, 255, 0.05);
