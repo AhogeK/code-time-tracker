@@ -1,8 +1,8 @@
 # Code Time Tracker
 
-[![Version](https://img.shields.io/badge/version-0.6.3-blue.svg)](https://github.com/AhogeK/code-time-tracker)
+[![Version](https://img.shields.io/badge/version-0.6.4-blue.svg)](https://github.com/AhogeK/code-time-tracker)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-IntelliJ%202025.2%2B-orange.svg)](https://plugins.jetbrains.com/)
+[![Platform](https://img.shields.io/badge/platform-IntelliJ%202025.3%2B-orange.svg)](https://plugins.jetbrains.com/)
 
 A JetBrains Platform plugin for automatic coding time tracking and analytics.
 
