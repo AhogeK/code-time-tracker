@@ -876,18 +876,18 @@ function disposeChart(chartKey) {
 }
 
 /**
- * Formats duration in seconds to human-readable format with high precision.
+ * Formats duration in seconds to human-readable format.
+ * Modified to use Hours as the largest unit (e.g., "26h 30m" instead of "1d 2h 30m").
  *
  * Display rules:
- * - Shows days, hours, minutes, and seconds for comprehensive accuracy
- * - Omits leading zero components (e.g., 0d is skipped)
- * - Always shows at least the minute component
+ * - Shows hours, minutes, and seconds
+ * - Always shows at least the minute component unless it's just seconds
  *
  * Examples:
  * - 37 seconds → "37s"
- * - 3097 seconds (51m 37s) → "51m 37s"
- * - 7337 seconds (2h 2m 17s) → "2h 2m 17s"
- * - 90061 seconds (1d 1h 1m 1s) → "1d 1h 1m 1s"
+ * - 3097 seconds → "51m 37s"
+ * - 7337 seconds → "2h 2m 17s"
+ * - 90061 seconds → "25h 1m 1s"
  *
  * @param {number} seconds - Duration in seconds
  * @returns {string} Formatted duration string
@@ -895,16 +895,13 @@ function disposeChart(chartKey) {
 function formatDuration(seconds) {
   if (seconds === 0) return '0s';
 
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
+  // Calculate total hours directly (do not extract days)
+  const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   const secs = Math.floor(seconds % 60);
 
   const parts = [];
 
-  if (days > 0) {
-    parts.push(`${days}d`);
-  }
   if (hours > 0) {
     parts.push(`${hours}h`);
   }
