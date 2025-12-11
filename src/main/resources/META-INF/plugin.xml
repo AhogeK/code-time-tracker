@@ -8,21 +8,62 @@
     <name>Code Time Tracker</name>
 
     <!-- A displayed Vendor name or Organization ID displayed on the Plugins Page. -->
-    <vendor url="https://www.ahogek.com">AhogeK</vendor>
+    <vendor email="ahogek@gmail.com" url="https://www.ahogek.com">AhogeK</vendor>
 
     <!-- Description of the plugin displayed on the Plugin Page and IDE Plugin Manager.
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
-    This plugin is mainly used to record the time users spend writing various types of code,
-    which is convenient for statistical analysis of their code time distribution.
-
-    <br/>
-    <h2>License</h2>
     <p>
-        This project is open-source and licensed under the
-        <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.
+      A professional IntelliJ Platform plugin that automatically tracks your coding time and provides comprehensive analytics
+      to help you understand your development patterns and improve productivity.
+    </p>
+
+    <h2>✨ Key Features</h2>
+    <ul>
+      <li><strong>Automatic Time Tracking</strong> - Captures keyboard and mouse activity with intelligent idle detection</li>
+      <li><strong>Real-time Statistics</strong> - Live status bar widget displaying current session and period-based metrics</li>
+      <li><strong>Multi-Project Support</strong> - Track multiple projects independently with separate analytics</li>
+      <li><strong>Visual Analytics</strong> - Interactive heatmaps, language distribution charts, and hourly coding patterns</li>
+      <li><strong>Data Management</strong> - Export and import your tracking data in JSON format for backup or migration</li>
+      <li><strong>Privacy First</strong> - All data stored locally in SQLite, never sent to external servers</li>
+    </ul>
+
+    <h2>🚀 Getting Started</h2>
+    <p>
+      After installation, the plugin starts tracking automatically. Access detailed statistics through the
+      <strong>Code Statistics</strong> tool window (View → Tool Windows → Code Statistics) or view real-time
+      data in the status bar widget.
+    </p>
+
+    <h2>🔗 Resources</h2>
+    <ul>
+      <li><strong>Source Code</strong>: <a href="https://github.com/AhogeK/code-time-tracker">GitHub Repository</a></li>
+      <li><strong>Report Issues</strong>: <a href="https://github.com/AhogeK/code-time-tracker/issues">Issue Tracker</a></li>
+      <li><strong>Documentation</strong>: <a href="https://github.com/AhogeK/code-time-tracker#readme">README</a></li>
+    </ul>
+
+    <h2>📄 License & Copyright</h2>
+    <p>
+      Copyright © 2025 <a href="https://www.ahogek.com">AhogeK</a>. All rights reserved.<br/>
+      Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.<br/>
+      This is free and open-source software. You may use, modify, and distribute it under the terms of the Apache License.
+    </p>
+
+    <h2>💖 Support</h2>
+    <p>
+      If you find this plugin helpful, please consider:
+    </p>
+    <ul>
+      <li>⭐ <a href="https://github.com/AhogeK/code-time-tracker">Star the project on GitHub</a></li>
+      <li>🐛 <a href="https://github.com/AhogeK/code-time-tracker/issues">Report bugs or request features</a></li>
+      <li>☕ <a href="https://ko-fi.com/ahogek">Support the developer</a></li>
+    </ul>
+
+    <p>
+      <small>Made with ❤️ for developers who value their time</small>
     </p>
     ]]></description>
+
 
     <!-- Product and plugin compatibility requirements.
          Read more: https://plugins.jetbrains.com/docs/intellij/plugin-compatibility.html -->
