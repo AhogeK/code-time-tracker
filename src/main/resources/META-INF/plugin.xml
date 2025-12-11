@@ -42,22 +42,30 @@
       <li><strong>Documentation</strong>: <a href="https://github.com/AhogeK/code-time-tracker#readme">README</a></li>
     </ul>
 
+    <h2>💖 Support the Project</h2>
+    <p>
+      Maintaining this open-source project takes time and effort. If you find this plugin helpful, please consider supporting its development:
+    </p>
+
+    <h3>Community Support</h3>
+    <ul>
+      <li>⭐ <a href="https://github.com/AhogeK/code-time-tracker">Star the project on GitHub</a> (Helps visibility)</li>
+      <li>🐛 <a href="https://github.com/AhogeK/code-time-tracker/issues">Report bugs or request features</a></li>
+    </ul>
+
+    <h3>Sponsor the Developer</h3>
+    <ul>
+      <li>☕ <strong>Ko-fi</strong>: <a href="https://ko-fi.com/ahogek">Buy me a coffee</a></li>
+      <li>⚡ <strong>Afdian</strong>: <a href="https://afdian.com/a/AhogeK">Sponsor via Afdian (爱发电)</a></li>
+      <li>💎 <strong>Solana</strong>: <a href="https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys">Donate SOL (View Wallet)</a></li>
+    </ul>
+
     <h2>📄 License & Copyright</h2>
     <p>
       Copyright © 2025 <a href="https://www.ahogek.com">AhogeK</a>. All rights reserved.<br/>
       Licensed under the <a href="https://www.apache.org/licenses/LICENSE-2.0">Apache License, Version 2.0</a>.<br/>
-      This is free and open-source software. You may use, modify, and distribute it under the terms of the Apache License.
+      This is free and open-source software.
     </p>
-
-    <h2>💖 Support</h2>
-    <p>
-      If you find this plugin helpful, please consider:
-    </p>
-    <ul>
-      <li>⭐ <a href="https://github.com/AhogeK/code-time-tracker">Star the project on GitHub</a></li>
-      <li>🐛 <a href="https://github.com/AhogeK/code-time-tracker/issues">Report bugs or request features</a></li>
-      <li>☕ <a href="https://ko-fi.com/ahogek">Support the developer</a></li>
-    </ul>
 
     <p>
       <small>Made with ❤️ for developers who value their time</small>
