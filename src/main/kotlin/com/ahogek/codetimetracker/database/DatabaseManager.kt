@@ -259,7 +259,6 @@ object DatabaseManager {
         }
     }
 
-
     /**
      * Shuts down the database executor gracefully
      * It stops accepting new tasks and waits for pending tasks to complete

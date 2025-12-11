@@ -14,7 +14,7 @@
          Guidelines: https://plugins.jetbrains.com/docs/marketplace/best-practices-for-listing.html#plugin-description -->
     <description><![CDATA[
     <p>
-      A professional IntelliJ Platform plugin that automatically tracks your coding time and provides comprehensive analytics
+      A JetBrains Platform plugin that automatically tracks your coding time and provides comprehensive analytics
       to help you understand your development patterns and improve productivity.
     </p>
 
