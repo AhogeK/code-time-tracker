@@ -5,6 +5,7 @@ import com.ahogek.codetimetracker.action.ImportDataAction
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.intellij.icons.AllIcons
+import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
@@ -62,11 +63,11 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
     private val summaryProvider = SummaryDataProvider()
 
     init {
-        // 1. Setup Toolbar (Updated with Import/Export)
+        // Setup Toolbar (Updated with Import/Export)
         val actionToolbar = createToolBar(this)
         add(actionToolbar, BorderLayout.NORTH)
 
-        // 2. Setup Browser Request Handler
+        // Setup Browser Request Handler
         val requestHandler = object : CefRequestHandlerAdapter() {
             override fun getResourceRequestHandler(
                 browser: CefBrowser,
@@ -82,9 +83,30 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
                 }
                 return null
             }
+
+            // Intercept external links and open in system browser
+            override fun onBeforeBrowse(
+                browser: CefBrowser?,
+                frame: CefFrame?,
+                request: CefRequest?,
+                userGesture: Boolean,
+                isRedirect: Boolean
+            ): Boolean {
+                val url = request?.url
+                // Check if the URL is external (http/https) and not our internal virtual domain
+                if (url != null && (url.startsWith("http://") || url.startsWith("https://"))
+                    && !url.startsWith(virtualDomain)
+                ) {
+                    // Open in the user's default system browser (Chrome, Edge, Safari, etc.)
+                    BrowserUtil.browse(url)
+                    // Return true to cancel the navigation inside the IDE plugin window
+                    return true
+                }
+                return false
+            }
         }
 
-        // 3. Initialize Browser
+        // Initialize Browser
         browser = JBCefBrowser.createBuilder()
             .setClient(jbCefClient)
             .setUrl(virtualDomain + "index.html")
@@ -92,6 +114,21 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
 
         // Add handler AFTER browser creation
         jbCefClient.addRequestHandler(requestHandler, browser.cefBrowser)
+
+        jbCefClient.addLifeSpanHandler(object : CefLifeSpanHandlerAdapter() {
+            override fun onBeforePopup(
+                browser: CefBrowser?,
+                frame: CefFrame?,
+                targetUrl: String?,
+                targetFrameName: String?
+            ): Boolean {
+                if (targetUrl != null && (targetUrl.startsWith("http://") || targetUrl.startsWith("https://"))) {
+                    BrowserUtil.browse(targetUrl)
+                    return true
+                }
+                return false
+            }
+        }, browser.cefBrowser)
 
         jbCefClient.addLoadHandler(object : CefLoadHandlerAdapter() {
             override fun onLoadEnd(

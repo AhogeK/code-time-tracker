@@ -206,3 +206,117 @@ body {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========== Footer / Sponsorship Styles ========== */
+.footer {
+  margin-top: 40px;
+  margin-bottom: 24px;
+  padding-top: 24px;
+  border-top: 1px solid rgba(128, 128, 128, 0.1);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  opacity: 0.5; /* Default low opacity for non-intrusive look */
+  transition: opacity 0.3s ease;
+}
+
+.footer:hover {
+  opacity: 1; /* Fully visible on interaction */
+}
+
+.footer-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.heart-icon {
+  color: #ff4d4f;
+  animation: heartbeat 1.5s ease-in-out infinite;
+}
+
+.sponsor-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+/* Base button style */
+.sponsor-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(128, 128, 128, 0.08);
+  border: 1px solid transparent;
+  border-radius: 100px; /* Pill shape */
+  text-decoration: none;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.sponsor-btn:hover {
+  transform: translateY(-2px);
+  color: #fff; /* White text on hover for colored backgrounds */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* --- Brand Specific Colors (Matches your README badges) --- */
+
+/* GitHub - Neutral/Dark */
+.sponsor-btn.github:hover {
+  background-color: #24292e;
+  border-color: #24292e;
+}
+
+/* Ko-fi - Red/Pink (#FF5E5B) */
+.sponsor-btn.kofi:hover {
+  background-color: #FF5E5B;
+  border-color: #FF5E5B;
+}
+
+/* Afdian - Purple (#946ce6) */
+.sponsor-btn.afdian:hover {
+  background-color: #946ce6;
+  border-color: #946ce6;
+}
+
+/* Solana - Green (#14F195) */
+/* Note: Since this green is very bright, we use dark text for contrast */
+.sponsor-btn.solana:hover {
+  background-color: #14F195;
+  border-color: #14F195;
+  color: #000000;
+}
+
+/* Dark mode adjustments specifically for the Solana text if needed */
+@media (prefers-color-scheme: dark) {
+  .sponsor-btn {
+    background: rgba(255, 255, 255, 0.05);
+  }
+}
+
+@keyframes heartbeat {
+  0% {
+    transform: scale(1);
+  }
+  14% {
+    transform: scale(1.15);
+  }
+  28% {
+    transform: scale(1);
+  }
+  42% {
+    transform: scale(1.15);
+  }
+  70% {
+    transform: scale(1);
+  }
+}
