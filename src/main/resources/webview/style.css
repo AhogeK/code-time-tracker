@@ -1,8 +1,9 @@
 :root {
-  /* Fallback colors for CSS variables */
+  /* Fallback colors */
   --text-primary: #000000;
   --text-secondary: #666666;
 
+  /* ... (Scrollbar & Card Variables 保持不变) ... */
   --scrollbar-thumb-color: rgba(128, 128, 128, 0.5);
   --scrollbar-thumb-hover-color: rgba(128, 128, 128, 0.7);
   --scrollbar-thumb-active-color: rgba(128, 128, 128, 0.9);
@@ -11,7 +12,17 @@
   --card-border: rgba(255, 255, 255, 0.1);
   --card-hover-border: rgba(255, 255, 255, 0.2);
   --card-shadow: rgba(0, 0, 0, 0.15);
+
   --label-opacity: 0.6;
+  --metric-label-color: var(--text-secondary);
+
+  --footer-border: rgba(128, 128, 128, 0.1);
+  --footer-opacity: 0.5;
+  --footer-text-color: var(--text-secondary);
+
+  --btn-bg: rgba(128, 128, 128, 0.08);
+  --btn-text: var(--text-secondary);
+  --btn-hover-text: #fff;
 }
 
 body {
@@ -190,12 +201,12 @@ body {
 
 .metric-label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
   opacity: var(--label-opacity);
   margin-bottom: 4px;
-  color: var(--text-secondary, inherit);
+  color: var(--metric-label-color, inherit);
 }
 
 .metric-value {
@@ -240,16 +251,17 @@ body {
 }
 
 /* ========== Footer / Sponsorship Styles ========== */
+
 .footer {
   margin-top: 40px;
   margin-bottom: 24px;
   padding-top: 24px;
-  border-top: 1px solid rgba(128, 128, 128, 0.1);
+  border-top: 1px solid var(--footer-border);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  opacity: 0.5; /* Default low opacity for non-intrusive look */
+  opacity: var(--footer-opacity);
   transition: opacity 0.3s ease;
 }
 
@@ -259,7 +271,7 @@ body {
 
 .footer-text {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--footer-text-color);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -277,25 +289,26 @@ body {
   gap: 12px;
 }
 
+/* Base button style */
 .sponsor-btn {
   display: flex;
   align-items: center;
   gap: 8px;
   padding: 6px 14px;
-  background: rgba(128, 128, 128, 0.08);
+  background: var(--btn-bg);
   border: 1px solid transparent;
-  border-radius: 100px; /* Pill shape */
+  border-radius: 100px;
   text-decoration: none;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: var(--btn-text);
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
 }
 
 .sponsor-btn:hover {
   transform: translateY(-2px);
-  color: #fff; /* White text on hover for colored backgrounds */
+  color: var(--btn-hover-text);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
 

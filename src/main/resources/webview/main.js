@@ -119,8 +119,8 @@ function renderSummary(summaryData) {
 function applyTheme(theme) {
   const root = document.documentElement;
 
-  // 1. 设置基础滚动条颜色
   if (theme.isDark) {
+    // === Dark Mode ===
     root.style.setProperty('--scrollbar-thumb-color', 'rgba(255, 255, 255, 0.2)');
     root.style.setProperty('--scrollbar-thumb-hover-color', 'rgba(255, 255, 255, 0.3)');
     root.style.setProperty('--scrollbar-thumb-active-color', 'rgba(255, 255, 255, 0.4)');
@@ -129,21 +129,43 @@ function applyTheme(theme) {
     root.style.setProperty('--card-border', 'rgba(255, 255, 255, 0.1)');
     root.style.setProperty('--card-hover-border', 'rgba(255, 255, 255, 0.2)');
     root.style.setProperty('--card-shadow', 'rgba(0, 0, 0, 0.15)');
+
     root.style.setProperty('--label-opacity', '0.6');
+    root.style.setProperty('--metric-label-color', 'var(--text-secondary)');
+
+    root.style.setProperty('--footer-border', 'rgba(128, 128, 128, 0.1)');
+    root.style.setProperty('--footer-opacity', '0.5');
+    root.style.setProperty('--footer-text-color', 'var(--text-secondary)');
+
+    root.style.setProperty('--btn-bg', 'rgba(128, 128, 128, 0.08)');
+    root.style.setProperty('--btn-text', 'var(--text-secondary)');
+    root.style.setProperty('--btn-hover-text', '#fff');
   } else {
+    // === Light Mode ===
     root.style.setProperty('--scrollbar-thumb-color', 'rgba(0, 0, 0, 0.2)');
     root.style.setProperty('--scrollbar-thumb-hover-color', 'rgba(0, 0, 0, 0.3)');
     root.style.setProperty('--scrollbar-thumb-active-color', 'rgba(0, 0, 0, 0.4)');
 
-    root.style.setProperty('--card-bg', 'rgba(0, 0, 0, 0.06)');
-    root.style.setProperty('--card-border', 'rgba(0, 0, 0, 0.1)');
-    root.style.setProperty('--card-hover-border', 'rgba(0, 0, 0, 0.2)');
-    root.style.setProperty('--card-shadow', 'rgba(0, 0, 0, 0.1)');
+    root.style.setProperty('--card-bg', 'rgba(0, 0, 0, 0.02)');
+    root.style.setProperty('--card-border', 'rgba(0, 0, 0, 0.12)');
+    root.style.setProperty('--card-hover-border', 'rgba(0, 0, 0, 0.25)');
+    root.style.setProperty('--card-shadow', 'rgba(0, 0, 0, 0.05)');
 
     root.style.setProperty('--label-opacity', '1');
+    root.style.setProperty('--metric-label-color', '#909090');
+
+    root.style.setProperty('--footer-border', 'rgba(0, 0, 0, 0.1)');
+
+    root.style.setProperty('--footer-opacity', '0.4');
+
+    root.style.setProperty('--footer-text-color', 'var(--text-primary)');
+    root.style.setProperty('--btn-text', 'var(--text-primary)');
+
+    root.style.setProperty('--btn-bg', 'rgba(0, 0, 0, 0.05)');
+    root.style.setProperty('--btn-hover-text', '#fff');
   }
 
-  // Text colors from IDE theme - critical for dark theme visibility
+  // Global text colors
   root.style.setProperty('--text-primary', theme.foreground);
   root.style.setProperty('--text-secondary', theme.secondary);
 }
