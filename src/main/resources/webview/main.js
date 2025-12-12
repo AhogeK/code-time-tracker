@@ -19,7 +19,7 @@ globalThis.renderCharts = function (payload) {
     const jsonPayload = JSON.parse(payload);
     const theme = jsonPayload.theme;
 
-    applyScrollbarTheme(theme);
+    applyTheme(theme);
 
     // Render summary dashboard FIRST for better UX
     if (jsonPayload.summaryData) {
@@ -112,20 +112,35 @@ function renderSummary(summaryData) {
 }
 
 /**
- * Applies scrollbar theme based on the current theme colors.
+ * Applies theme colors to CSS variables for UI elements.
+ * Handles both scrollbars and card styling for light/dark modes.
  * @param {Object} theme - Theme colors
  */
-function applyScrollbarTheme(theme) {
+function applyTheme(theme) {
   const root = document.documentElement;
 
+  // 1. 设置基础滚动条颜色
   if (theme.isDark) {
     root.style.setProperty('--scrollbar-thumb-color', 'rgba(255, 255, 255, 0.2)');
     root.style.setProperty('--scrollbar-thumb-hover-color', 'rgba(255, 255, 255, 0.3)');
     root.style.setProperty('--scrollbar-thumb-active-color', 'rgba(255, 255, 255, 0.4)');
+
+    root.style.setProperty('--card-bg', 'rgba(255, 255, 255, 0.05)');
+    root.style.setProperty('--card-border', 'rgba(255, 255, 255, 0.1)');
+    root.style.setProperty('--card-hover-border', 'rgba(255, 255, 255, 0.2)');
+    root.style.setProperty('--card-shadow', 'rgba(0, 0, 0, 0.15)');
+    root.style.setProperty('--label-opacity', '0.6');
   } else {
     root.style.setProperty('--scrollbar-thumb-color', 'rgba(0, 0, 0, 0.2)');
     root.style.setProperty('--scrollbar-thumb-hover-color', 'rgba(0, 0, 0, 0.3)');
     root.style.setProperty('--scrollbar-thumb-active-color', 'rgba(0, 0, 0, 0.4)');
+
+    root.style.setProperty('--card-bg', 'rgba(0, 0, 0, 0.06)');
+    root.style.setProperty('--card-border', 'rgba(0, 0, 0, 0.1)');
+    root.style.setProperty('--card-hover-border', 'rgba(0, 0, 0, 0.2)');
+    root.style.setProperty('--card-shadow', 'rgba(0, 0, 0, 0.1)');
+
+    root.style.setProperty('--label-opacity', '1');
   }
 
   // Text colors from IDE theme - critical for dark theme visibility

@@ -6,6 +6,12 @@
   --scrollbar-thumb-color: rgba(128, 128, 128, 0.5);
   --scrollbar-thumb-hover-color: rgba(128, 128, 128, 0.7);
   --scrollbar-thumb-active-color: rgba(128, 128, 128, 0.9);
+
+  --card-bg: rgba(255, 255, 255, 0.05);
+  --card-border: rgba(255, 255, 255, 0.1);
+  --card-hover-border: rgba(255, 255, 255, 0.2);
+  --card-shadow: rgba(0, 0, 0, 0.15);
+  --label-opacity: 0.6;
 }
 
 body {
@@ -138,9 +144,9 @@ body {
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   cursor: pointer;
   position: relative;
@@ -162,8 +168,8 @@ body {
 
 .summary-card:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.2);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  border-color: var(--card-hover-border);
+  box-shadow: 0 4px 12px var(--card-shadow);
 }
 
 .summary-card:hover::before {
@@ -187,7 +193,7 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
-  opacity: 0.6;
+  opacity: var(--label-opacity);
   margin-bottom: 4px;
   color: var(--text-secondary, inherit);
 }

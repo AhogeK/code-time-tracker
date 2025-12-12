@@ -1,7 +1,7 @@
 [versions]
 
 # Plugin versioning
-pluginVersion = "0.7.3"
+pluginVersion = "0.7.4"
 
 # dependencies versions
 junitVersion = "6.0.1"
