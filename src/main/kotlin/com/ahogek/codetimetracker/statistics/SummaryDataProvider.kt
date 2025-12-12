@@ -78,18 +78,70 @@ class SummaryDataProvider {
         }
 
         val today = LocalDate.now()
-        val timeBoundaries = buildTimeBoundaries(today)
-        val aggregates = aggregateSessionData(sessionTimes, timeBoundaries)
-        val dailyAverage = calculateDailyAverage(aggregates.totalSeconds, aggregates.firstDate, today)
+        val boundaries = buildTimeBoundaries(today)
+
+        // Prepare lists for each period to collect intervals
+        val todayIntervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
+        val weekIntervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
+        val monthIntervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
+        val yearIntervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
+        val totalIntervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
+
+        var firstDate: LocalDate? = null
+
+        for (session in sessionTimes) {
+            // Track total intervals (lifetime)
+            totalIntervals.add(session.startTime to session.endTime)
+
+            // Track earliest date for daily average calculation
+            val sessionDate = session.startTime.toLocalDate()
+            if (firstDate == null || sessionDate.isBefore(firstDate)) {
+                firstDate = sessionDate
+            }
+
+            // Filter and clip sessions for each period using helper
+            addIfOverlaps(session, boundaries.todayStart, boundaries.todayEnd, todayIntervals)
+            addIfOverlaps(session, boundaries.weekStart, boundaries.weekEnd, weekIntervals)
+            addIfOverlaps(session, boundaries.monthStart, boundaries.monthEnd, monthIntervals)
+            addIfOverlaps(session, boundaries.yearStart, boundaries.yearEnd, yearIntervals)
+        }
+
+        // Calculate durations with overlap merging using TimeRangeUtils
+        val totalDuration = TimeRangeUtils.calculateMergedDuration(totalIntervals)
+
+        // Calculate daily average
+        val dailyAverage = if (firstDate != null) {
+            val daysSinceFirst = ChronoUnit.DAYS.between(firstDate, today).coerceAtLeast(1)
+            Duration.ofSeconds(totalDuration.toSeconds() / daysSinceFirst)
+        } else {
+            Duration.ZERO
+        }
 
         return SummaryData(
-            today = Duration.ofSeconds(aggregates.todaySeconds),
+            today = TimeRangeUtils.calculateMergedDuration(todayIntervals),
             dailyAverage = dailyAverage,
-            thisWeek = Duration.ofSeconds(aggregates.thisWeekSeconds),
-            thisMonth = Duration.ofSeconds(aggregates.thisMonthSeconds),
-            thisYear = Duration.ofSeconds(aggregates.thisYearSeconds),
-            total = Duration.ofSeconds(aggregates.totalSeconds)
+            thisWeek = TimeRangeUtils.calculateMergedDuration(weekIntervals),
+            thisMonth = TimeRangeUtils.calculateMergedDuration(monthIntervals),
+            thisYear = TimeRangeUtils.calculateMergedDuration(yearIntervals),
+            total = totalDuration
         )
+    }
+
+    /**
+     * Helper to add a session to a list if it overlaps with the period, clipping it to the period boundaries.
+     */
+    private fun addIfOverlaps(
+        session: SessionSummaryDTO,
+        periodStart: LocalDateTime,
+        periodEnd: LocalDateTime,
+        targetList: MutableList<Pair<LocalDateTime, LocalDateTime>>
+    ) {
+        val effectiveStart = maxOf(session.startTime, periodStart)
+        val effectiveEnd = minOf(session.endTime, periodEnd)
+
+        if (effectiveStart.isBefore(effectiveEnd)) {
+            targetList.add(effectiveStart to effectiveEnd)
+        }
     }
 
     /**
@@ -105,19 +157,6 @@ class SummaryDataProvider {
         val monthEnd: LocalDateTime,
         val yearStart: LocalDateTime,
         val yearEnd: LocalDateTime
-    )
-
-    /**
-     * Aggregated statistics from session data processing.
-     * Separates data accumulation from business logic.
-     */
-    private data class SessionAggregates(
-        val todaySeconds: Long,
-        val thisWeekSeconds: Long,
-        val thisMonthSeconds: Long,
-        val thisYearSeconds: Long,
-        val totalSeconds: Long,
-        val firstDate: LocalDate?
     )
 
     /**
@@ -150,98 +189,6 @@ class SummaryDataProvider {
             yearEnd = TimeRangeUtils.getYearEnd(referenceDate)
         )
     }
-
-    /**
-     * Aggregates session data into period-specific totals using single-pass calculation.
-     * Efficiently processes all sessions once and accumulates time for each period.
-     *
-     * Performance: O(n) where n is the number of sessions
-     *
-     * @param sessions List of session time ranges to process
-     * @param boundaries Time boundaries for period calculations
-     * @return SessionAggregates containing accumulated seconds per period
-     */
-    private fun aggregateSessionData(
-        sessions: List<SessionSummaryDTO>,
-        boundaries: TimeBoundaries
-    ): SessionAggregates {
-        var todaySeconds = 0L
-        var thisWeekSeconds = 0L
-        var thisMonthSeconds = 0L
-        var thisYearSeconds = 0L
-        var totalSeconds = 0L
-        var firstDate: LocalDate? = null
-
-        for (session in sessions) {
-            val sessionDuration = ChronoUnit.SECONDS.between(session.startTime, session.endTime)
-            totalSeconds += sessionDuration
-
-            // Track the earliest session date for daily average calculation
-            val sessionDate = session.startTime.toLocalDate()
-            if (firstDate == null || sessionDate.isBefore(firstDate)) {
-                firstDate = sessionDate
-            }
-
-            // Accumulate overlapping time for each period
-            todaySeconds += calculatePeriodOverlap(session, boundaries.todayStart, boundaries.todayEnd)
-            thisWeekSeconds += calculatePeriodOverlap(session, boundaries.weekStart, boundaries.weekEnd)
-            thisMonthSeconds += calculatePeriodOverlap(session, boundaries.monthStart, boundaries.monthEnd)
-            thisYearSeconds += calculatePeriodOverlap(session, boundaries.yearStart, boundaries.yearEnd)
-        }
-
-        return SessionAggregates(
-            todaySeconds = todaySeconds,
-            thisWeekSeconds = thisWeekSeconds,
-            thisMonthSeconds = thisMonthSeconds,
-            thisYearSeconds = thisYearSeconds,
-            totalSeconds = totalSeconds,
-            firstDate = firstDate
-        )
-    }
-
-    /**
-     * Calculates overlap between a session and a time period.
-     * Returns 0 if there's no overlap, otherwise returns overlapping duration in seconds.
-     *
-     * @param session The coding session to check
-     * @param periodStart Start of the time period (inclusive)
-     * @param periodEnd End of the time period (exclusive)
-     * @return Overlapping duration in seconds (0 if no overlap)
-     */
-    private fun calculatePeriodOverlap(
-        session: SessionSummaryDTO,
-        periodStart: LocalDateTime,
-        periodEnd: LocalDateTime
-    ): Long {
-        return if (session.endTime.isAfter(periodStart) && session.startTime.isBefore(periodEnd)) {
-            calculateOverlap(session.startTime, session.endTime, periodStart, periodEnd)
-        } else {
-            0L
-        }
-    }
-
-    /**
-     * Calculates daily average coding time based on total accumulation and date range.
-     * Uses the earliest session date to determine the calculation window.
-     *
-     * @param totalSeconds Total accumulated coding time in seconds
-     * @param firstDate Earliest session date (null if no sessions)
-     * @param today Current date for calculation
-     * @return Duration representing average daily coding time
-     */
-    private fun calculateDailyAverage(
-        totalSeconds: Long,
-        firstDate: LocalDate?,
-        today: LocalDate
-    ): Duration {
-        return if (firstDate != null) {
-            val daysSinceFirst = ChronoUnit.DAYS.between(firstDate, today).coerceAtLeast(1)
-            Duration.ofSeconds(totalSeconds / daysSinceFirst)
-        } else {
-            Duration.ZERO
-        }
-    }
-
 
     /**
      * SQL-based computation strategy for large datasets.
@@ -291,27 +238,5 @@ class SummaryDataProvider {
             thisYear = thisYearDuration,
             total = totalDuration
         )
-    }
-
-
-    /**
-     * Calculates the overlapping duration between a session and a time range.
-     * Handles sessions that partially overlap with the target range.
-     *
-     * @return Overlapping duration in seconds
-     */
-    private fun calculateOverlap(
-        sessionStart: LocalDateTime,
-        sessionEnd: LocalDateTime,
-        rangeStart: LocalDateTime,
-        rangeEnd: LocalDateTime
-    ): Long {
-        val effectiveStart = maxOf(sessionStart, rangeStart)
-        val effectiveEnd = minOf(sessionEnd, rangeEnd)
-        return if (effectiveStart.isBefore(effectiveEnd)) {
-            ChronoUnit.SECONDS.between(effectiveStart, effectiveEnd)
-        } else {
-            0L
-        }
     }
 }

@@ -3,6 +3,7 @@ package com.ahogek.codetimetracker.database
 import com.ahogek.codetimetracker.model.*
 import com.ahogek.codetimetracker.user.UserManager
 import com.ahogek.codetimetracker.util.PathUtils
+import com.ahogek.codetimetracker.util.TimeRangeUtils
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.diagnostic.Logger
 import java.sql.Connection
@@ -311,27 +312,36 @@ object DatabaseManager {
      * @return The total duration of all encoding activities (Duration).
      */
     fun getTotalCodingTime(projectName: String? = null): Duration {
-        // Uses strftime('%s', column) to convert the time string into a Unix timestamp (seconds).
-        // Then, it subtracts to get the number of seconds for each session, and finally uses the SUM() function to get the total.
-        val baseSql =
-            "SELECT SUM(strftime('%s', end_time) - strftime('%s', start_time)) FROM coding_sessions WHERE is_deleted = 0"
-        val sql = if (projectName != null) "$baseSql AND project_name = ?" else baseSql
-        var totalSeconds = 0L
+        val conditions = mutableListOf("is_deleted = 0")
+        if (projectName != null) {
+            conditions.add("project_name = ?")
+        }
+
+        val sql = "SELECT start_time, end_time FROM coding_sessions WHERE ${conditions.joinToString(" AND ")}"
+        val intervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
+
         try {
             withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
-                    projectName?.let { pstmt.setString(1, it) }
+                    if (projectName != null) {
+                        pstmt.setString(1, projectName)
+                    }
                     pstmt.executeQuery().use { rs ->
-                        if (rs.next()) {
-                            totalSeconds = rs.getLong(1)
+                        while (rs.next()) {
+                            val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val end = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            intervals.add(start to end)
                         }
                     }
                 }
             }
         } catch (e: Exception) {
             log.error("Failed to get total coding time from database.", e)
+            return Duration.ZERO
         }
-        return Duration.ofSeconds(totalSeconds)
+
+        // 使用工具类合并重叠时间
+        return TimeRangeUtils.calculateMergedDuration(intervals)
     }
 
     /**
@@ -355,15 +365,13 @@ object DatabaseManager {
         endTime: LocalDateTime,
         projectName: String? = null
     ): Duration {
-        // SQL will fetch all coding sessions that overlap with the target period.
-        // Any session whose end_time is after the period's start, and whose start_time is before the period's end.
-        // Optional project filter
         val sql = if (projectName != null) {
             "$SQL_SELECT_SESSIONS_IN_RANGE AND project_name = ?"
         } else {
             SQL_SELECT_SESSIONS_IN_RANGE
         }
-        var totalSeconds = 0L
+
+        val intervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
 
         try {
             withConnection { conn ->
@@ -374,16 +382,15 @@ object DatabaseManager {
 
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            // Parse session times from database
                             val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
                             val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
-                            // The latest possible session start for overlap
+
+                            // Calculate the effective overlap with the target period
                             val effectiveStart = maxOf(sessionStart, startTime)
-                            // The earliest possible session end for overlap
                             val effectiveEnd = minOf(sessionEnd, endTime)
-                            // If there's a valid overlapping range, add its duration
+
                             if (effectiveStart.isBefore(effectiveEnd)) {
-                                totalSeconds += Duration.between(effectiveStart, effectiveEnd).toSeconds()
+                                intervals.add(effectiveStart to effectiveEnd)
                             }
                         }
                     }
@@ -391,8 +398,11 @@ object DatabaseManager {
             }
         } catch (e: Exception) {
             log.error("Failed to get coding time for period from database.", e)
+            return Duration.ZERO
         }
-        return Duration.ofSeconds(totalSeconds)
+
+        // 使用工具类合并重叠时间
+        return TimeRangeUtils.calculateMergedDuration(intervals)
     }
 
     /**

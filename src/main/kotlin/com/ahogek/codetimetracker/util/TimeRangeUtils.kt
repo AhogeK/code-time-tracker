@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.util
 
 import java.time.DayOfWeek
+import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.temporal.TemporalAdjusters
@@ -127,5 +128,47 @@ object TimeRangeUtils {
      */
     fun getDayEnd(referenceDate: LocalDate = LocalDate.now()): LocalDateTime {
         return referenceDate.plusDays(1).atStartOfDay()
+    }
+
+    /**
+     * Calculates the total duration of a list of time intervals, merging overlapping intervals.
+     * This ensures that concurrent coding sessions (e.g., in multiple IDE windows) are not double-counted.
+     *
+     * @param intervals List of start and end time pairs.
+     * @return The total merged duration.
+     */
+    fun calculateMergedDuration(intervals: List<Pair<LocalDateTime, LocalDateTime>>): Duration {
+        if (intervals.isEmpty()) return Duration.ZERO
+
+        // Sort by start time to process sequentially
+        val sorted = intervals.sortedBy { it.first }
+        var totalDuration = Duration.ZERO
+
+        // Initialize with the first interval
+        var currentStart = sorted[0].first
+        var currentEnd = sorted[0].second
+
+        for (i in 1 until sorted.size) {
+            val next = sorted[i]
+            val nextStart = next.first
+            val nextEnd = next.second
+
+            if (nextStart.isBefore(currentEnd)) {
+                // Overlap detected: extend the current interval's end if the next one ends later
+                if (nextEnd.isAfter(currentEnd)) {
+                    currentEnd = nextEnd
+                }
+            } else {
+                // No overlap: add the current merged interval to total and start a new one
+                totalDuration = totalDuration.plus(Duration.between(currentStart, currentEnd))
+                currentStart = nextStart
+                currentEnd = nextEnd
+            }
+        }
+
+        // Add the final interval
+        totalDuration = totalDuration.plus(Duration.between(currentStart, currentEnd))
+
+        return totalDuration
     }
 }
