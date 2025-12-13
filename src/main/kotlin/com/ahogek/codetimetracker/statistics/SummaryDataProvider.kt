@@ -22,7 +22,7 @@ import java.time.temporal.ChronoUnit
  * @author AhogeK ahogek@gmail.com
  * @since 2025-12-05 16:46:13
  */
-class SummaryDataProvider {
+class SummaryDataProvider : ChartDataProvider {
     private val log = Logger.getInstance(SummaryDataProvider::class.java)
 
     companion object {
@@ -33,7 +33,10 @@ class SummaryDataProvider {
         private const val IN_MEMORY_THRESHOLD = 20_000
     }
 
-    data class SummaryData(
+    /**
+     * Internal data holder for duration statistics.
+     */
+    private data class SummaryData(
         val today: Duration,
         val dailyAverage: Duration,
         val thisWeek: Duration,
@@ -43,32 +46,55 @@ class SummaryDataProvider {
     )
 
     /**
+     * Implementation of ChartDataProvider.
+     * Maps the internal Duration objects to seconds (Long) for the frontend.
+     */
+    override fun prepareData(
+        startTime: LocalDateTime?,
+        endTime: LocalDateTime?
+    ): Map<String, Any> {
+        // Compute the summary using the existing adaptive strategy
+        val summary = computeSummary()
+
+        // Transform strict types (Duration) to frontend-friendly types (Seconds/Long)
+        return mapOf(
+            "today" to summary.today.toSeconds(),
+            "dailyAverage" to summary.dailyAverage.toSeconds(),
+            "thisWeek" to summary.thisWeek.toSeconds(),
+            "thisMonth" to summary.thisMonth.toSeconds(),
+            "thisYear" to summary.thisYear.toSeconds(),
+            "total" to summary.total.toSeconds()
+        )
+    }
+
+    override fun getChartKey(): String = "summaryData"
+
+    override fun requiresTimeRange(): Boolean = false
+
+    /**
      * Computes all summary statistics using an adaptive strategy.
      * Automatically selects the optimal computation method based on data volume.
      */
-    fun computeSummary(): SummaryData {
+    private fun computeSummary(): SummaryData {
         return try {
             val totalRecords = DatabaseManager.getRecordCount()
             if (totalRecords < IN_MEMORY_THRESHOLD) {
-                log.info("Using memory computation strategy (Record count: $totalRecords)")
+                log.debug("Using memory computation strategy (Record count: $totalRecords)")
                 computeSummaryInMemory()
             } else {
-                log.info("Using database aggregation strategy (Record count: $totalRecords)")
+                log.debug("Using database aggregation strategy (Record count: $totalRecords)")
                 computeSummaryWithSQL()
             }
         } catch (e: Exception) {
             log.error("Statistical data calculating failed", e)
-            SummaryData(
-                Duration.ZERO, Duration.ZERO, Duration.ZERO,
-                Duration.ZERO, Duration.ZERO, Duration.ZERO
-            )
+            createEmptySummaryData()
         }
     }
 
     /**
      * In-memory computation strategy using lightweight DTOs.
      * Optimized for memory efficiency by loading only time ranges.
-     * Uses TimeRangeUtils for consistent time boundary calculations.
+     * Uses TimeRangeUtils for consistent time boundary calculations and overlap merging.
      */
     private fun computeSummaryInMemory(): SummaryData {
         val sessionTimes = DatabaseManager.getAllActiveSessionTimes()
@@ -106,7 +132,7 @@ class SummaryDataProvider {
             addIfOverlaps(session, boundaries.yearStart, boundaries.yearEnd, yearIntervals)
         }
 
-        // Calculate durations with overlap merging using TimeRangeUtils
+        // Calculate durations with overlap merging using TimeRangeUtils (Crucial for multi-project/window accuracy)
         val totalDuration = TimeRangeUtils.calculateMergedDuration(totalIntervals)
 
         // Calculate daily average
@@ -136,8 +162,9 @@ class SummaryDataProvider {
         periodEnd: LocalDateTime,
         targetList: MutableList<Pair<LocalDateTime, LocalDateTime>>
     ) {
-        val effectiveStart = maxOf(session.startTime, periodStart)
-        val effectiveEnd = minOf(session.endTime, periodEnd)
+        // Compare comparable directly using standard library functions
+        val effectiveStart = if (session.startTime.isAfter(periodStart)) session.startTime else periodStart
+        val effectiveEnd = if (session.endTime.isBefore(periodEnd)) session.endTime else periodEnd
 
         if (effectiveStart.isBefore(effectiveEnd)) {
             targetList.add(effectiveStart to effectiveEnd)

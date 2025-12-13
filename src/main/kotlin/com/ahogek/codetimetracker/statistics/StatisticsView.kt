@@ -52,6 +52,7 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
         .create()
 
     private val dataProvides: List<ChartDataProvider> = listOf(
+        SummaryDataProvider(),
         YearlyActivityDataProvider(),
         RecentActivityDataProvider(),
         DailyHourDataProvider(),
@@ -60,8 +61,6 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
         ProjectDistributionDataProvider(),
         TimeOfDayDistributionDataProvider()
     )
-
-    private val summaryProvider = SummaryDataProvider()
 
     init {
         // Setup Toolbar (Updated with Import/Export)
@@ -182,23 +181,8 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
             val endTime = LocalDateTime.now()
             val startTime = endTime.minusYears(1)
 
-            // Compute summary statistics for header display
-            val summaryData = summaryProvider.computeSummary()
-
             val payload = buildMap {
                 put("theme", getThemeColors())
-
-                // Add summary data (convert Duration to seconds for JSON)
-                put(
-                    "summaryData", mapOf(
-                        "today" to summaryData.today.toSeconds(),
-                        "dailyAverage" to summaryData.dailyAverage.toSeconds(),
-                        "thisWeek" to summaryData.thisWeek.toSeconds(),
-                        "thisMonth" to summaryData.thisMonth.toSeconds(),
-                        "thisYear" to summaryData.thisYear.toSeconds(),
-                        "total" to summaryData.total.toSeconds()
-                    )
-                )
 
                 dataProvides.forEach { provider ->
                     val data = if (provider.requiresTimeRange()) {
