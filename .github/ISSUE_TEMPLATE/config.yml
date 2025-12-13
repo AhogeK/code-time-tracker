@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Report a Security Vulnerability
+    url: https://github.com/AhogeK/code-time-tracker/blob/main/SECURITY.md
+    about: Please do not open public issues for security vulnerabilities.
+  - name: 💬 Ask a Question
+    url: https://github.com/AhogeK/code-time-tracker/discussions
+    about: Please ask and answer questions here.
