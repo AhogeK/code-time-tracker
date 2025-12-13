@@ -197,6 +197,16 @@ function renderYearlyActivityHeatmap(data, streaks, theme) {
   const startDate = new Date();
   startDate.setFullYear(endDate.getFullYear() - 1);
 
+  // Helper to format date as YYYY-MM-DD in local time
+  // Fix: Using toISOString() uses UTC time, which causes the "latest cell is yesterday" bug
+  // when the user is in a timezone ahead of UTC (e.g. UTC+8) and it's a new day locally but not yet in UTC.
+  const toLocalDateString = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   const option = {
     backgroundColor: 'transparent',
     title: [{
@@ -247,7 +257,7 @@ function renderYearlyActivityHeatmap(data, streaks, theme) {
       left: 30,
       right: 30,
       cellSize: ['auto', 13],
-      range: [startDate.toISOString().slice(0, 10), endDate.toISOString().slice(0, 10)],
+      range: [toLocalDateString(startDate), toLocalDateString(endDate)],
       dayLabel: {
         color: theme.secondary
       },
