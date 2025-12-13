@@ -18,6 +18,10 @@
       to help you understand your development patterns and improve productivity.
     </p>
 
+    <p>
+      <strong>⚠️ Compatibility Note:</strong> This plugin requires <strong>IntelliJ IDEA 2024.2+</strong> (Build 242+) as it relies on Java 21 features.
+    </p>
+
     <h2>✨ Key Features</h2>
     <ul>
       <li><strong>Automatic Time Tracking</strong> - Captures keyboard and mouse activity with intelligent idle detection</li>

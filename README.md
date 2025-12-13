@@ -6,6 +6,11 @@
 
 A JetBrains Platform plugin for automatic coding time tracking and analytics.
 
+## 📋 Requirements
+
+- **IntelliJ IDEA 2024.2** or later (Build 242+)
+- **Java 21** runtime (Bundled with IDE 2024.2+)
+
 ## Features
 
 - **🎯 Automatic Tracking** - Captures keyboard and mouse activity with idle detection
