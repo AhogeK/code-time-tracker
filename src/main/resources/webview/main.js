@@ -529,7 +529,7 @@ function renderOverallHourlyChart(data, totalDays, theme) {
       top: 80,
       left: 50,
       right: 30,
-      bottom: 30
+      bottom: 20
     },
     xAxis: {
       type: 'category',
@@ -889,8 +889,6 @@ function renderTimeOfDayDistribution(data, theme) {
     totalSeconds += seconds;
   });
 
-  const totalHours = totalSeconds / 3600;
-
   // Prepare chart data in correct order
   const chartData = timePeriodOrder.map((period, index) => {
     const seconds = dataMap[period] || 0;
@@ -908,16 +906,11 @@ function renderTimeOfDayDistribution(data, theme) {
     backgroundColor: 'transparent',
     title: {
       text: 'Time of Day Distribution',
-      subtext: `Total: ${totalHours.toFixed(2)} hours`,
       left: 'center',
       top: 0,
       textStyle: {
         color: theme.foreground
       },
-      subtextStyle: {
-        color: theme.secondary,
-        fontSize: 12
-      }
     },
     tooltip: {
       trigger: 'axis',
@@ -933,11 +926,11 @@ function renderTimeOfDayDistribution(data, theme) {
       }
     },
     grid: {
-      left: '20%',
-      right: '10%',
-      top: 80,
-      bottom: 30,
-      containLabel: true
+      left: 160,
+      right: 160,
+      top: 50,
+      bottom: 20,
+      containLabel: false
     },
     xAxis: {
       type: 'value',
