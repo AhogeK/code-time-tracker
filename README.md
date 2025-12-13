@@ -11,7 +11,7 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 - **IntelliJ IDEA 2024.2** or later (Build 242+)
 - **Java 21** runtime (Bundled with IDE 2024.2+)
 
-## Features
+## ✨ Features
 
 - **🎯 Automatic Tracking** - Captures keyboard and mouse activity with idle detection
 - **📊 Real-time Analytics** - Live status bar widget with period-based statistics
@@ -20,20 +20,21 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 - **💾 Data Management** - Export/import sessions in JSON format
 - **🔒 Privacy First** - All data stored locally in SQLite
 
-## Contributing
+## 🤝 Contributing
 
-Contributions welcome! Please follow:
+Contributions are always welcome!
 
-1. Fork & create feature branch
-2. Follow [Kotlin conventions](https://kotlinlang.org/docs/coding-conventions.html)
-3. Write tests for new features
-4. Submit PR with clear description
+Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to set up the development environment and submit Pull
+Requests.
 
-## License
+Please also note that this project is released with a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this
+project you agree to abide by its terms.
+
+## 📄 License
 
 Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
-## Contact
+## 📬 Contact
 
 **Maintainer**: AhogeK  
 **GitHub**: [@AhogeK](https://github.com/AhogeK)  
