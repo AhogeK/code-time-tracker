@@ -3,6 +3,7 @@
  */
 const chartInstances = {
   heatmap: null,
+  recentActivityChart: null,
   dailyHourHeatmap: null,
   overallHourlyChart: null,
   languageDistributionChart: null,
@@ -24,6 +25,13 @@ globalThis.renderCharts = function (payload) {
     // Render summary dashboard FIRST for better UX
     if (jsonPayload.summaryData) {
       renderSummary(jsonPayload.summaryData);
+    }
+
+    if (jsonPayload.recentActivity) {
+      renderRecentActivityChart(
+          jsonPayload.recentActivity.data,
+          theme
+      );
     }
 
     // Render yearly activity heatmap
@@ -256,6 +264,89 @@ function renderYearlyActivityHeatmap(data, streaks, theme) {
   };
 
   chartInstances.heatmap.setOption(option);
+}
+
+function renderRecentActivityChart(data, theme) {
+  disposeChart('recentActivityChart');
+
+  const chartDom = document.getElementById('recentActivityChart');
+  if (!chartDom) return;
+
+  const chartTheme = theme.isDark ? 'dark' : 'default';
+  chartInstances.recentActivityChart = echarts.init(chartDom, chartTheme);
+
+  const dates = data.map(item => item.date);
+  const values = data.map(item => (item.seconds / 3600).toFixed(2));
+
+  const option = {
+    backgroundColor: 'transparent',
+    title: {
+      text: 'Coding Activity (Last 30 Days)',
+      left: 'center',
+      top: 0,
+      textStyle: {color: theme.foreground}
+    },
+    tooltip: {
+      trigger: 'axis',
+      formatter: function (params) {
+        if (!params || params.length === 0) return '';
+        const item = params[0];
+        const rawData = data[item.dataIndex];
+        const hours = Math.floor(item.value);
+        const minutes = Math.round((item.value - hours) * 60);
+        let timeStr = '';
+        if (hours > 0) timeStr += `${hours}h `;
+        timeStr += `${minutes}m`;
+        return `${rawData.fullDate}<br/>Time: ${timeStr}`;
+      }
+    },
+    grid: {left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true},
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: dates,
+      axisLabel: {color: theme.secondary, interval: 2},
+      axisLine: {lineStyle: {color: theme.secondary}}
+    },
+    yAxis: {
+      type: 'value',
+      name: 'Hours',
+      nameTextStyle: {color: theme.secondary},
+      axisLabel: {color: theme.secondary, formatter: '{value} h'},
+      splitLine: {
+        lineStyle: {color: theme.isDark ? '#333' : '#e0e0e0', type: 'dashed'}
+      }
+    },
+    series: [
+      {
+        name: 'Coding Time',
+        type: 'line',
+        smooth: true,
+        symbol: 'none',
+        lineStyle: {
+          width: 3,
+          color: new echarts.graphic.LinearGradient(0, 0, 1, 0, [
+            {offset: 0, color: '#5470c6'},
+            {offset: 1, color: '#91cc75'}
+          ])
+        },
+        areaStyle: {
+          opacity: 0.2,
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            {offset: 0, color: '#5470c6'},
+            {offset: 1, color: 'rgba(145, 204, 117, 0.1)'}
+          ])
+        },
+        emphasis: {
+          focus: 'series',
+          itemStyle: {color: '#91cc75', borderColor: '#fff', borderWidth: 2}
+        },
+        data: values
+      }
+    ]
+  };
+
+  chartInstances.recentActivityChart.setOption(option);
 }
 
 /**

@@ -53,6 +53,7 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
 
     private val dataProvides: List<ChartDataProvider> = listOf(
         YearlyActivityDataProvider(),
+        RecentActivityDataProvider(),
         DailyHourDataProvider(),
         OverallHourlyDataProvider(),
         LanguageDistributionDataProvider(),

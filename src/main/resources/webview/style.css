@@ -3,7 +3,6 @@
   --text-primary: #000000;
   --text-secondary: #666666;
 
-  /* ... (Scrollbar & Card Variables 保持不变) ... */
   --scrollbar-thumb-color: rgba(128, 128, 128, 0.5);
   --scrollbar-thumb-hover-color: rgba(128, 128, 128, 0.7);
   --scrollbar-thumb-active-color: rgba(128, 128, 128, 0.9);
@@ -82,6 +81,18 @@ body {
   box-sizing: border-box;
   flex: 0 0 auto;
   width: 800px;
+}
+
+/* Recent Activity Line Chart */
+
+.recent-activity-chart {
+  width: 840px;
+}
+
+#recentActivityChart {
+  width: 100%;
+  height: 250px;
+  min-height: 250px;
 }
 
 /* ========== Fixed Optimal Widths ========== */
