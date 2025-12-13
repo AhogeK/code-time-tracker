@@ -1,6 +1,6 @@
 # Code Time Tracker
 
-[![Version](https://img.shields.io/badge/version-0.8.3-blue.svg)](https://github.com/AhogeK/code-time-tracker)
+[![Version](https://img.shields.io/badge/version-0.8.4-blue.svg)](https://github.com/AhogeK/code-time-tracker)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-IntelliJ%202025.3%2B-orange.svg)](https://plugins.jetbrains.com/)
 

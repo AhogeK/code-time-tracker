@@ -310,7 +310,7 @@ function renderRecentActivityChart(data, theme) {
         return `${rawData.fullDate}<br/>Time: ${timeStr}`;
       }
     },
-    grid: {left: '3%', right: '4%', bottom: '3%', top: '15%', containLabel: true},
+    grid: {left: '3%', right: '4%', bottom: 20, top: 60, containLabel: true},
     xAxis: {
       type: 'category',
       boundaryGap: false,
