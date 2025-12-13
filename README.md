@@ -8,7 +8,8 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 
 ## 📋 Requirements
 
-- **IntelliJ IDEA 2024.2** or later (Build 242+)
+- **JetBrains IDEs 2024.2** or later (Build 242+)
+  *(Compatible with IntelliJ IDEA, PyCharm, WebStorm, GoLand, Android Studio, etc.)*
 - **Java 21** runtime (Bundled with IDE 2024.2+)
 
 ## ✨ Features
