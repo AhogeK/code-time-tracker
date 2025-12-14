@@ -24,6 +24,11 @@ out/
 .idea/data_source_mapping.xml
 .idea/GitCommitMessageStorage.xml
 .idea/material_theme_project_new.xml
+.idea/vcs.xml
+!.idea/jsLibraryMappings.xml
+!.idea/dictionaries/project.xml
+!.idea/sqldialects.xml
+.idea/.gitignore
 
 ### Eclipse ###
 .apt_generated
