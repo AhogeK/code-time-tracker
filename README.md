@@ -32,6 +32,16 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
   <img src="assets/Screenshot%202025-12-14%20at%2016.44.09.png" alt="Dashboard & Statistics" width="600">
 </details>
 
+<details>
+  <summary><b>Import/Export Data</b></summary>
+  <br>
+  <p>The project includes import and export functions to facilitate data synchronization between different devices. It will help you skip duplicate data.</p>
+  <img src="assets/Screenshot%202025-12-14%20at%2018.29.29.png" alt="Import/Export Data" width="400">
+  <img src="assets/Screenshot%202025-12-14%20at%2018.29.38.png" alt="Import/Export Data" width="400">
+  <img src="assets/Screenshot%202025-12-14%20at%2018.30.29.png" alt="Import/Export Data" width="400">
+  <img src="assets/Screenshot%202025-12-14%20at%2018.30.45.png" alt="Import/Export Data" width="400">
+</details>
+
 ## ✨ Features
 
 - **🎯 Automatic Tracking** - Captures keyboard and mouse activity with idle detection
