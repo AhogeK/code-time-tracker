@@ -23,7 +23,7 @@ Please email **ahogek@gmail.com**.
 
 In your report, please include:
 
-1. The version of the plugin and IntelliJ IDEA you are using.
+1. The version of the plugin and the JetBrains IDE you are using.
 2. A description of the vulnerability.
 3. Steps to reproduce the issue (if applicable).
 
