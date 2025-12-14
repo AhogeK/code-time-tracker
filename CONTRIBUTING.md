@@ -13,7 +13,7 @@ You don't need a complicated setup to get started.
 ### Prerequisites
 
 - **JDK 21** (Required for building the project)
-- **IntelliJ IDEA** (Community or Ultimate, version 2024.2 or later is recommended)
+- **IntelliJ IDEA** (Community or Ultimate, version 2025.1 or later is recommended)
 
 ### How to Run Locally
 

@@ -1,6 +1,6 @@
 # Code Time Tracker
 
-[![Version](https://img.shields.io/badge/version-0.8.6-blue.svg)](https://github.com/AhogeK/code-time-tracker)
+[![Version](https://img.shields.io/badge/version-0.8.7-blue.svg)](https://github.com/AhogeK/code-time-tracker)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-IntelliJ%202025.3%2B-orange.svg)](https://plugins.jetbrains.com/)
 
@@ -8,9 +8,9 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 
 ## 📋 Requirements
 
-- **JetBrains IDEs 2024.2** or later (Build 242+)
+- **JetBrains IDEs 2025.1** or later (Build 251+)
   *(Compatible with IntelliJ IDEA, PyCharm, WebStorm, GoLand, Android Studio, etc.)*
-- **Java 21** runtime (Bundled with IDE 2024.2+)
+- **Java 21** runtime (Bundled with IDE 2025.1+)
 
 ## 📸 Gallery
 
