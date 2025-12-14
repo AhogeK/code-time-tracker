@@ -1,6 +1,6 @@
 # Code Time Tracker
 
-[![Version](https://img.shields.io/badge/version-0.8.5-blue.svg)](https://github.com/AhogeK/code-time-tracker)
+[![Version](https://img.shields.io/badge/version-0.8.6-blue.svg)](https://github.com/AhogeK/code-time-tracker)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-IntelliJ%202025.3%2B-orange.svg)](https://plugins.jetbrains.com/)
 
@@ -27,7 +27,7 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
   <p>If the chart is not in the right-side toolbar, you can find it under the menu bar: View → Appearance.</p>
   <img src="assets/Screenshot%202025-12-14%20at%2016.35.32.png" alt="Dashboard & Statistics menu" width="600">
   <p>Clicking it will open the statistics chart content for the coding time.</p>
-  <img src="assets/Screenshot%202025-12-14%20at%2016.37.01.png" alt="Dashboard & Statistics" width="600">
+  <img src="assets/Screenshot%202025-12-14%20at%2018.00.32.png" alt="Dashboard & Statistics" width="600">
   <img src="assets/Screenshot%202025-12-14%20at%2016.43.54.png" alt="Dashboard & Statistics" width="600">
   <img src="assets/Screenshot%202025-12-14%20at%2016.44.09.png" alt="Dashboard & Statistics" width="600">
 </details>

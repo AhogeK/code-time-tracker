@@ -11,6 +11,7 @@ import com.intellij.ui.components.JBLabel
 import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
+import java.awt.Dimension
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import javax.swing.ButtonGroup
@@ -192,7 +193,7 @@ class ExportDialog(project: Project?) : DialogWrapper(project) {
     }
 
     override fun createCenterPanel(): JComponent? {
-        return FormBuilder.createFormBuilder()
+        val panel = FormBuilder.createFormBuilder()
             .addComponent(allDataRadio)
             .addComponent(dateRangeRadio)
             .addVerticalGap(10)
@@ -200,6 +201,10 @@ class ExportDialog(project: Project?) : DialogWrapper(project) {
             .addVerticalGap(5)
             .addLabeledComponent(JBLabel("End date:"), endDatePicker)
             .panel
+
+        panel.preferredSize = Dimension(JBUI.scale(500), panel.preferredSize.height)
+
+        return panel
     }
 
     override fun doValidate(): ValidationInfo? {
