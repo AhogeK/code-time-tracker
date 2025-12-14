@@ -22,6 +22,8 @@ out/
 !**/src/test/**/out/
 .intellijPlatform
 .idea/data_source_mapping.xml
+.idea/GitCommitMessageStorage.xml
+.idea/material_theme_project_new.xml
 
 ### Eclipse ###
 .apt_generated
