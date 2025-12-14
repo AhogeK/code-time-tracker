@@ -12,6 +12,26 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
   *(Compatible with IntelliJ IDEA, PyCharm, WebStorm, GoLand, Android Studio, etc.)*
 - **Java 21** runtime (Bundled with IDE 2024.2+)
 
+## 📸 Gallery
+
+<details>
+  <summary><b>Timer Display</b></summary>
+  <br>
+  <p>The bottom toolbar displays a timer, which you can click to select the type you want to show.</p>
+  <img src="assets/Screenshot%202025-12-14%20at%2016.31.05.png" alt="Timer Display" width="600">
+</details>
+
+<details>
+  <summary><b>Dashboard & Statistics</b></summary>
+  <br>
+  <p>If the chart is not in the right-side toolbar, you can find it under the menu bar: View → Appearance.</p>
+  <img src="assets/Screenshot%202025-12-14%20at%2016.35.32.png" alt="Dashboard & Statistics menu" width="600">
+  <p>Clicking it will open the statistics chart content for the coding time.</p>
+  <img src="assets/Screenshot%202025-12-14%20at%2016.37.01.png" alt="Dashboard & Statistics" width="600">
+  <img src="assets/Screenshot%202025-12-14%20at%2016.43.54.png" alt="Dashboard & Statistics" width="600">
+  <img src="assets/Screenshot%202025-12-14%20at%2016.44.09.png" alt="Dashboard & Statistics" width="600">
+</details>
+
 ## ✨ Features
 
 - **🎯 Automatic Tracking** - Captures keyboard and mouse activity with idle detection
