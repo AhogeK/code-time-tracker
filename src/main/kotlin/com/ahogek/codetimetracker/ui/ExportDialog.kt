@@ -2,6 +2,7 @@ package com.ahogek.codetimetracker.ui
 
 import com.github.lgooddatepicker.components.DatePicker
 import com.github.lgooddatepicker.components.DatePickerSettings
+import com.intellij.icons.AllIcons
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.ui.DialogWrapper
 import com.intellij.openapi.ui.ValidationInfo
@@ -45,8 +46,14 @@ class ExportDialog(project: Project?) : DialogWrapper(project) {
         group.add(dateRangeRadio)
 
         val toggleFields = {
-            startDatePicker.isEnabled = dateRangeRadio.isSelected
-            endDatePicker.isEnabled = dateRangeRadio.isSelected
+            val isDateRange = dateRangeRadio.isSelected
+            startDatePicker.isEnabled = isDateRange
+            endDatePicker.isEnabled = isDateRange
+            if (!JBColor.isBright()) {
+                val darkBg = UIUtil.getTextFieldBackground()
+                startDatePicker.componentDateTextField.background = darkBg
+                endDatePicker.componentDateTextField.background = darkBg
+            }
         }
 
         allDataRadio.addActionListener { toggleFields() }
@@ -139,6 +146,15 @@ class ExportDialog(project: Project?) : DialogWrapper(project) {
             // --- Navigation Buttons ---
             settings.setColor(DatePickerSettings.DateArea.TextMonthAndYearNavigationButtons, brightText)
             settings.setColor(DatePickerSettings.DateArea.BackgroundMonthAndYearNavigationButtons, panelBg)
+        } else {
+            // Light Theme Fixes
+            val darkText = JBColor.BLACK
+            settings.setColor(DatePickerSettings.DateArea.TextMonthAndYearMenuLabels, darkText)
+            settings.setColor(DatePickerSettings.DateArea.TextMonthAndYearNavigationButtons, darkText)
+            settings.setColor(DatePickerSettings.DateArea.CalendarTextNormalDates, darkText)
+            settings.setColor(DatePickerSettings.DateArea.CalendarTextWeekdays, darkText)
+            settings.setColor(DatePickerSettings.DateArea.TextTodayLabel, darkText)
+            settings.setColor(DatePickerSettings.DateArea.TextClearLabel, darkText)
         }
 
         // Disable keyboard editing for consistency
@@ -162,10 +178,14 @@ class ExportDialog(project: Project?) : DialogWrapper(project) {
 
         // --- Toggle Button Styling (Minimalist) ---
         picker.componentToggleCalendarButton.apply {
+            text = ""
+            icon = AllIcons.Actions.MoreHorizontal
+
             isContentAreaFilled = false
+            isFocusPainted = false
+            isBorderPainted = false
+
             border = JBUI.Borders.empty()
-            // Optional: Set custom icon for better dark theme integration
-            // icon = AllIcons.Actions.Calendar
         }
 
         return picker

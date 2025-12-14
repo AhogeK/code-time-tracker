@@ -13,7 +13,7 @@ body:
     attributes:
       label: Plugin Version
       description: Which version of Code Time Tracker are you using?
-      placeholder: e.g. 0.8.4
+      placeholder: e.g. 0.8.5
     validations:
       required: true
 
