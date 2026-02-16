@@ -137,7 +137,7 @@ class SummaryDataProvider : ChartDataProvider {
 
         // Calculate daily average
         val dailyAverage = if (firstDate != null) {
-            val daysSinceFirst = ChronoUnit.DAYS.between(firstDate, today).coerceAtLeast(1)
+            val daysSinceFirst = ChronoUnit.DAYS.between(firstDate, today).plus(1).coerceAtLeast(1)
             Duration.ofSeconds(totalDuration.toSeconds() / daysSinceFirst)
         } else {
             Duration.ZERO
@@ -251,7 +251,7 @@ class SummaryDataProvider : ChartDataProvider {
         val firstRecordDate = DatabaseManager.getFirstRecordDate()
 
         val dailyAverage = if (firstRecordDate != null) {
-            val daysSinceFirst = ChronoUnit.DAYS.between(firstRecordDate, today).coerceAtLeast(1)
+            val daysSinceFirst = ChronoUnit.DAYS.between(firstRecordDate, today).plus(1).coerceAtLeast(1)
             Duration.ofSeconds(totalDuration.toSeconds() / daysSinceFirst)
         } else {
             Duration.ZERO
