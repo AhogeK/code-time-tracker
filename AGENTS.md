@@ -122,10 +122,11 @@ codetimetracker/
 
 1. 更新 `gradle/libs.versions.toml` 中的 `pluginVersion`
 2. 更新 `AGENTS.md` 顶部的版本号（保持一致）
-3. 提交信息格式：`release: bump version to x.x.x`
+3. 更新 `README.md` 中的版本 badge
+4. 提交信息格式：`release: bump version to x.x.x`
 
 **版本号规则**：
-- 修复 Bug → patch 版本 +1（如 0.8.8 → 0.8.9）
+- 修复 Bug → patch 版本 +1（如 0.8.9 → 0.8.10）
 - 新增功能 → minor 版本 +1（如 0.8.9 → 0.9.0）
 - 破坏性变更 → major 版本 +1（如 0.9.0 → 1.0.0）
 
