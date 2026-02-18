@@ -95,8 +95,8 @@ class TimeTrackerService : Disposable {
         val currentLanguage = file.fileType.name
         val now = LocalDateTime.now()
 
-        // Update the last activity timestamp.
-        lastActivityTime.set(now)
+        // Get previous activity time BEFORE updating (atomic operation)
+        val previousActivity = lastActivityTime.getAndSet(now)
 
         // If the user was previously inactive, fire the "started" event
         if (isUserActive.compareAndSet(false, true)) {
@@ -142,7 +142,6 @@ class TimeTrackerService : Disposable {
         projectSessions[currentLanguage] = updatedSession
 
         // Calculate time delta since last activity and add to tracking time
-        val previousActivity = lastActivityTime.get()
         val timeDelta = ChronoUnit.MILLIS.between(previousActivity, now)
         if (timeDelta > 0 && timeDelta < IDLE_THRESHOLD_SECONDS * 1000) {
             addTrackingTime(timeDelta)
