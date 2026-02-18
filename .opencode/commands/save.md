@@ -1,22 +1,34 @@
 ---
-description: 保存当前进度到 memory-bank
-arguments:
-  - name: note
-    description: 进度备注（如完成的功能、遇到的问题）
-    required: false
+description: 结束当前会话：执行休眠存档，同步进度与架构决策至记忆体
 ---
 
-# 保存进度
+# 🌙 休眠存档与上下文交接
 
-*! date +"%Y-%m-%d %H:%M" *
+主理人即将结束当前会话，请严格按照以下流程执行"状态落盘"：
 
-请更新 `memory-bank/progress.md`：
+## 1. 阶段总结 (Recap)
 
-1. 更新 **最后更新** 日期
-2. 在 **最近完成** 中添加：$1
-3. 更新 **当前状态**（如需要）
-4. 更新 **下一步**（如需要）
+简要回顾本次会话中完成的核心代码或逻辑验证。
 
-如果 $1 为空，请询问用户要记录的进度内容。
+## 2. 进度更新 (Progress Update)
 
-同时检查 `memory-bank/implementation-plan.md`，标记已完成的阶段（如有）。
+更新 `memory-bank/progress.md`：
+- 更新 **最后更新** 日期
+- 在 **最近完成** 中添加本次完成的内容
+- 更新 **当前状态**（如需要）
+- 更新 **下一步**（如需要）
+
+同时检查 `memory-bank/implementation-plan.md`，标记已完成的阶段。
+
+## 3. 决策快照 (Decision Snapshot)
+
+回顾本次会话，如果做出了重要技术决策或规避 Bug 的方案，追加到 `memory-bank/decisions.md`。
+
+## 4. 交接包（输出给用户）
+
+- 本次完成的可提交变更点摘要
+- 建议的测试点清单
+- 建议的 commit message（可多条）
+
+**最终输出**：
+> 🌙 **休眠存档完毕**。记忆体已更新，期待下一次唤醒 `/boot`。

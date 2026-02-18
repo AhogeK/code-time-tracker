@@ -70,7 +70,7 @@ codetimetracker/
 
 - **必须**先读取 `memory-bank/progress.md` 了解当前状态
 - **必须**检查 `memory-bank/implementation-plan.md` 的阶段进度
-- 使用命令：`/init`
+- 使用命令：`/boot`
 
 ### 会话结束
 
@@ -90,10 +90,22 @@ codetimetracker/
 
 | 命令                    | 场景    | 必需 |
 |-----------------------|-------|----|
-| `/init`               | 新会话开始 | 是  |
-| `/save <note>`        | 阶段完成  | 是  |
-| `/plan <feature>`     | 重大功能  | 是  |
+| `/boot`               | 新会话开始 | 是   |
+| `/save <note>`        | 阶段完成  | 是   |
+| `/plan <feature>`     | 重大功能  | 是   |
 | `/new-feature <name>` | 开始新功能 | 可选 |
+
+---
+
+### `/boot` 命令 - 会话唤醒
+
+执行 `/boot` 进行会话初始化，详细流程见 `.opencode/commands/boot.md`
+
+---
+
+### `/save <note>` 命令 - 休眠存档
+
+执行 `/save <note>` 保存进度，详细流程见 `.opencode/commands/save.md`
 
 ---
 
@@ -108,7 +120,7 @@ codetimetracker/
 
 ```
 1. 打开新会话
-   → 运行 /init
+   → 运行 /boot
 
 2. 开始新功能
    → 运行 /plan <feature>
