@@ -23,15 +23,40 @@
 
 ---
 
-## Decision-002: 
+## Decision-002: DatabaseManager 线程安全性确认
 
-**日期**: 
-**状态**: 
+**日期**: 2026-02-19
+**状态**: 已实施（确认安全，仅小修复）
 
 ### 背景
 
-### 决策
+用户提出需确认 `DatabaseManager` 的写入操作是否真正线程安全。`pauseAndPersistSessions` 既在 EDT 上调用，也可能在调度线程上调用（`stopTracking()`）。
+
+### 分析结果
+
+**现有实现已具备线程安全性**：
+
+1. **写操作（`saveSessions`）**：
+   - 使用 `databaseExecutor`（单线程执行器）串行化所有写入 ✅
+   - 回调通过 `invokeLater` 返回 EDT ✅
+
+2. **读操作**（所有 `get*` 方法）：
+   - 每次调用通过 `DriverManager.getConnection()` 创建新连接
+   - 无共享连接状态 ✅
+   - SQLite 支持并发读取 ✅
+
+3. **配置访问**：
+   - `config` 字段使用 `@Volatile` 确保跨线程可见性 ✅
+   - `withConnection` 使用局部变量副本 ✅
+
+### 发现的问题
+
+当 `sessions` 为空时，`onComplete()` 回调被**直接调用**而非通过 `invokeLater`，这在非 EDT 线程调用时可能导致问题。
+
+### 修复
+
+在空 session 情况下也使用 `invokeLater` 调用回调，确保线程安全。
 
 ### 后果
 
----
+统一回调调用方式，进一步增强线程安全性。不影响外部行为。

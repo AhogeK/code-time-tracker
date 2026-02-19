@@ -212,7 +212,9 @@ object DatabaseManager {
 
     fun saveSessions(sessions: List<CodingSession>, onComplete: () -> Unit) {
         if (sessions.isEmpty()) {
-            onComplete()
+            ApplicationManager.getApplication().invokeLater {
+                onComplete()
+            }
             return
         }
 
