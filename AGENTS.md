@@ -113,6 +113,7 @@ codetimetracker/
 
 - Memory-bank 目录的变更**应该**提交（记录设计演进）
 - 提交信息格式：`docs: update memory-bank - <变更内容>`
+- **重要**：在执行 `git commit` 之前，必须先征得用户明确同意
 
 ---
 
