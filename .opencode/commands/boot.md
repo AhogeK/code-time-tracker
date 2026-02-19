@@ -42,6 +42,4 @@ git pull --rebase
 - 今日目标
 - 建议立即执行的 3 个动作
 
----
-
-> **注意**：如果 progress.md 或 implementation-plan.md 为空或过于陈旧，请主动更新它们。
+**重要**：如果 memory-bank 文件为空或内容过时，AI 应直接更新这些文件，而不是告知用户"文件为空"或要求用户处理。
