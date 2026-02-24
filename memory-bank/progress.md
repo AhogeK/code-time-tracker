@@ -4,16 +4,15 @@
 
 ## 当前状态
 
-- **活跃功能**: 无
-- **当前阶段**: 待定
+- **活跃功能**: DatabaseManager 重构（拆分上帝类）
+- **当前阶段**: Phase 1 - 基础设施拆分
 - **阻塞问题**: 无
 
 ## 今日目标
 
-- [x] 修复 TimeTrackerService.onActivity() 中 lastActivityTime 的竞态条件
-- [x] 更新版本号到 0.8.9
-- [x] 完善 AGENTS.md 版本号更新规范
-- [x] 分析并修复 DatabaseManager 线程安全性
+- [x] 创建新分支 refactor/database-manager-refactoring
+- [x] 创建 Design Doc
+- [x] Phase 1: 创建 ConnectionManager + MigrationManager
 
 ## 最近完成
 
@@ -25,7 +24,9 @@
 
 ## 下一步
 
-- [ ] 等待用户新任务
+- [ ] Phase 2: 创建 SessionRepository（提取会话 CRUD）
+- [ ] Phase 3: 创建 StatsRepository（提取统计查询）
+- [ ] Phase 4: 清理 DatabaseManager + 测试
 
 ## 笔记
 
