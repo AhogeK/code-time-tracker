@@ -1,7 +1,7 @@
 [versions]
 
 # Plugin versioning
-pluginVersion = "0.8.8"
+pluginVersion = "0.8.9"
 
 # dependencies versions
 junitVersion = "6.0.1"
@@ -25,5 +25,5 @@ lgooddatepicker = { module = "com.github.lgooddatepicker:LGoodDatePicker", versi
 
 java = { id = "java" }
 jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.2.21" }
-jetbrains-intellij-platform = { id = "org.jetbrains.intellij.platform", version = "2.10.5" }
+jetbrains-intellij-platform = { id = "org.jetbrains.intellij.platform", version = "2.11.0" }
 ben-manes = { id = "com.github.ben-manes.versions", version = "0.53.0" }
