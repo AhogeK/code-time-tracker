@@ -288,26 +288,25 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
     }
 
     /**
-     * Get time for a specific period, preferring service UI time over database query
+     * Get time for a specific period by combining database history with real-time accumulation
      *
      * @param modelPeriod The time period from the model
-     * @param dbQueryFallback Lambda to query database if service time is not available
-     * @return Duration representing the accumulated time
+     * @param dbQueryFallback Lambda to query database for historical time
+     * @return Duration representing database time + real-time accumulation
      */
     private fun getTimeForPeriod(
         modelPeriod: TimePeriod,
         dbQueryFallback: (LocalDateTime) -> Duration
     ): Duration {
-        // First try to get time from service (real-time accumulation)
-        val serviceTime = timeTrackerService.getUIDisplayTime(modelPeriod)
-        if (serviceTime > 0) {
-            return Duration.ofMillis(serviceTime)
-        }
-
-        // Fallback to database query
+        // Always query database for historical/persisted time
         val now = LocalDateTime.now()
         val startOfToday = now.with(LocalTime.MIN)
-        return dbQueryFallback(startOfToday)
+        val dbTime = dbQueryFallback(startOfToday)
+
+        // Add real-time accumulation from service (if any active session)
+        val serviceTime = timeTrackerService.getUIDisplayTime(modelPeriod)
+
+        return dbTime.plus(Duration.ofMillis(serviceTime))
     }
 
     /**

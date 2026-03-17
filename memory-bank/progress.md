@@ -1,18 +1,26 @@
 # Progress
 
-> 最后更新: 2026-02-26
+> 最后更新: 2026-03-17
 
 ## 当前状态
 
-- **活跃功能**: 无
-- **当前阶段**: 待定
+- **活跃功能**: StatusBar 时间显示修复
+- **当前阶段**: 已完成
 - **阻塞问题**: 无
 
 ## 今日目标
 
-- [x] DatabaseManager 重构（拆分上帝类）
+- [x] 修复 StatusBar 与统计页时间不一致问题
+- [x] 解决持久化后时间回退问题
 
 ## 最近完成
+
+- **StatusBar 时间显示修复** (2026-03-17)
+    - 问题：StatusBar 的 Today/This Week/This Month/This Year 显示与统计页不一致
+    - 根因 1：`getTimeForPeriod()` 当 `serviceTime > 0` 时忽略数据库历史
+    - 根因 2：`endTime` 基于 `finalEndTime` 计算而非实际编码时长
+    - 修复：改为 `数据库时间 + 实时累积` + 用 `totalSessionTime` 计算正确的 `endTime`
+    - 文件：`CodeTimeTrackerWidget.kt`, `TimeTrackerService.kt`
 
 - **DatabaseManager 重构** (PR #8)
   - 将 1446 行 `DatabaseManager.kt` 拆分为单一职责组件
@@ -32,7 +40,7 @@
 
 ## 下一步
 
-- [ ] 等待用户新任务
+- [ ] 等待用户验证修复效果
 
 ## 笔记
 

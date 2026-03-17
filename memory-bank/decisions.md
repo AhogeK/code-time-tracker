@@ -63,6 +63,79 @@
 
 ---
 
+## Decision-004: StatusBar 时间显示逻辑修复
+
+**日期**: 2026-03-17
+**状态**: 已实施
+
+### 背景
+
+用户报告 StatusBar 上的 Today/This Week/This Month/This Year 时间显示与统计页不一致，只有 Total 是正确的。
+
+### 问题分析
+
+`Widget.getTimeForPeriod()` 方法存在逻辑缺陷：
+
+```kotlin
+// 错误逻辑：当 serviceTime > 0 时只返回实时累积时间
+val serviceTime = timeTrackerService.getUIDisplayTime(modelPeriod)
+if (serviceTime > 0) {
+    return Duration.ofMillis(serviceTime)  // 忽略了数据库历史！
+}
+return dbQueryFallback(startOfToday)  // 只有 serviceTime == 0 才查询数据库
+```
+
+这导致：
+
+- 有活跃会话时只显示实时累积时间，忽略数据库中已持久化的历史时间
+- 数据库中已存在的历史编码时间被完全忽略
+
+### 决策
+
+修复为正确的组合逻辑：数据库历史时间 + 实时累积时间
+
+```kotlin
+// 正确逻辑：总是查询数据库，然后加上实时累积
+val dbTime = dbQueryFallback(startOfToday)
+val serviceTime = timeTrackerService.getUIDisplayTime(modelPeriod)
+return dbTime.plus(Duration.ofMillis(serviceTime))
+```
+
+### 后果
+
+- StatusBar 与统计页时间显示现在一致
+- 用户可以看到完整的编码时间（历史 + 当前会话）
+- 不影响现有功能和性能
+
+**补充修复**：
+
+问题进一步分析发现：`session.endTime - session.startTime`（时间区间）与 `uiDisplayTime`（实际编码累积时间）不同步，导致持久化后显示值回退。
+
+**根因**：
+
+- `endTime` 持续更新为每次活动的 `now`（包含空闲间隔）
+- `uiDisplayTime` 只在 `timeDelta < IDLE_THRESHOLD_SECONDS * 1000` 时累积
+- 两者不同步！
+
+**最终解决方案**：
+
+1. **正确的 `endTime` 计算**：用 `totalSessionTime` 计算实际编码时长，`endTime = startTime + totalSessionTime`
+2. **简化 Widget 查询**：直接查询数据库，不再加 `uiDisplayTime`
+3. **持久化后立即重置**：`totalSessionTime` 和 `uiDisplayTime` 清零，下次编码从零累积
+
+**效果**：
+
+- StatusBar 显示 = 数据库查询（与统计页一致）
+- 响应快速（无异步累积延迟）
+- 回退最多 1 秒（数据库查询延迟，可接受）
+
+**并发安全**：
+
+- 持久化前立即重置累积器，确保新会话从 0 开始
+- 快照机制确保持久化数据独立于新累积
+
+---
+
 ## Decision-003: DatabaseManager 重构为 Facade 模式
 
 **日期**: 2026-02-26

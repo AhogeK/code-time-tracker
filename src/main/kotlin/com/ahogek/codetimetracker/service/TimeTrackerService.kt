@@ -223,6 +223,12 @@ class TimeTrackerService : Disposable {
             // Clear all active sessions.
             activeSessions.clear()
 
+            // Reset tracking times after sessions are captured to avoid double-counting
+            totalSessionTime.set(0)
+            TimePeriod.entries.forEach { period ->
+                uiDisplayTime[period]?.set(0)
+            }
+
             DatabaseManager.saveSessions(sessionsToStore, onSaveComplete)
             log.info("Persisted sessions task submitted for: $sessionsToStore")
         } else {
@@ -292,6 +298,12 @@ class TimeTrackerService : Disposable {
             val sessionsToStore = projectSessions.values.toImmutableList()
             log.info("Stopping tracking for closed project: $projectPath. Saving ${sessionsToStore.size} sessions.")
             DatabaseManager.saveSessions(sessionsToStore) {}
+
+            // Reset tracking times to avoid double-counting
+            totalSessionTime.set(0)
+            TimePeriod.entries.forEach { period ->
+                uiDisplayTime[period]?.set(0)
+            }
         }
 
         if (activeSessions.isEmpty()) {
