@@ -2,7 +2,6 @@ package com.ahogek.codetimetracker.user
 
 import com.ahogek.codetimetracker.database.DatabaseManager
 import com.intellij.ide.util.PropertiesComponent
-import okio.withLock
 import java.util.*
 import java.util.concurrent.locks.ReentrantLock
 
@@ -33,10 +32,14 @@ object UserManager {
      */
     fun getUserId(): String {
         // Double-checked locking for thread-safe, lazy initialization
-        if (currentUserId == null)
-            lock.withLock {
-                if (currentUserId == null) currentUserId = determineUserId()
-            }
+                if (currentUserId == null) {
+            lock.lock()
+            try {
+                                if (currentUserId == null) currentUserId = determineUserId()
+            } finally {
+                lock.unlock()
+                        }
+        }
         return currentUserId!!
     }
 
