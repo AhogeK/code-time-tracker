@@ -182,21 +182,27 @@
 
 版本号位置：`gradle/libs.versions.toml` 的 `pluginVersion` 字段（`build.gradle.kts` 通过 `libs.versions.pluginVersion` 引用，单一来源）
 
-格式：`MAJOR.MINOR.PATCH[-SNAPSHOT]`
+格式：`MAJOR.MINOR.PATCH`（本插件为 JetBrains 发布制品，不使用 `-SNAPSHOT` 后缀；开发中版本按变更类型正常推进，正式发布时以最终版本号提交）
 
-变更规则：Bug修复→PATCH+1，新功能→MINOR+1，破坏性→MAJOR+1，开发中→`-SNAPSHOT`后缀
+变更规则：Bug修复→PATCH+1，新功能→MINOR+1，破坏性→MAJOR+1
 
 执行时机：每次代码修改后立即：1.确定新版本号 2.更新 libs.versions.toml 3.同步 README.md 版本 badge 4.全局搜索检查硬编码 5.记录到activeContext.md
 
 禁止：代码变更不更新、跳版本、未经确认升MAJOR、代码硬编码版本号（统一引用 `pluginVersion`）
 
-### R19: 自我学习（强制）
+### R19: 自我学习（强制 v2）
 
-当同一问题解决2次以上，创建skill记录方案。
+触发条件（满足其一）：
+- 同一问题解决 2 次以上
+- 单次排查/研究耗时较长（>30 分钟）且有复盘价值
+
+动作：**先询问用户**是否沉淀为 skill，用户同意后才创建，**禁止自动写入**。
 
 存放位置：`.agents/skills/[skill-name]/SKILL.md`
 
-创建流程：确认解决 → 用skill-creator创建 → 写入.agents/skills/ → 更新版本号
+创建流程：确认解决 → 询问用户 → 用户同意 → 用skill-creator创建 → 写入.agents/skills/ → 更新版本号
+
+**与 R20 的关系**：R20 的"仅当用户明确要求时才可操作 `.agents/`"即本规则的询问环节，二者一致不冲突。
 
 ### R20: AI 文件保护（强制）
 
@@ -244,7 +250,13 @@
 
 使用某类型Skills前先列出所有同类Skills，可同时加载多个，不是只能选一个。
 
-### R26: 外部 AI 咨询能力
+### R26: 网络检索与外部 AI 咨询（强制 v2）
+
+- **禁止使用内置 WebSearch 工具**（多 provider 不稳定/易失败）
+- 网络检索必须走浏览器类工具链：`doko-search`/`dokobot`（本地 bridge + 用户 Chrome）、`opencli <site> search`（站点适配器）、`grep.app`（代码搜索）；使用前按 R25 列出同类技能并读对应技能文档
+- 已知 URL 优先内置 `read` 直读（静态页）；需要已登录/JS 渲染页面才用浏览器工具
+- 浏览器行为必须发生在用户在用或包含用户数据的浏览器上，禁止 Incognito 模式
+- 高级 AI 咨询保留：可使用 `ai-chat-browser` / `opencli` 访问 gemini.google.com / perplexity.ai（需选择模型）
 
 可使用skills访问 gemini.google.com / perplexity.ai 咨询高级AI（需选择模型）及网络搜索。
 
