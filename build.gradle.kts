@@ -24,7 +24,7 @@ repositories {
 // Read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin.html
 dependencies {
     intellijPlatform {
-        create("IU", "2025.3")
+        create("IU", "2026.1")
         testFramework(org.jetbrains.intellij.platform.gradle.TestFrameworkType.Platform)
 
         // Add necessary plugin dependencies for compilation here, example:
@@ -53,7 +53,7 @@ dependencies {
 intellijPlatform {
     pluginConfiguration {
         ideaVersion {
-            sinceBuild = "251"
+            sinceBuild = "261"
         }
 
         changeNotes = """
@@ -68,11 +68,18 @@ intellijPlatform {
     }
 }
 
+java {
+    toolchain {
+        // Build with JDK 25 (LTS); the plugin targets the IDE's JBR 25 runtime.
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+
 tasks {
-    // Set the JVM compatibility versions
+    // Compile against the IDE's JBR 25 runtime: --release bounds both the
+    // bytecode version and the Java API surface.
     withType<JavaCompile> {
-        sourceCompatibility = "21"
-        targetCompatibility = "21"
+        options.release.set(25)
     }
 
     withType<Test> {
@@ -129,9 +136,9 @@ fun isNonStable(version: String): Boolean {
     return isStable.not()
 }
 
-kotlin {
-    compilerOptions {
-        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
-    }
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    // Task-level assignment: IPGP applies jvmTarget.convention(...) per task, which would
+    // override the kotlin {} extension default; a strong set() here wins.
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_25)
 }
 
