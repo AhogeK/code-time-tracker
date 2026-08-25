@@ -1,4 +1,7 @@
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+import org.jetbrains.intellij.platform.gradle.extensions.IntelliJPlatformExtension
+
+val intellijPlatformExtension = extensions.getByType(IntelliJPlatformExtension::class.java)
 
 plugins {
     alias(libs.plugins.java)
@@ -32,6 +35,12 @@ dependencies {
         implementation(libs.gson)
         implementation(libs.lgooddatepicker)
     }
+
+    // The credentialStore platform module (PasswordSafe) is bundled inside the IDE's app.jar,
+    // which the IntelliJ Platform Gradle Plugin excludes from the compile classpath (no
+    // independent module jar, no module alias — see JetBrains/intellij-platform-gradle-plugin#2144).
+    // app.jar is provided by the IDE at runtime and is never bundled into the plugin.
+    compileOnly(files({ intellijPlatformExtension.platformPath.resolve("lib/app.jar").toFile() }))
 
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.assertj.core)
@@ -125,3 +134,4 @@ kotlin {
         jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_21)
     }
 }
+
