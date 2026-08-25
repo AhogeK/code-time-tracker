@@ -15,7 +15,7 @@ JetBrains 平台插件：自动追踪编码时间并提供可视化统计分析�
 ## 范围
 
 - 当前版本：v0.8.10（`gradle/libs.versions.toml` → `pluginVersion`）
-- 目标平台：JetBrains IDE 2025.3+（Build 253+）
+- 目标平台：JetBrains IDE 2026.1+（Build 261+）
 - 云同步：**未实现**（`CodingSession` 已预留 `isSynced`/`syncVersion` 字段，关联 ctt-server/ctt-web）
 
 ## 用户故事

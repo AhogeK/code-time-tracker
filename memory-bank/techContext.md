@@ -6,9 +6,9 @@
 
 | 维度 | 选型 |
 |---|---|
-| **开发语言** | Kotlin (JVM 21) |
+| **开发语言** | Kotlin (JVM 25) |
 | **构建工具** | Gradle Kotlin DSL + IntelliJ Platform Gradle Plugin |
-| **目标平台** | JetBrains IDE 2025.3+ (Build 253+) |
+| **目标平台** | JetBrains IDE 2026.1+ (Build 261+) |
 | **本地存储** | SQLite（via `sqlite-jdbc`） |
 | **数据序列化** | Gson |
 | **日期选择器 UI** | LGoodDatePicker |

@@ -2,6 +2,26 @@
 
 > 当前工作上下文（保留最近30天，删除>90天前）
 
+## [2026-08-26] - 方案 A：只支持新版 IDE（版本 1.0.0）
+
+- **sinceBuild 251 → 261**（IDEA 2026.1 起），`create("IU","2026.1")`；放弃 2025.x 用户（用户决策）
+- **JBR 事实**：2025.3 = JBR 21.0.8（本机 SDK 实测）；2026.1 = JBR 25（JBR 版本表）——261 是最早带 JBR 25 的 IDE
+- **编译目标 21 → 25**：JavaCompile `--release 25` + Kotlin `jvmTarget 25`（Kotlin 2.4.10 支持 JVM_25/26）
+- **坑**：IPGP 对 Kotlin 任务应用 `jvmTarget.convention()`（弱默认）覆盖 `kotlin {}` 扩展设置 → 必须**任务级 `configureEach { compilerOptions.jvmTarget.set() }`**
+- **坑**：JavaCompile 的 release 由 Gradle daemon JDK 决定（JAVA_HOME 不重启 daemon 不生效）→ 声明 **java toolchain 25**（可移植）
+- **坑**：UserManager 隐式依赖 IDE 平台传递的 okio（`lock.withLock`）——2026.1 SDK 不再传递 → 改为标准 `ReentrantLock` try/finally
+- 产物 class major 69（Java 25）；63/63 测试通过
+- 文档全量同步：README（badge/Requirements）、CONTRIBUTING（JDK 25 + IDEA 2026.1）、plugin.xml description、AGENTS.md R8、techContext/projectbrief
+
+## [2026-08-26] - 依赖与工具链升级（版本 0.9.1）
+
+- **gradle-versions-plugin 0.53 → 0.61.0**：坐标迁移 `com.github.ben-manes.versions` → `io.github.ben-manes.versions`（旧坐标停在 0.54，README badge 指向新坐标；portal metadata 旧坐标滞后是陷阱）
+- **Gradle 9.3.1 → 9.7.1**（wrapper）
+- **依赖**：gson 2.14.0、junit 6.1.3、sqlite-jdbc 3.53.2.1、IPGP 2.18.1
+- **Kotlin 2.2.21 → 2.4.10**：JDK 25 必需（2.2.21 在 JDK 25 下 Kotlin daemon `NoSuchMethodError: connectAndLease`，靠 in-process fallback 才编译）
+- **JDK 25 LTS 验证**：本机 sdkman 25.0.4-tem 构建 BUILD SUCCESSFUL + 63/63 测试；**jvmTarget 保持 21**（产物 major 65，插件运行在 IDE JBR 21）——构建环境 25、编译目标 21
+- 全量测试 63/63 通过；版本 0.9.0 → 0.9.1
+
 ## [2026-08-26] - 审查修复批次（code-review + 真实集成验证）
 
 - **审查发现并修复**：

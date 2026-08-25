@@ -107,7 +107,7 @@
 
 ### R8: 技术决策确认
 
-**禁止擅自修改**：Kotlin/JVM 版本、IntelliJ Platform 版本（2025.3+ / Build 253+）、架构设计、数据模型/SQLite schema、plugin.xml 配置、依赖版本。原则：只读取不猜测，只实现不决策，有疑问必须问。
+**禁止擅自修改**：Kotlin/JVM 版本、IntelliJ Platform 版本（2026.1+ / Build 261+）、架构设计、数据模型/SQLite schema、plugin.xml 配置、依赖版本。原则：只读取不猜测，只实现不决策，有疑问必须问。
 
 ### R9: 项目一致性优先（强制）
 
