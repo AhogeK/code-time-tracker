@@ -101,7 +101,13 @@
         <applicationService
                 serviceInterface="com.ahogek.codetimetracker.service.sync.SyncApiService"
                 serviceImplementation="com.ahogek.codetimetracker.service.sync.SyncApiServiceImpl"/>
-        <applicationService serviceImplementation="com.ahogek.codetimetracker.service.sync.SyncApiKeyManager"/>
+        <applicationConfigurable
+                parentId="settings"
+                instance="com.ahogek.codetimetracker.ui.SyncSettingsConfigurable"
+                id="com.ahogek.codetimetracker.syncSettings"
+                displayName="Code Time Tracker Sync"/>
+        <notificationGroup id="Code Time Tracker Sync" displayType="BALLOON"/>
+
     </extensions>
 
     <applicationListeners>
