@@ -2,6 +2,22 @@
 
 > 当前工作上下文（保留最近30天，删除>90天前）
 
+## [2026-08-26] - A3 五轴审查修复（独立子代理抓出 2 个真实 bug）
+
+- **状态一致性 bug**：绑定/解绑改 settings.syncEnabled 但 checkbox 不刷新 → OK/Apply 静默回退刚绑定状态 → refreshBindingState 同步 checkbox
+- **测试连接误导**：ping 用已保存 URL 而非编辑中的字段 → 临时切换 settings.serverUrl（try/finally 恢复）
+- **凭据卫生**：绑定成功后清空密码/手动 key 字段（成功时）
+- Nit：Regex 提升 companion 常量；删除空 dispose()（Disposable 无资源）；isBound() 去重（vault.load 一次）
+- 63/63 测试通过；版本 0.11.0
+
+## [2026-08-26] - A3 设置界面完成（版本 0.11.0）
+
+- `ui/SyncSettingsConfigurable.kt`：applicationConfigurable 设置页——服务器地址/同步开关/API Key 绑定（登录 + 手动粘贴）/解绑/测试连接；EDT 规则（后台线程 + invokeLater）；Notification 提示（plugin.xml 注册 notificationGroup）
+- plugin.xml 注册 applicationConfigurable + notificationGroup（SyncApiService 注入用于 pingServer）
+- **教训**：edit 工具的 ＋ 行标记在本文件写成字面 `+` 字符（全角＋未识别）→ 用 python 修复；plugin.xml 类文件改动用 python 或谨慎 edit
+- 版本 0.10.0 → 0.11.0；编译 + 63/63 测试通过
+- A 阶段全部完成：A1 transport ✅ A2 credentials ✅ A3 settings ✅ A4 error mapping ✅
+
 ## [2026-08-26] - 方案 A：只支持新版 IDE（版本 1.0.0）
 
 - **sinceBuild 251 → 261**（IDEA 2026.1 起），`create("IU","2026.1")`；放弃 2025.x 用户（用户决策）
