@@ -5,12 +5,23 @@
 ## 当前状态
 
 - **活跃功能**: 云同步基础设施 A 阶段（全部完成）
-- **当前阶段**: 待提交（Settings UI 完成，版本 0.11.0）
+- **当前阶段**: 登录绑定移除 + .env 构建配置 + 设置页 UI 修复完成（版本 0.11.1），待提交
 - **阻塞问题**: 无
 
 ## 最近完成
 
-- **同步基础设施 A 阶段**（2026-08-26，版本 0.11.0）
+- **登录绑定移除 + .env 配置 + 设置页 UI 修复**（2026-08-26，版本 0.11.1）
+  - 移除登录绑定（hCaptcha 不可行）：服务层 bindWithCredentials/login/createApiKey + 6 测试删
+  - 前端地址构建配置：SyncWebConfig 生成（.env/-P/环境变量），Get an API key 按钮
+  - modality/setBusy/isBound EDT/statusLabel 修复（runIde 验收）
+  - 测试 58/58；与服务容器修复同批未提交
+  - **A 阶段服务容器 bug 修复**（2026-08-26，版本 0.11.1）
+  - 症状：runIde 打开设置页 `InstantiationException: SyncApiKeyManager does not define any of supported signatures` + `ConfigurableWrapper` NPE
+  - 根因：sync 服务构造器带自定义参数，平台容器只支持 5 种签名；纯 JUnit 测试从不过容器
+  - 修复：secondary 无参构造器 + 内部 getService 具体类；plugin.xml 删 applicationService 注册
+  - 回归：SyncServiceResolutionTest（LightPlatformTestCase 真实容器解析），红绿验证通过；64/64 测试
+  - 版本 0.11.0 → 0.11.1
+  - **同步基础设施 A 阶段**（2026-08-26，版本 0.11.0）
   - A1 HTTP 传输层：JDK HttpClient + envelope 解析 + 429 Retry-After 双源 + 上限重试
   - A2 API Key 生命周期：登录→SYNC key→CredentialStore（PasswordSafe Java 桥）、手动粘贴、解绑
   - A3 设置界面：SyncSettingsConfigurable（服务器/开关/绑定/解绑/测试连接）

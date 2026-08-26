@@ -1,6 +1,26 @@
 # Active Context
 
 > 当前工作上下文（保留最近30天，删除>90天前）
+## [2026-08-26] - A 阶段服务容器实例化 bug 修复（版本 0.11.1）
+
+- **症状（runIde 手动验收）**：打开设置页抛 `InstantiationException: SyncApiKeyManager does not define any of supported signatures`，级联 `ConfigurableWrapper.getConfigurable()` null → `isModified()` NPE
+- **根因**：SyncApiKeyManager/SyncHttpClient/SyncApiServiceImpl 三个服务构造器带自定义服务参数，平台容器只支持 `()void/(CoroutineScope)/(Application)/(Application,CoroutineScope)/(ComponentManager)` 5 种签名；纯 JUnit 测试手动 new 从不经过容器，runIde 首次暴露
+- **修复**：各加 secondary 无参构造器（内部 `ApplicationManager.getService` 具体类）；`SyncSettingsConfigurable` 的 `getService(SyncApiService)` 改 `getService(SyncApiServiceImpl)`；plugin.xml 删 3 条 applicationService 注册（`@Service` 注解即 light service，`SyncSettingsState` 的 `@State` 注解驱动持久化）
+- **回归防护**：`SyncServiceResolutionTest`（LightPlatformTestCase，真实 headless 容器解析 4 个服务）；vintage engine `testRuntimeOnly` → `testImplementation`（编译期需 `junit.framework.TestCase`）
+- **红绿验证**：stash 修复后测试 FAILED（同一 InstantiationException）→ 恢复后通过；64/64 测试
+- 版本 0.11.0 → 0.11.1；README badge 同步
+
+## [2026-08-26] - 登录绑定移除 + .env 构建配置 + 设置页 UI 修复（版本 0.11.1）
+
+- **登录绑定移除**：ctt-server login 强制 hCaptcha（`captchaService.verifyCaptcha`，实测 403 VALIDATION_ERROR），插件无法完成 → 移除邮箱/密码 UI + 服务层 `bindWithCredentials`/`login`/`createApiKey` + 相关 DTO（LoginRequest/CreateApiKeyRequest/Response/ApiKeyResponse）+ 6 个测试用例；绑定只留手动粘贴；`SyncApiKeyManager` 构造器精简为仅 `settings`（删 apiService 参数）
+- **前端地址构建配置**：`build.gradle.kts` `generateSyncConfig` 任务生成 `SyncWebConfig.kt`（WEB_URL/DEFAULT_SERVER_URL，build/generated 不入库）；解析顺序 `-Pctt.*` > `CTT_*` 环境变量 > 项目 `.env` > 默认；`.env.example` 模板（提交）+ `.env` gitignore；serverUrl 默认构建注入 + IDE 设置可覆盖（自部署场景）；设置页 `Get an API key` 按钮（`BrowserUtil.browse(SyncWebConfig.WEB_URL)`，固定链接非可编辑字段）
+- **设置页 UI 修复**（runIde 验收发现）：
+  - **modality**：`invokeLater` 默认 NON_MODAL 在 modal 设置对话框内不执行（"按钮灰 + 没反馈"根因）→ 全部后台跳转改 `ModalityState.stateForComponent(panel)`，`panel` 字段在 createComponent 末尾赋值
+  - **setBusy(false) 恢复绑定状态**（unbind=apiKeyPrefix!=null, test=!bound）——修复 unbind 按钮误亮
+  - **isBound() 移出 EDT**：PasswordSafe.get 在 2026.1 是 slow operation（EDT 禁止，日志 SEVERE）→ `refreshBindingState` 后台读凭据库 + invokeLater 回 UI
+  - **statusLabel**：操作结果绿（`JBColor(0x1B7F3B,0x4E9A51)`）/红（`UIUtil.getErrorForeground()`）显示 + `javax.swing.Timer` 5 秒自动清除（替代 modal 内不显示的 balloon notify）；test/绑定/解绑全部接入
+- **教训**：edit 工具多操作 payload 的 MATCH 不匹配易产生语法损坏 → 复杂/多段改动用 `write` 重写小文件更稳；2026.1 `JBUI` 包从 `com.intellij.ui` 迁移到 `com.intellij.util.ui`
+- 测试 58/58（删 6 个登录用例）；版本 0.11.1（与服务容器修复同批未提交）
 
 ## [2026-08-26] - A3 五轴审查修复（独立子代理抓出 2 个真实 bug）
 
