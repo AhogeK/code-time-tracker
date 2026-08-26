@@ -51,6 +51,8 @@ class SyncSettingsState : PersistentStateComponent<SyncSettingsState.State> {
         }
 
     companion object {
-        const val DEFAULT_SERVER_URL = "http://localhost:8080/ctt-server"
+        // Default server URL is injected at build time (see .env.example); the settings
+        // page can still override it at runtime per user.
+        val DEFAULT_SERVER_URL: String = SyncWebConfig.DEFAULT_SERVER_URL
     }
 }

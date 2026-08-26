@@ -1,12 +1,17 @@
 package com.ahogek.codetimetracker.ui
 
 import com.ahogek.codetimetracker.service.sync.SyncApiKeyManager
-import com.ahogek.codetimetracker.service.sync.SyncApiService
+import com.ahogek.codetimetracker.service.sync.SyncApiServiceImpl
 import com.ahogek.codetimetracker.service.sync.SyncResult
+import com.ahogek.codetimetracker.service.sync.SyncError
+import com.ahogek.codetimetracker.service.sync.SyncErrorKind
 import com.ahogek.codetimetracker.service.sync.SyncSettingsState
+import com.ahogek.codetimetracker.service.sync.SyncWebConfig
+import com.intellij.ide.BrowserUtil
 import com.intellij.notification.NotificationType
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.options.SearchableConfigurable
 import com.intellij.openapi.ui.MessageType
 import com.intellij.openapi.ui.Messages
@@ -14,17 +19,21 @@ import com.intellij.openapi.util.text.StringUtil
 import com.intellij.ui.JBColor
 import com.intellij.ui.components.JBCheckBox
 import com.intellij.ui.components.JBLabel
-import com.intellij.ui.components.JBPasswordField
 import com.intellij.ui.components.JBTextField
 import com.intellij.util.ui.FormBuilder
-import java.awt.FlowLayout
+import com.intellij.util.ui.JBUI
+import com.intellij.util.ui.UIUtil
+import java.awt.BorderLayout
+import javax.swing.Box
+import javax.swing.BoxLayout
 import javax.swing.JButton
 import javax.swing.JComponent
 import javax.swing.JPanel
+import javax.swing.Timer
 
 /**
- * Settings page for the sync feature: server address, sync toggle, API key binding
- * (sign-in flow or manual paste), unbinding and server connectivity check.
+ * Settings page for the sync feature: server address, web console URL, sync toggle,
+ * API key binding (manual paste), unbinding and server connectivity check.
  *
  * Network operations run on a pooled thread and never block the EDT; results are
  * surfaced through balloon notifications.
@@ -36,19 +45,23 @@ class SyncSettingsConfigurable : SearchableConfigurable {
 
     private val settings = ApplicationManager.getApplication().getService(SyncSettingsState::class.java)
     private val keyManager = ApplicationManager.getApplication().getService(SyncApiKeyManager::class.java)
-    private val apiService = ApplicationManager.getApplication().getService(SyncApiService::class.java)
+    private val apiService = ApplicationManager.getApplication().getService(SyncApiServiceImpl::class.java)
 
     private val serverUrlField = JBTextField(settings.serverUrl, 40)
     private val syncEnabledCheckBox = JBCheckBox("Enable synchronization", settings.syncEnabled)
 
     private val bindingStatusLabel = JBLabel()
-    private val emailField = JBTextField(30)
-    private val passwordField = JBPasswordField().apply { columns = 30 }
-    private val bindButton = JButton("Sign in and bind API key")
+    private val getKeyButton = JButton("Get an API key")
     private val manualKeyField = JBTextField(40)
     private val pasteButton = JButton("Bind pasted API key")
     private val unbindButton = JButton("Unbind API key")
     private val testButton = JButton("Test connection")
+    private val statusLabel = JBLabel(" ").apply { foreground = JBColor.GRAY }
+    private val statusTimer = Timer(STATUS_MESSAGE_MS) {
+        statusLabel.text = " "
+        statusLabel.foreground = JBColor.GRAY
+    }.apply { isRepeats = false }
+    private var panel: JComponent? = null
 
     override fun getDisplayName(): String = "Code Time Tracker Sync"
 
@@ -58,38 +71,49 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         serverUrlField.toolTipText = "ctt-server base URL, e.g. http://localhost:8080/ctt-server"
         syncEnabledCheckBox.toolTipText = "Enables uploading and downloading coding sessions"
 
-        bindButton.addActionListener { bindWithCredentials() }
+        getKeyButton.addActionListener { openWebConsole() }
         pasteButton.addActionListener { bindWithManualKey() }
         unbindButton.addActionListener { unbind() }
         testButton.addActionListener { testConnection() }
 
-        refreshBindingState()
-
-        val actionPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 0)).apply {
+        val actionPanel = JPanel().apply {
+            // BoxLayout avoids FlowLayout's default 5px insets, keeping the buttons
+            // left-aligned with the "Bind pasted API key" button above.
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
             add(unbindButton)
+            add(Box.createHorizontalStrut(4))
             add(testButton)
         }
 
-        return FormBuilder.createFormBuilder()
+        val formPanel = FormBuilder.createFormBuilder()
             .addLabeledComponent(JBLabel("Server address:"), serverUrlField)
             .addComponent(syncEnabledCheckBox)
             .addSeparator()
             .addLabeledComponent(JBLabel("API key:"), bindingStatusLabel)
-            .addLabeledComponent(JBLabel("Email:"), emailField)
-            .addLabeledComponent(JBLabel("Password:"), passwordField)
-            .addComponent(bindButton)
+            .addComponent(getKeyButton)
             .addLabeledComponent(JBLabel("Or paste an API key:"), manualKeyField)
             .addComponent(pasteButton)
             .addComponent(
                 JBLabel(
-                    "Keys are stored in the IDE credential store and used with the SYNC scope. " +
-                        "Create one manually at ctt-server \u2192 Profile \u2192 API keys.",
+                    "<html>Keys are stored in the IDE credential store and used with the SYNC scope.<br>" +
+                        "Create one manually at ctt-server \u2192 Profile \u2192 API keys.</html>",
                 ).apply {
                     foreground = JBColor.GRAY
+                    border = JBUI.Borders.emptyLeft(JBUI.scale(24))
+                    UIUtil.applyStyle(UIUtil.ComponentStyle.SMALL, this)
                 },
             )
             .addComponent(actionPanel)
+            .addComponent(statusLabel)
             .panel
+
+        val root = JPanel(BorderLayout()).apply {
+            add(formPanel, BorderLayout.NORTH)
+        }
+
+        panel = root
+        refreshBindingState()
+        return root
     }
 
     override fun isModified(): Boolean =
@@ -113,21 +137,8 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         refreshBindingState()
     }
 
-    private fun bindWithCredentials() {
-        val email = emailField.text.trim()
-        val password = String(passwordField.password)
-        if (email.isEmpty() || password.isEmpty()) {
-            Messages.showWarningDialog("Enter both email and password first.", "Sync Setup")
-            return
-        }
-        setBusy(true)
-        ApplicationManager.getApplication().executeOnPooledThread {
-            val result = keyManager.bindWithCredentials(email, password)
-            ApplicationManager.getApplication().invokeLater {
-                setBusy(false)
-                handleBindingResult(result, "API key bound successfully.")
-            }
-        }
+    private fun openWebConsole() {
+        BrowserUtil.browse(SyncWebConfig.WEB_URL)
     }
 
     private fun bindWithManualKey() {
@@ -137,12 +148,17 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             return
         }
         setBusy(true)
+        statusLabel.text = "Connecting to ctt-server..."
         ApplicationManager.getApplication().executeOnPooledThread {
-            val result = keyManager.bindWithManualKey(rawKey)
-            ApplicationManager.getApplication().invokeLater {
+            val result = try {
+                keyManager.bindWithManualKey(rawKey)
+            } catch (t: Throwable) {
+                SyncResult.Failure(SyncError(SyncErrorKind.UNKNOWN, message = "Unexpected error: ${t.message}"))
+            }
+            ApplicationManager.getApplication().invokeLater({
                 setBusy(false)
                 handleBindingResult(result, "API key bound successfully.")
-            }
+            }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
     }
 
@@ -150,11 +166,14 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         when (result) {
             is SyncResult.Success -> {
                 // Credential hygiene: the secret must not linger in the component.
-                passwordField.text = ""
                 manualKeyField.text = ""
+                showStatus(successMessage)
                 notify(successMessage, MessageType.INFO)
             }
-            is SyncResult.Failure -> notify(result.error.toUserMessage(), MessageType.ERROR)
+            is SyncResult.Failure -> {
+                showStatus(result.error.toUserMessage(), error = true)
+                notify(result.error.toUserMessage(), MessageType.ERROR)
+            }
         }
         refreshBindingState()
     }
@@ -170,6 +189,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         if (choice == Messages.YES) {
             keyManager.unbind()
             refreshBindingState()
+            showStatus("API key removed.")
             notify("API key removed.", MessageType.INFO)
         }
     }
@@ -177,10 +197,11 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private fun testConnection() {
         val url = serverUrlField.text.trim()
         if (!isValidServerUrl(url)) {
-            notify("Enter a valid server address (http:// or https://) first.", MessageType.WARNING)
+            showStatus("Enter a valid server address (http:// or https://) first.", error = true)
             return
         }
         setBusy(true)
+        statusLabel.text = "Testing connection to $url..."
         ApplicationManager.getApplication().executeOnPooledThread {
             // Ping the URL the user is editing, not the last applied one; the settings
             // value is restored afterwards so an un-applied edit is not persisted.
@@ -188,13 +209,13 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             settings.serverUrl = url
             try {
                 val result = apiService.pingServer()
-                ApplicationManager.getApplication().invokeLater {
+                ApplicationManager.getApplication().invokeLater({
                     setBusy(false)
                     when (result) {
-                        is SyncResult.Success -> notify("Server is reachable.", MessageType.INFO)
-                        is SyncResult.Failure -> notify(result.error.toUserMessage(), MessageType.ERROR)
+                        is SyncResult.Success -> showStatus("Server is reachable.")
+                        is SyncResult.Failure -> showStatus(result.error.toUserMessage(), error = true)
                     }
-                }
+                }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
             } finally {
                 settings.serverUrl = savedUrl
             }
@@ -202,26 +223,46 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     }
 
     private fun refreshBindingState() {
-        val bound = keyManager.isBound()
-        // Keep the toggle consistent with the persisted state: bind/unbind change
-        // settings.syncEnabled, otherwise OK/Apply would silently revert the change.
-        syncEnabledCheckBox.isSelected = settings.syncEnabled
-        val prefix = settings.apiKeyPrefix
-        bindingStatusLabel.text = if (bound) {
-            "<html>Bound (<b>${StringUtil.escapeXmlEntities(prefix ?: "")}</b>\u2026)</html>"
-        } else {
-            "Not bound"
+        val app = ApplicationManager.getApplication()
+        app.executeOnPooledThread {
+            // PasswordSafe access is a slow operation and is forbidden on the EDT
+            // (SlowOperations), so the credential-store read runs off the EDT.
+            val bound = keyManager.isBound()
+            app.invokeLater({
+                // Keep the toggle consistent with the persisted state: bind/unbind change
+                // settings.syncEnabled, otherwise OK/Apply would silently revert the change.
+                syncEnabledCheckBox.isSelected = settings.syncEnabled
+                val prefix = settings.apiKeyPrefix
+                bindingStatusLabel.text = if (bound) {
+                    "<html>Bound (<b>${StringUtil.escapeXmlEntities(prefix ?: "")}</b>\u2026)</html>"
+                } else {
+                    "Not bound"
+                }
+                unbindButton.isEnabled = bound
+                testButton.isEnabled = !bound
+            }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
-        unbindButton.isEnabled = bound
-        testButton.isEnabled = !bound
     }
 
     private fun setBusy(busy: Boolean) {
-        listOf(bindButton, pasteButton, unbindButton, testButton).forEach { it.isEnabled = !busy }
+        listOf(pasteButton, unbindButton, testButton).forEach { it.isEnabled = !busy }
+        if (!busy) {
+            // Restore the binding-aware state: the busy flag must not enable Unbind
+            // (or disable Test connection) for an unbound account.
+            val bound = settings.apiKeyPrefix != null
+            unbindButton.isEnabled = bound
+            testButton.isEnabled = !bound
+        }
     }
 
     private fun isValidServerUrl(url: String): Boolean =
         url.matches(SERVER_URL_PATTERN)
+
+    private fun showStatus(message: String, error: Boolean = false) {
+        statusLabel.foreground = if (error) UIUtil.getErrorForeground() else STATUS_SUCCESS_COLOR
+        statusLabel.text = message
+        statusTimer.restart()
+    }
 
     private fun notify(message: String, type: MessageType) {
         val notificationType = when (type) {
@@ -238,5 +279,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     companion object {
         const val NOTIFICATION_GROUP_ID = "Code Time Tracker Sync"
         private val SERVER_URL_PATTERN = Regex("^https?://.+")
+        private const val STATUS_MESSAGE_MS = 5_000
+        private val STATUS_SUCCESS_COLOR = JBColor(0x1B7F3B, 0x4E9A51)
     }
 }

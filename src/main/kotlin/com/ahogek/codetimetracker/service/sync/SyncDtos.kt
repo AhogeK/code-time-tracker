@@ -9,47 +9,13 @@ package com.ahogek.codetimetracker.service.sync
  * @since 2026-08-26
  */
 
-/** POST /api/v1/auth/login request body. */
-data class LoginRequest(
-    val email: String? = null,
-    val password: String? = null,
-    val deviceId: String? = null,
-    val captchaToken: String? = null,
-)
-
-/** POST /api/v1/auth/login response body. */
+/** POST /api/v1/auth/login response body (also used as a generic parsed-response DTO in tests). */
 data class LoginResponse(
     val userId: String? = null,
     val accessToken: String? = null,
     val refreshToken: String? = null,
     val expiresIn: Long = 0L,
     val tokenType: String? = null,
-)
-
-/** POST /api/v1/auth/api-keys request body. */
-data class CreateApiKeyRequest(
-    val name: String? = null,
-    val scopes: List<String> = emptyList(),
-    val expiresAt: String? = null,
-)
-
-/** POST /api/v1/auth/api-keys response body; rawKey is exposed exactly once. */
-data class CreateApiKeyResponse(
-    val rawKey: String? = null,
-    val apiKey: ApiKeyResponse? = null,
-)
-
-/** API key metadata snapshot (no secret material). */
-data class ApiKeyResponse(
-    val id: String? = null,
-    val name: String? = null,
-    val keyPrefix: String? = null,
-    val scopes: List<String> = emptyList(),
-    val lastUsedAt: String? = null,
-    val expiresAt: String? = null,
-    val revokedAt: String? = null,
-    val createdAt: String? = null,
-    val status: String? = null,
 )
 
 /** ctt-server unified response envelope: {success, message, data, timestamp}. */

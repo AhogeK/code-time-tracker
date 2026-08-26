@@ -56,3 +56,6 @@ bin/
 .DS_Store
 
 .kotlin
+### Local workspace ###
+.omp/
+.env
