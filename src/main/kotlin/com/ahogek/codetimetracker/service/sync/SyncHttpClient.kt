@@ -4,6 +4,7 @@ import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonSyntaxException
 import com.intellij.openapi.Disposable
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import java.io.IOException
@@ -50,6 +51,11 @@ data class SyncRequest(
  */
 @Service(Service.Level.APP)
 class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
+    /**
+     * Platform-container entry point: the service container only supports
+     * parameterless constructors, so dependencies are resolved via [ApplicationManager].
+     */
+    constructor() : this(ApplicationManager.getApplication().getService(SyncSettingsState::class.java))
 
     companion object {
         const val MAX_RETRIES = 2

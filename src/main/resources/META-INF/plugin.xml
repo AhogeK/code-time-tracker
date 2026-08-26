@@ -96,11 +96,6 @@
                 factoryClass="com.ahogek.codetimetracker.toolwindow.StatisticsToolWindowFactory"
                 anchor="right"
                 icon="/icons/statistics_icon.svg"/>
-        <applicationService serviceImplementation="com.ahogek.codetimetracker.service.sync.SyncSettingsState"/>
-        <applicationService serviceImplementation="com.ahogek.codetimetracker.service.sync.SyncHttpClient"/>
-        <applicationService
-                serviceInterface="com.ahogek.codetimetracker.service.sync.SyncApiService"
-                serviceImplementation="com.ahogek.codetimetracker.service.sync.SyncApiServiceImpl"/>
         <applicationConfigurable
                 parentId="settings"
                 instance="com.ahogek.codetimetracker.ui.SyncSettingsConfigurable"

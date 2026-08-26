@@ -1,5 +1,6 @@
 package com.ahogek.codetimetracker.service.sync
 
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 
 /**
@@ -11,31 +12,11 @@ import com.intellij.openapi.components.Service
  */
 @Service(Service.Level.APP)
 class SyncApiServiceImpl(private val client: SyncHttpClient) : SyncApiService {
-
-    override fun login(email: String, password: String, deviceId: String): SyncResult<LoginResponse> =
-        client.execute(
-            SyncRequest(
-                method = "POST",
-                path = "/api/v1/auth/login",
-                body = LoginRequest(email = email, password = password, deviceId = deviceId),
-            ),
-            LoginResponse::class.java,
-        )
-
-    override fun createApiKey(
-        accessToken: String,
-        name: String,
-        scopes: List<String>,
-    ): SyncResult<CreateApiKeyResponse> =
-        client.execute(
-            SyncRequest(
-                method = "POST",
-                path = "/api/v1/auth/api-keys",
-                body = CreateApiKeyRequest(name = name, scopes = scopes),
-                bearerToken = accessToken,
-            ),
-            CreateApiKeyResponse::class.java,
-        )
+    /**
+     * Platform-container entry point: the service container only supports
+     * parameterless constructors, so dependencies are resolved via [ApplicationManager].
+     */
+    constructor() : this(ApplicationManager.getApplication().getService(SyncHttpClient::class.java))
 
     override fun pingServer(): SyncResult<Unit> {
         val result = client.execute(

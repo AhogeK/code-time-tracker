@@ -47,7 +47,7 @@ dependencies {
 
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
-    testRuntimeOnly(libs.junit.vintage.engine)
+    testImplementation(libs.junit.vintage.engine)
 }
 
 intellijPlatform {
@@ -81,7 +81,63 @@ tasks {
     withType<JavaCompile> {
         options.release.set(25)
     }
+}
 
+// Build-time sync configuration. Resolution order: -Pctt.* Gradle property, then
+// CTT_* environment variable, then the project .env file (see .env.example), then
+// the development defaults. A release build only changes these values, never the code.
+fun loadDotEnv(file: File): Map<String, String> {
+    if (!file.exists()) return emptyMap()
+    return file.readLines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") && it.contains('=') }
+        .associate { line ->
+            val idx = line.indexOf('=')
+            line.substring(0, idx).trim() to line.substring(idx + 1).trim()
+        }
+}
+
+val dotEnv: Map<String, String> = loadDotEnv(rootProject.file(".env"))
+
+val syncWebUrl: String = providers.gradleProperty("ctt.webUrl").orNull
+    ?: System.getenv("CTT_WEB_URL")
+    ?: dotEnv["CTT_WEB_URL"]
+    ?: "http://localhost:5173/"
+val syncServerUrl: String = providers.gradleProperty("ctt.serverUrl").orNull
+    ?: System.getenv("CTT_SERVER_URL")
+    ?: dotEnv["CTT_SERVER_URL"]
+    ?: "http://localhost:8080/ctt-server"
+
+val generateSyncConfig by tasks.registering {
+    val outputDir = layout.buildDirectory.dir("generated/syncConfig/kotlin")
+    outputs.dir(outputDir)
+    doLast {
+        val file = outputDir.get().file("com/ahogek/codetimetracker/service/sync/SyncWebConfig.kt").asFile
+        file.parentFile.mkdirs()
+        file.writeText(
+            """
+            |package com.ahogek.codetimetracker.service.sync
+            |
+            |/**
+            | * Generated at build time from -Pctt.*, CTT_* environment variables or the
+            | * project .env file (see .env.example). The settings page can still override
+            | * the server URL at runtime; the web console URL is fixed per build.
+            | */
+            |object SyncWebConfig {
+            |    const val WEB_URL: String = "$syncWebUrl"
+            |    const val DEFAULT_SERVER_URL: String = "$syncServerUrl"
+            |}
+            |""".trimMargin(),
+        )
+    }
+}
+
+kotlin {
+    sourceSets["main"].kotlin.srcDir(layout.buildDirectory.dir("generated/syncConfig/kotlin"))
+}
+tasks.named("compileKotlin") { dependsOn(generateSyncConfig) }
+
+tasks {
     withType<Test> {
         useJUnitPlatform()
     }
