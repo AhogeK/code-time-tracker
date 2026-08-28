@@ -1,6 +1,11 @@
 # Active Context
 
 > 当前工作上下文（保留最近30天，删除>90天前）
+## [2026-08-27] - Test connection 始终可用 + 常量清理（版本 0.11.2）
+
+- **Test connection 修复**：`setBusy(false)`/`refreshBindingState` 里 `testButton.isEnabled = !bound` 导致绑定后 Test 按钮永久禁用（测试连接只测服务器可达性，与绑定状态无关）→ Test 只受 busy 控制，Unbind 保持绑定感知
+- **常量清理**（IDE 警告驱动）：`DISPLAY_NAME` 消除 "Code Time Tracker Sync" 3 处重复（NOTIFICATION_GROUP_ID 引用它）；`handleBindingResult` 去掉恒值参数（成功消息提为 `BIND_SUCCESS_MESSAGE` 常量）；companion 只留编译期常量（`SERVER_URL_PATTERN`/`STATUS_SUCCESS_COLOR` 两个运行时对象移到文件顶层——IDE 扩展 companion 只允许 logger + constants）
+- 测试 58/58；版本 0.11.1 → 0.11.2（toml + README badge）
 ## [2026-08-26] - A 阶段服务容器实例化 bug 修复（版本 0.11.1）
 
 - **症状（runIde 手动验收）**：打开设置页抛 `InstantiationException: SyncApiKeyManager does not define any of supported signatures`，级联 `ConfigurableWrapper.getConfigurable()` null → `isModified()` NPE
