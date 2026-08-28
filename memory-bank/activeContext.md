@@ -1,6 +1,13 @@
 # Active Context
 
 > 当前工作上下文（保留最近30天，删除>90天前）
+## [2026-08-27] - 云同步设置发现性入口（版本 0.12.0）
+
+- **背景**：云同步设置只在 Settings 搜索可找到，用户无主动发现路径（功能存在但不可见）→ 加两个入口
+- **统计面板**：`StatisticsView` 工具栏加 ⚙️ Settings action（`AllIcons.General.Settings`）→ `ShowSettingsUtil` 打开 `SyncSettingsConfigurable`；`StatisticsView` 构造加 `Project` 参数（`StatisticsToolWindowFactory` 传入）
+- **状态栏**：`CodeTimeTrackerWidget` 弹出菜单底部加 "Settings..." 项 → `ShowSettingsUtil`（常驻全局入口，发现性最好）
+- **2026.1 坑**：`ShowSettingsUtil` 包在 `com.intellij.openapi.options`（非 ide.util/ide.actions）；AnAction description 含产品名触发 `CapitalizationInspection` 误报 → description 移除（text "Settings..." 自解释）
+- 测试 58/58；版本 0.11.2 → 0.12.0（新功能 MINOR）
 ## [2026-08-27] - Test connection 始终可用 + 常量清理（版本 0.11.2）
 
 - **Test connection 修复**：`setBusy(false)`/`refreshBindingState` 里 `testButton.isEnabled = !bound` 导致绑定后 Test 按钮永久禁用（测试连接只测服务器可达性，与绑定状态无关）→ Test 只受 busy 控制，Unbind 保持绑定感知
