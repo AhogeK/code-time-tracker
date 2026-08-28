@@ -11,6 +11,7 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 - **JetBrains IDEs 2026.1** or later (Build 261+)
   *(Compatible with IntelliJ IDEA, PyCharm, WebStorm, GoLand, Android Studio, etc.)*
 - **Java 25** runtime (Bundled with IDE 2026.1+)
+- **ctt-server** (optional) - Self-hosted sync backend for cloud sync; not required for local-only tracking
 
 ## 📸 Gallery
 
@@ -49,7 +50,8 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 - **🗂️ Multi-Project Support** - Track multiple projects independently
 - **📈 Visual Insights** - Heatmaps, language distribution, hourly patterns
 - **💾 Data Management** - Export/import sessions in JSON format
-- **🔒 Privacy First** - All data stored locally in SQLite
+- **☁️ Cloud Sync** - Optional multi-device session sync via your own [ctt-server](https://github.com/AhogeK/ctt-server): bind an API key in Settings and the plugin keeps sessions in sync (pull/push with per-device cursor)
+- **🔒 Privacy First** - All data stored locally in SQLite; cloud sync is opt-in and only runs when you bind a key to your own ctt-server
 
 ## 🤝 Contributing
 
