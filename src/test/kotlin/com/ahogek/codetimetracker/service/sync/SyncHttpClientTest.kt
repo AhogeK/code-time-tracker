@@ -33,6 +33,8 @@ class SyncHttpClientTest {
         server.createContext("/rate-limit-huge") { exchange -> handleRateLimitHuge(exchange) }
         server.createContext("/devices") { exchange -> handleDevices(exchange) }
         server.createContext("/devices-register") { exchange -> handleDevicesRegister(exchange) }
+        server.createContext("/sync-pull") { exchange -> handleSyncPull(exchange) }
+        server.createContext("/sync-push") { exchange -> handleSyncPush(exchange) }
         server.start()
 
         settings = SyncSettingsState()
@@ -233,6 +235,27 @@ class SyncHttpClientTest {
         )
     }
 
+    private fun handleSyncPull(exchange: HttpExchange) {
+        respond(
+            exchange,
+            200,
+            """{"success":true,"data":{
+                "changes":[
+                    {"changeId":41,"sessionId":"srv-1","sessionUuid":"1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d","op":"UPSERT","serverVersion":2,"happenedAt":"2026-08-25T10:00:00Z","projectName":"ctt-server","language":"Java","startTime":"2026-08-25T09:00:00Z","endTime":"2026-08-25T10:00:00Z","clientModifiedAt":"2026-08-25T10:00:00Z","clientVersion":2,"deleted":false}
+                ],
+                "nextCursor":42
+            },"timestamp":"2026-08-29T00:00:00Z"}""",
+        )
+    }
+
+    private fun handleSyncPush(exchange: HttpExchange) {
+        respond(
+            exchange,
+            200,
+            """{"success":true,"data":{"nextCursor":42},"timestamp":"2026-08-29T00:00:00Z"}""",
+        )
+    }
+
     @Test
     fun `should deserialize a typed list response via TypeToken`() {
         val result = client.execute<List<DeviceResponse>>(
@@ -272,6 +295,56 @@ class SyncHttpClientTest {
         assertThat(device.id).isEqualTo("dev-1")
         assertThat(device.deviceName).isEqualTo("MacBook Pro")
         assertThat(device.platform).isEqualTo("macOS")
+    }
+
+    @Test
+    fun `should parse a pull response with changes and next cursor`() {
+        val result = client.execute(
+            SyncRequest(
+                method = "POST",
+                path = "/sync-pull",
+                body = SyncPullRequest(deviceId = "dev-1", lastPulledChangeId = 3),
+                bearerToken = "cttak_key",
+            ),
+            SyncPullResponse::class.java,
+        )
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        val pull = (result as SyncResult.Success).data
+        assertThat(pull.nextCursor).isEqualTo(42L)
+        assertThat(pull.changes).hasSize(1)
+        assertThat(pull.changes[0].sessionUuid).isEqualTo("1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d")
+        assertThat(pull.changes[0].op).isEqualTo(ChangeOp.UPSERT)
+        assertThat(pull.changes[0].clientVersion).isEqualTo(2)
+    }
+
+    @Test
+    fun `should serialize a push request and parse the next cursor`() {
+        val result = client.execute(
+            SyncRequest(
+                method = "POST",
+                path = "/sync-push",
+                body = SyncPushRequest(
+                    deviceId = "dev-1",
+                    sessions = listOf(
+                        SyncSessionDto(
+                            sessionUuid = "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+                            projectName = "ctt-server",
+                            language = "Java",
+                            startTime = "2026-08-25T09:00:00Z",
+                            endTime = "2026-08-25T10:00:00Z",
+                            clientModifiedAt = "2026-08-25T10:00:00Z",
+                            clientVersion = 1,
+                        ),
+                    ),
+                ),
+                bearerToken = "cttak_key",
+            ),
+            SyncPushResponse::class.java,
+        )
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        assertThat((result as SyncResult.Success).data.nextCursor).isEqualTo(42L)
     }
 
     private fun respond(

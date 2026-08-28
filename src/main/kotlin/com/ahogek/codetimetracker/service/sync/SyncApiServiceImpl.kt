@@ -45,4 +45,16 @@ class SyncApiServiceImpl(private val client: SyncHttpClient) : SyncApiService {
             SyncRequest(method = "POST", path = "/api/v1/devices", body = request, bearerToken = apiKey),
             DeviceResponse::class.java,
         )
+
+    override fun pull(request: SyncPullRequest, apiKey: String): SyncResult<SyncPullResponse> =
+        client.execute(
+            SyncRequest(method = "POST", path = "/api/v1/sync/pull", body = request, bearerToken = apiKey),
+            SyncPullResponse::class.java,
+        )
+
+    override fun push(request: SyncPushRequest, apiKey: String): SyncResult<SyncPushResponse> =
+        client.execute(
+            SyncRequest(method = "POST", path = "/api/v1/sync/push", body = request, bearerToken = apiKey),
+            SyncPushResponse::class.java,
+        )
 }
