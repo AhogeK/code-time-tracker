@@ -1,19 +1,11 @@
 package com.ahogek.codetimetracker.ui
 
-import com.ahogek.codetimetracker.service.sync.SyncApiKeyManager
-import com.ahogek.codetimetracker.service.sync.SyncApiServiceImpl
-import com.ahogek.codetimetracker.service.sync.SyncCoordinator
-import com.ahogek.codetimetracker.service.sync.SyncScheduler
-import com.ahogek.codetimetracker.service.sync.SyncResult
-import com.ahogek.codetimetracker.service.sync.SyncDeviceMetadata
-import com.ahogek.codetimetracker.service.sync.SyncError
-import com.ahogek.codetimetracker.service.sync.SyncErrorKind
-import com.ahogek.codetimetracker.service.sync.SyncSettingsState
-import com.ahogek.codetimetracker.service.sync.SyncWebConfig
+import com.ahogek.codetimetracker.database.DatabaseManager
+import com.ahogek.codetimetracker.service.sync.*
 import com.ahogek.codetimetracker.user.UserManager
 import com.intellij.ide.BrowserUtil
-import com.intellij.notification.NotificationType
 import com.intellij.notification.NotificationGroupManager
+import com.intellij.notification.NotificationType
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ModalityState
 import com.intellij.openapi.options.SearchableConfigurable
@@ -28,22 +20,20 @@ import com.intellij.util.ui.FormBuilder
 import com.intellij.util.ui.JBUI
 import com.intellij.util.ui.UIUtil
 import java.awt.BorderLayout
-import javax.swing.Box
-import javax.swing.BoxLayout
-import javax.swing.JButton
-import javax.swing.JComponent
-import javax.swing.JPanel
-import javax.swing.Timer
+import java.time.format.DateTimeFormatter
+import javax.swing.*
 
 private val SERVER_URL_PATTERN = Regex("^https?://.+")
 private val STATUS_SUCCESS_COLOR = JBColor(0x1B7F3B, 0x4E9A51)
 
 /**
  * Settings page for the sync feature: server address, web console URL, sync toggle,
- * API key binding (manual paste), unbinding and server connectivity check.
+ * API key binding (manual paste), unbinding, server connectivity check, a manual
+ * "Sync now" action, a periodic sync interval (minutes) and a sync status line
+ * (last sync time, pending session count and last error).
  *
- * Network operations run on a pooled thread and never block the EDT; results are
- * surfaced through balloon notifications.
+ * Network and database operations run on a pooled thread and never block the EDT;
+ * results are surfaced through balloon notifications and the status lines.
  *
  * @author AhogeK ahogek@gmail.com
  * @since 2026-08-26
@@ -65,8 +55,12 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private val pasteButton = JButton("Bind pasted API key")
     private val unbindButton = JButton("Unbind API key")
     private val testButton = JButton("Test connection")
+    private val syncNowButton = JButton("Sync now")
+    private val syncIntervalField = JBTextField(settings.syncIntervalMinutes.toString(), 5)
     private val statusLabel = JBLabel(" ").apply { foreground = JBColor.GRAY }
     private val deviceStatusLabel = JBLabel(" ")
+    private val syncStatusLabel = JBLabel(" ").apply { foreground = JBColor.GRAY }
+    private val sessionRepository = DatabaseManager.getSessionRepository()
     private val statusTimer = Timer(STATUS_MESSAGE_MS) {
         statusLabel.text = " "
         statusLabel.foreground = JBColor.GRAY
@@ -85,6 +79,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         pasteButton.addActionListener { bindWithManualKey() }
         unbindButton.addActionListener { unbind() }
         testButton.addActionListener { testConnection() }
+        syncNowButton.addActionListener { syncNow() }
 
         val actionPanel = JPanel().apply {
             // BoxLayout avoids FlowLayout's default 5px insets, keeping the buttons
@@ -93,6 +88,8 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             add(unbindButton)
             add(Box.createHorizontalStrut(4))
             add(testButton)
+            add(Box.createHorizontalStrut(4))
+            add(syncNowButton)
         }
 
         val statusRow = JPanel().apply {
@@ -122,6 +119,9 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             )
             .addComponent(actionPanel)
             .addComponent(statusLabel)
+            .addSeparator()
+            .addLabeledComponent(JBLabel("Sync interval (minutes, 0 = off):"), syncIntervalField)
+            .addComponent(syncStatusLabel)
             .panel
 
         val root = JPanel(BorderLayout()).apply {
@@ -130,12 +130,14 @@ class SyncSettingsConfigurable : SearchableConfigurable {
 
         panel = root
         refreshBindingState()
+        refreshSyncStatus()
         return root
     }
 
     override fun isModified(): Boolean =
         serverUrlField.text.trim() != settings.serverUrl ||
-            syncEnabledCheckBox.isSelected != settings.syncEnabled
+            syncEnabledCheckBox.isSelected != settings.syncEnabled ||
+            syncIntervalField.text.trim() != settings.syncIntervalMinutes.toString()
 
     override fun apply() {
         var url = serverUrlField.text.trim()
@@ -146,11 +148,16 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         }
         settings.serverUrl = url
         settings.syncEnabled = syncEnabledCheckBox.isSelected
+        settings.syncIntervalMinutes = readInterval() ?: SyncSettingsState.DEFAULT_SYNC_INTERVAL_MINUTES
+        syncIntervalField.text = settings.syncIntervalMinutes.toString()
+        // Re-arm the periodic task for the new interval / enable flag.
+        scheduler.reschedule()
     }
 
     override fun reset() {
         serverUrlField.text = settings.serverUrl
         syncEnabledCheckBox.isSelected = settings.syncEnabled
+        syncIntervalField.text = settings.syncIntervalMinutes.toString()
         refreshBindingState()
     }
 
@@ -223,6 +230,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             }
         }
         refreshBindingState()
+        refreshSyncStatus()
     }
 
     private fun unbind() {
@@ -236,6 +244,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         if (choice == Messages.YES) {
             keyManager.unbind()
             refreshBindingState()
+            refreshSyncStatus()
             showStatus("API key removed.")
             notify("API key removed.", MessageType.INFO)
         }
@@ -266,6 +275,47 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             } finally {
                 settings.serverUrl = savedUrl
             }
+        }
+    }
+
+    private fun syncNow() {
+        if (!settings.syncEnabled || keyManager.getApiKey() == null) {
+            showStatus("Bind an API key and enable synchronization first.", error = true)
+            return
+        }
+        setBusy(true)
+        syncStatusLabel.text = "Syncing..."
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val result = coordinator.syncOnce()
+            ApplicationManager.getApplication().invokeLater({
+                setBusy(false)
+                refreshSyncStatus()
+                when (result) {
+                    is SyncResult.Success -> showStatus("Sync completed.")
+                    is SyncResult.Failure -> showStatus("Sync failed: ${result.error.toUserMessage()}", error = true)
+                }
+            }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
+        }
+    }
+
+    private fun readInterval(): Int? = syncIntervalField.text.trim().toIntOrNull()
+
+    private fun refreshSyncStatus() {
+        val app = ApplicationManager.getApplication()
+        app.executeOnPooledThread {
+            val pending = runCatching { sessionRepository.getDirtySessions().size }.getOrDefault(0)
+            app.invokeLater({
+                val lastSync = coordinator.lastSyncAt
+                val error = coordinator.lastSyncError
+                val parts = mutableListOf<String>()
+                parts.add(if (lastSync != null) "Last sync: ${lastSync.format(SYNC_TIME_FORMATTER)}" else "Never synced")
+                parts.add("Pending: $pending")
+                if (error != null) {
+                    parts.add("Last error: $error")
+                }
+                syncStatusLabel.foreground = if (error != null) UIUtil.getErrorForeground() else JBColor.GRAY
+                syncStatusLabel.text = parts.joinToString("  \u2022  ")
+            }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
     }
 
@@ -318,11 +368,12 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     }
 
     private fun setBusy(busy: Boolean) {
-        listOf(pasteButton, unbindButton, testButton).forEach { it.isEnabled = !busy }
+        listOf(pasteButton, unbindButton, testButton, syncNowButton).forEach { it.isEnabled = !busy }
         if (!busy) {
-            // Unbind is binding-aware; Test connection stays available regardless of
-            // the binding state (it only checks server reachability).
+            // Unbind and Sync now are binding-aware; Test connection stays available
+            // regardless of the binding state (it only checks server reachability).
             unbindButton.isEnabled = settings.apiKeyPrefix != null
+            syncNowButton.isEnabled = settings.apiKeyPrefix != null
         }
     }
 
@@ -352,5 +403,6 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         const val NOTIFICATION_GROUP_ID = DISPLAY_NAME
         private const val BIND_SUCCESS_MESSAGE = "API key bound successfully."
         private const val STATUS_MESSAGE_MS = 5_000
+        private val SYNC_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss")
     }
 }
