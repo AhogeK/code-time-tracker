@@ -171,3 +171,12 @@
 - 测试 +1（getDirtySessions：返回未同步会话 + 标记同步后为空）；63/63
 - **B 阶段最终状态**：B1 DTO 对齐 ✅ / B2 字段映射 + isSynced 脏标记 ✅ / B3 软删（用户否决，不实施）✅ 取消 / B4 设备注册（后端 v0.48.0 + 插件适配）✅ / 变更追踪（脏会话查询）✅
 - 版本 0.15.0 → 0.16.0（新功能 MINOR）
+
+## [2026-08-29] - 配置缓存兼容修复 + 设备状态 UI 调整（版本 0.16.1）
+
+- **generateSyncConfig 配置缓存修复**（build.gradle.kts）：
+  - 根因：doLast 闭包引用脚本顶层 val（Kotlin 编译成脚本实例字段访问），捕获 Gradle 脚本对象，配置缓存无法序列化；执行期访问 project.version 同样不支持
+  - 修复：改为自定义任务类 `GenerateSyncConfig`（@Input webUrl/serverUrl/appVersion + @OutputFile），配置期捕获 `project.version`（syncAppVersion），执行期只访问任务属性
+  - 验证：默认配置缓存构建 BUILD SUCCESSFUL（无 problems found），63/63
+- **设备注册状态 UI 调整**（SyncSettingsConfigurable）：Device registered 从 Test connection 结果下方移到 Bound([api key]) 右侧（statusRow 并排）——状态与操作反馈分离
+- 版本 0.16.0 → 0.16.1（bug 修复 PATCH）
