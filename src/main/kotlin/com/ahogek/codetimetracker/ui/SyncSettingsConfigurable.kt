@@ -3,6 +3,7 @@ package com.ahogek.codetimetracker.ui
 import com.ahogek.codetimetracker.service.sync.SyncApiKeyManager
 import com.ahogek.codetimetracker.service.sync.SyncApiServiceImpl
 import com.ahogek.codetimetracker.service.sync.SyncCoordinator
+import com.ahogek.codetimetracker.service.sync.SyncScheduler
 import com.ahogek.codetimetracker.service.sync.SyncResult
 import com.ahogek.codetimetracker.service.sync.SyncDeviceMetadata
 import com.ahogek.codetimetracker.service.sync.SyncError
@@ -53,6 +54,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private val keyManager = ApplicationManager.getApplication().getService(SyncApiKeyManager::class.java)
     private val apiService = ApplicationManager.getApplication().getService(SyncApiServiceImpl::class.java)
     private val coordinator = ApplicationManager.getApplication().getService(SyncCoordinator::class.java)
+    private val scheduler = ApplicationManager.getApplication().getService(SyncScheduler::class.java)
 
     private val serverUrlField = JBTextField(settings.serverUrl, 40)
     private val syncEnabledCheckBox = JBCheckBox("Enable synchronization", settings.syncEnabled)
@@ -183,7 +185,14 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             val result = apiService.registerDevice(SyncDeviceMetadata.registrationRequest(), apiKey)
             // A freshly bound device runs an initial sync round right after registration so
             // the local store converges with the server without further user action.
-            val syncResult = if (result is SyncResult.Success) coordinator.syncOnce() else null
+            val syncResult = if (result is SyncResult.Success) {
+                // Binding enables sync; re-arm the periodic fallback so it applies
+                // without waiting for an IDE restart.
+                scheduler.reschedule()
+                coordinator.syncOnce()
+            } else {
+                null
+            }
             ApplicationManager.getApplication().invokeLater({
                 when (result) {
                     is SyncResult.Success -> {
