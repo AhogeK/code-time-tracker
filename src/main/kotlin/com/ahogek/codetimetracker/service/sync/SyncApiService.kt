@@ -28,4 +28,18 @@ interface SyncApiService {
      * authenticates with the SYNC-scoped API key.
      */
     fun registerDevice(request: RegisterDeviceRequest, apiKey: String): SyncResult<DeviceResponse>
+
+    /**
+     * Pulls the changes recorded after [request.lastPulledChangeId] for [request.deviceId].
+     * The response carries the changes to apply plus the next pull cursor. [apiKey]
+     * authenticates with the SYNC-scoped API key.
+     */
+    fun pull(request: SyncPullRequest, apiKey: String): SyncResult<SyncPullResponse>
+
+    /**
+     * Pushes a batch of session states for [request.deviceId] under server-side LWW
+     * conflict resolution; the batch is applied atomically by the server. [apiKey]
+     * authenticates with the SYNC-scoped API key.
+     */
+    fun push(request: SyncPushRequest, apiKey: String): SyncResult<SyncPushResponse>
 }

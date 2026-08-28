@@ -65,11 +65,14 @@ enum class ChangeOp {
 
 /**
  * A single change-log entry with the winning session snapshot, matching the server
- * SyncChangeDto record.
+ * SyncChangeDto record. [sessionUuid] is the client contract session identifier (the
+ * server returns it in pull responses so the client can match changes to local rows);
+ * [sessionId] is the server-side primary key and is not used for local matching.
  */
 data class SyncChangeDto(
     val changeId: Long = 0L,
     val sessionId: String? = null,
+    val sessionUuid: String? = null,
     val op: ChangeOp? = null,
     val serverVersion: Long = 0L,
     val happenedAt: String? = null,
