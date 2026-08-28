@@ -31,7 +31,7 @@ class StatisticsToolWindowFactory : ToolWindowFactory, DumbAware {
         project: Project,
         toolWindow: ToolWindow
     ) {
-        val statisticsView = StatisticsView()
+        val statisticsView = StatisticsView(project)
         val contentFactory = ContentFactory.getInstance()
         val content = contentFactory.createContent(statisticsView, "", false)
         toolWindow.contentManager.addContent(content)
