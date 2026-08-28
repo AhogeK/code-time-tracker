@@ -1,14 +1,26 @@
 # Progress
 
-> 最后更新: 2026-08-26
+> 最后更新: 2026-08-29
 
 ## 当前状态
 
-- **活跃功能**: 云同步基础设施 A 阶段（全部完成）
-- **当前阶段**: 登录绑定移除 + .env 构建配置 + 设置页 UI 修复完成（版本 0.11.1），待提交
-- **阻塞问题**: 无
+- **活跃功能**: 云同步 C 阶段（同步核心）完成，端到端真实验收通过
+- **当前阶段**: B 阶段（本地模型对齐 + 变更追踪）+ C 阶段（Pull/Push/游标/编排）全部完成（版本 0.17.0），收尾中
+- **阻塞问题**: 无（ctt-server v0.49.0 已落地 sessionUuid 契约）
 
 ## 最近完成
+
+- **云同步 C 阶段：同步核心**（2026-08-29，版本 0.17.0）
+  - C3 游标持久化：sync_cursor 表 + SyncCursorRepository（单调不后退）
+  - C2/C1 传输：SyncApiService.pull/push（POST /api/v1/sync/pull、/push）
+  - C1/C4 应用：SyncSessionApplier（UPSERT 新建/覆盖/跳过 dirty；DELETE 软删/保留 dirty）
+  - 编排：SyncCoordinator.syncOnce（pull→push→pull 收敛；失败保留状态幂等重试）
+  - 绑定后自动初始同步；双轴审查修复（MIN 污染/KDoc/编号注释）
+  - 测试 85/85；配置缓存兼容；端到端真实验收通过（3198 会话全量同步 + 增量幂等 + 游标续传）
+  - **云同步 B 阶段：本地模型对齐 + 变更追踪**（2026-08-28，版本 0.16.0）
+  - B1 DTO 对齐（SyncDtos）+ B2 字段映射（SyncSessionMapper）+ B4 设备注册（需求报告 → ctt-server v0.48.0 落地）+ 变更追踪（getDirtySessions）
+  - B3 软删取消（用户否决）；测试 63/63；版本 0.16.0
+  - 需求报告：ctt-server SyncChangeDto.sessionUuid → v0.49.0 落地（C 阶段 pull 应用前置）
 
 - **登录绑定移除 + .env 配置 + 设置页 UI 修复**（2026-08-26，版本 0.11.1）
   - 移除登录绑定（hCaptcha 不可行）：服务层 bindWithCredentials/login/createApiKey + 6 测试删
@@ -54,9 +66,9 @@
 
 ## 下一步
 
-- [ ] 等待用户验证 A 阶段功能（runIde 手动验收设置页）
-- [ ] 云同步 B 阶段（同步客户端 push/pull）
+- [ ] 等待用户指示：D 阶段（同步触发调度：定时/IDE 生命周期事件 + 手动同步按钮 UI）
+- [ ] C 阶段收尾提交（README 功能描述 + 记忆 + 设计文档）
 
 ## 笔记
 
-- 所有测试通过 `./gradlew test`（63/63）
+- 所有测试通过 `./gradlew test`（85/85，含真实 ctt-server 集成用例）

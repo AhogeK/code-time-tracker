@@ -1,0 +1,167 @@
+# Archived activeContext entries (A phase + early B, superseded)
+
+> Archived 2026-08-29 per R16 (activeContext > 200 lines). Original entries preserved verbatim.
+
+## [2026-08-27] - B4 设备注册：插件侧状态显示 + 需求报告（版本 0.14.0）
+
+- **应然设计确认（用户纠正）**：绑定 API key 即绑定设备是正确架构（同步游标按设备隔离、设备归属 key 持有者），不是可选期待；ctt-server 当前契约不支持（API key 无 deviceId 关联）——**契约缺陷**
+- **需求报告**：`.omp/ctt-server-device-registration-requirement.md`（可复制转交负责人）——现状/应然设计/方案 A（key 创建带 deviceId，推荐）/B（新增 POST /devices）/C（Sync 时自动 upsert）/影响面/验收
+- **插件侧状态显示**（不依赖后端）：`SyncSettingsConfigurable.checkDeviceRegistration()`——绑定后异步查 `listDevices` 比较本设备（`UserManager.getUserId()`）→ 设置页显示 Device registered / not registered（绿/红）；未绑定时清空
+- **待后端**：绑定流程自动注册（需求报告落地后插件侧适配）
+- 测试 61/61；版本 0.13.0 → 0.14.0（新功能 MINOR）
+## [2026-08-27] - AGENTS.md R3 升级：需求报告流程（用户约束）
+
+- **用户约束**：绝不自行修改 ctt-server/ctt-web（含理由）；依赖关联项目改动时输出**可复制的需求报告**（Markdown 可转交项目负责人），由用户联系负责人开发，结果反馈后插件侧对接
+- **R3 更新**：明确"只读研究契约允许且必须（验证不猜测）"+"严禁修改关联项目（无论理由）"+"需求报告流程 4 步"（现状/期望/理由/影响面/验收 → 交用户 → 负责人开发 → 反馈对接）
+- **B4 契约发现**：ctt-server 设备端点仅 GET /devices + DELETE /{id}（**无自动注册端点**）；设备创建在登录流程（createRefreshToken 用 deviceId）+ SyncPull/Push 校验 deviceId 归属；**插件手动粘贴 key 不登录 → 设备无法自动注册**——B4 引导路径待用户决策（插件侧引导去 Web 登录 vs 需求报告让 ctt-server 加自动注册端点）
+## [2026-08-27] - B 阶段：本地模型对齐（逻辑层，版本 0.13.0）
+
+- **B1 DTO 对齐**：SyncDtos.kt 加 sync 契约 DTO（SyncPullRequest/Response、SyncPushRequest/Response、SyncSessionDto、SyncChangeDto、ChangeOp 枚举、DeviceResponse）——字段严格对齐 ctt-server @Schema（含 deleted 契约字段）
+- **B2 字段映射**：SyncSessionMapper.kt（CodingSession→SyncSessionDto）：lastModified→clientModifiedAt、syncVersion→clientVersion、LocalDateTime→ISO-8601 Instant（系统时区）；platform/ideName 不上报（设备信息由设备注册承载）；测试 2 个（字段零偏差 + deleted 恒 false）
+- **B3 软删取消（用户否决）**：插件已发布且设计不想要软删 → 不动 DB、CodingSession 不加 deleted；SyncSessionDto.deleted 契约字段保留但映射恒 false
+- **B4 设备注册（逻辑层）**：SyncHttpClient 支持 TypeToken 泛型（execute/parseBody 改 Type 签名）；SyncApiService.listDevices(apiKey)（GET /api/v1/devices）——设备注册状态可查询；UI 引导路径（设置页设备状态显示）待下段
+- **契约来源**：ctt-server（sync/dto/ + device/）实测：SyncSessionDto 8 字段、SyncPullRequest(deviceId,lastPulledChangeId)、SyncPushRequest(deviceId,sessions)、ChangeOp{UPSERT,DELETE}、Device 端点 GET /devices + DELETE /{id}（无自动注册）
+- 测试 60/60（+2 mapper）；版本 0.12.0 → 0.13.0（新功能 MINOR）
+## [2026-08-27] - AGENTS.md R16 升级：记忆归档流程（用户约束）
+
+- **用户约束**：记忆可优化但不可删除；超限/过时内容必须归档（冷数据，未来可能不用但非 100% 不用）
+- **R16 更新**：原"删除>90天前/删除过时配置"改为归档制——`memory-bank/archive/YYYY-MM-DD-<topic>.md`（目录不存在时创建）；主文件保留摘要+指向 archive 的链接；彻底删除需用户确认
+- **当前状态**：memory-bank 全部 <200 行（decisions 172 最高），无立即归档需求
+## [2026-08-27] - 云同步设置发现性入口（版本 0.12.0）
+
+- **背景**：云同步设置只在 Settings 搜索可找到，用户无主动发现路径（功能存在但不可见）→ 加两个入口
+- **统计面板**：`StatisticsView` 工具栏加 ⚙️ Settings action（`AllIcons.General.Settings`）→ `ShowSettingsUtil` 打开 `SyncSettingsConfigurable`；`StatisticsView` 构造加 `Project` 参数（`StatisticsToolWindowFactory` 传入）
+- **状态栏**：`CodeTimeTrackerWidget` 弹出菜单底部加 "Settings..." 项 → `ShowSettingsUtil`（常驻全局入口，发现性最好）
+- **2026.1 坑**：`ShowSettingsUtil` 包在 `com.intellij.openapi.options`（非 ide.util/ide.actions）；AnAction description 含产品名触发 `CapitalizationInspection` 误报 → description 移除（text "Settings..." 自解释）
+- 测试 58/58；版本 0.11.2 → 0.12.0（新功能 MINOR）
+## [2026-08-27] - Test connection 始终可用 + 常量清理（版本 0.11.2）
+
+- **Test connection 修复**：`setBusy(false)`/`refreshBindingState` 里 `testButton.isEnabled = !bound` 导致绑定后 Test 按钮永久禁用（测试连接只测服务器可达性，与绑定状态无关）→ Test 只受 busy 控制，Unbind 保持绑定感知
+- **常量清理**（IDE 警告驱动）：`DISPLAY_NAME` 消除 "Code Time Tracker Sync" 3 处重复（NOTIFICATION_GROUP_ID 引用它）；`handleBindingResult` 去掉恒值参数（成功消息提为 `BIND_SUCCESS_MESSAGE` 常量）；companion 只留编译期常量（`SERVER_URL_PATTERN`/`STATUS_SUCCESS_COLOR` 两个运行时对象移到文件顶层——IDE 扩展 companion 只允许 logger + constants）
+- 测试 58/58；版本 0.11.1 → 0.11.2（toml + README badge）
+## [2026-08-26] - A 阶段服务容器实例化 bug 修复（版本 0.11.1）
+
+- **症状（runIde 手动验收）**：打开设置页抛 `InstantiationException: SyncApiKeyManager does not define any of supported signatures`，级联 `ConfigurableWrapper.getConfigurable()` null → `isModified()` NPE
+- **根因**：SyncApiKeyManager/SyncHttpClient/SyncApiServiceImpl 三个服务构造器带自定义服务参数，平台容器只支持 `()void/(CoroutineScope)/(Application)/(Application,CoroutineScope)/(ComponentManager)` 5 种签名；纯 JUnit 测试手动 new 从不经过容器，runIde 首次暴露
+- **修复**：各加 secondary 无参构造器（内部 `ApplicationManager.getService` 具体类）；`SyncSettingsConfigurable` 的 `getService(SyncApiService)` 改 `getService(SyncApiServiceImpl)`；plugin.xml 删 3 条 applicationService 注册（`@Service` 注解即 light service，`SyncSettingsState` 的 `@State` 注解驱动持久化）
+- **回归防护**：`SyncServiceResolutionTest`（LightPlatformTestCase，真实 headless 容器解析 4 个服务）；vintage engine `testRuntimeOnly` → `testImplementation`（编译期需 `junit.framework.TestCase`）
+- **红绿验证**：stash 修复后测试 FAILED（同一 InstantiationException）→ 恢复后通过；64/64 测试
+- 版本 0.11.0 → 0.11.1；README badge 同步
+
+## [2026-08-26] - 登录绑定移除 + .env 构建配置 + 设置页 UI 修复（版本 0.11.1）
+
+- **登录绑定移除**：ctt-server login 强制 hCaptcha（`captchaService.verifyCaptcha`，实测 403 VALIDATION_ERROR），插件无法完成 → 移除邮箱/密码 UI + 服务层 `bindWithCredentials`/`login`/`createApiKey` + 相关 DTO（LoginRequest/CreateApiKeyRequest/Response/ApiKeyResponse）+ 6 个测试用例；绑定只留手动粘贴；`SyncApiKeyManager` 构造器精简为仅 `settings`（删 apiService 参数）
+- **前端地址构建配置**：`build.gradle.kts` `generateSyncConfig` 任务生成 `SyncWebConfig.kt`（WEB_URL/DEFAULT_SERVER_URL，build/generated 不入库）；解析顺序 `-Pctt.*` > `CTT_*` 环境变量 > 项目 `.env` > 默认；`.env.example` 模板（提交）+ `.env` gitignore；serverUrl 默认构建注入 + IDE 设置可覆盖（自部署场景）；设置页 `Get an API key` 按钮（`BrowserUtil.browse(SyncWebConfig.WEB_URL)`，固定链接非可编辑字段）
+- **设置页 UI 修复**（runIde 验收发现）：
+  - **modality**：`invokeLater` 默认 NON_MODAL 在 modal 设置对话框内不执行（"按钮灰 + 没反馈"根因）→ 全部后台跳转改 `ModalityState.stateForComponent(panel)`，`panel` 字段在 createComponent 末尾赋值
+  - **setBusy(false) 恢复绑定状态**（unbind=apiKeyPrefix!=null, test=!bound）——修复 unbind 按钮误亮
+  - **isBound() 移出 EDT**：PasswordSafe.get 在 2026.1 是 slow operation（EDT 禁止，日志 SEVERE）→ `refreshBindingState` 后台读凭据库 + invokeLater 回 UI
+  - **statusLabel**：操作结果绿（`JBColor(0x1B7F3B,0x4E9A51)`）/红（`UIUtil.getErrorForeground()`）显示 + `javax.swing.Timer` 5 秒自动清除（替代 modal 内不显示的 balloon notify）；test/绑定/解绑全部接入
+- **教训**：edit 工具多操作 payload 的 MATCH 不匹配易产生语法损坏 → 复杂/多段改动用 `write` 重写小文件更稳；2026.1 `JBUI` 包从 `com.intellij.ui` 迁移到 `com.intellij.util.ui`
+- 测试 58/58（删 6 个登录用例）；版本 0.11.1（与服务容器修复同批未提交）
+
+## [2026-08-26] - A3 五轴审查修复（独立子代理抓出 2 个真实 bug）
+
+- **状态一致性 bug**：绑定/解绑改 settings.syncEnabled 但 checkbox 不刷新 → OK/Apply 静默回退刚绑定状态 → refreshBindingState 同步 checkbox
+- **测试连接误导**：ping 用已保存 URL 而非编辑中的字段 → 临时切换 settings.serverUrl（try/finally 恢复）
+- **凭据卫生**：绑定成功后清空密码/手动 key 字段（成功时）
+- Nit：Regex 提升 companion 常量；删除空 dispose()（Disposable 无资源）；isBound() 去重（vault.load 一次）
+- 63/63 测试通过；版本 0.11.0
+
+## [2026-08-26] - A3 设置界面完成（版本 0.11.0）
+
+- `ui/SyncSettingsConfigurable.kt`：applicationConfigurable 设置页——服务器地址/同步开关/API Key 绑定（登录 + 手动粘贴）/解绑/测试连接；EDT 规则（后台线程 + invokeLater）；Notification 提示（plugin.xml 注册 notificationGroup）
+- plugin.xml 注册 applicationConfigurable + notificationGroup（SyncApiService 注入用于 pingServer）
+- **教训**：edit 工具的 ＋ 行标记在本文件写成字面 `+` 字符（全角＋未识别）→ 用 python 修复；plugin.xml 类文件改动用 python 或谨慎 edit
+- 版本 0.10.0 → 0.11.0；编译 + 63/63 测试通过
+- A 阶段全部完成：A1 transport ✅ A2 credentials ✅ A3 settings ✅ A4 error mapping ✅
+
+## [2026-08-26] - 方案 A：只支持新版 IDE（版本 1.0.0）
+
+- **sinceBuild 251 → 261**（IDEA 2026.1 起），`create("IU","2026.1")`；放弃 2025.x 用户（用户决策）
+- **JBR 事实**：2025.3 = JBR 21.0.8（本机 SDK 实测）；2026.1 = JBR 25（JBR 版本表）——261 是最早带 JBR 25 的 IDE
+- **编译目标 21 → 25**：JavaCompile `--release 25` + Kotlin `jvmTarget 25`（Kotlin 2.4.10 支持 JVM_25/26）
+- **坑**：IPGP 对 Kotlin 任务应用 `jvmTarget.convention()`（弱默认）覆盖 `kotlin {}` 扩展设置 → 必须**任务级 `configureEach { compilerOptions.jvmTarget.set() }`**
+- **坑**：JavaCompile 的 release 由 Gradle daemon JDK 决定（JAVA_HOME 不重启 daemon 不生效）→ 声明 **java toolchain 25**（可移植）
+- **坑**：UserManager 隐式依赖 IDE 平台传递的 okio（`lock.withLock`）——2026.1 SDK 不再传递 → 改为标准 `ReentrantLock` try/finally
+- 产物 class major 69（Java 25）；63/63 测试通过
+- 文档全量同步：README（badge/Requirements）、CONTRIBUTING（JDK 25 + IDEA 2026.1）、plugin.xml description、AGENTS.md R8、techContext/projectbrief
+
+## [2026-08-26] - 依赖与工具链升级（版本 0.9.1）
+
+- **gradle-versions-plugin 0.53 → 0.61.0**：坐标迁移 `com.github.ben-manes.versions` → `io.github.ben-manes.versions`（旧坐标停在 0.54，README badge 指向新坐标；portal metadata 旧坐标滞后是陷阱）
+- **Gradle 9.3.1 → 9.7.1**（wrapper）
+- **依赖**：gson 2.14.0、junit 6.1.3、sqlite-jdbc 3.53.2.1、IPGP 2.18.1
+- **Kotlin 2.2.21 → 2.4.10**：JDK 25 必需（2.2.21 在 JDK 25 下 Kotlin daemon `NoSuchMethodError: connectAndLease`，靠 in-process fallback 才编译）
+- **JDK 25 LTS 验证**：本机 sdkman 25.0.4-tem 构建 BUILD SUCCESSFUL + 63/63 测试；**jvmTarget 保持 21**（产物 major 65，插件运行在 IDE JBR 21）——构建环境 25、编译目标 21
+- 全量测试 63/63 通过；版本 0.9.0 → 0.9.1
+
+## [2026-08-26] - 审查修复批次（code-review + 真实集成验证）
+
+- **审查发现并修复**：
+  - plugin.xml 注册 4 个 applicationService（light service 不支持依赖构造注入，官方文档证实；运行时 getService 此前会失败）
+  - **envelope 契约修复（集成测试抓出）**：ctt-server 统一响应是 `{success,message,data:{...},timestamp}` 包裹结构，成功/错误解析均需走 `RestApiEnvelope`；错误码在 `data.code`（实测 401 AUTH_003 验证）
+  - 429 retryAfter 加 60s 上限（超限直接 RATE_LIMITED，防阻塞调用线程）
+  - `toUserMessage()` 优先返回具体 message（空白键提示不再误导）
+  - 手动粘贴加 `cttak_` 前缀校验；移除冗余 cast
+  - **S3 判定不成立**：2025.3 的 `State` 注解无 roamingType 参数（reviewer 知识过时，已回退）
+- **真实集成测试** `SyncApiIntegrationTest`（assumeTrue 服务器可达，2 测试实跑本地 ctt-server）
+- **冒烟脚本** `scripts/verify-sync-flow.sh`：注册→Mailpit 验证（HTML token 提取，参考 ctt-web get-token.sh）→登录→建 SYNC key→probe 403 AUTH_020，实跑通过；真实 rawKey 格式 `cttak_*` 确认
+- **版本 0.8.10 → 0.9.0**（R18 微调：插件发布制品不用 -SNAPSHOT 后缀）；README badge 同步
+- 全量 63/63 通过（含 4 个新增用例）
+
+## [2026-08-26] - 规则更新：R19 自我学习 v2 + 全局 4.3
+
+- 项目 R19 v2：触发条件扩为"同一问题解决 2 次以上 **或** 单次排查耗时 >30 分钟且有复盘价值"；动作改为**先询问用户**再创建，禁止自动写入；明确与 R20 的衔接（询问环节 = 用户明确要求）
+- 全局 `~/.omp/agent/AGENTS.md` 新增 4.3（同款跨项目规则）
+
+## [2026-08-26] - 规则更新：禁用内置 WebSearch
+
+- 全局 `~/.omp/agent/AGENTS.md` 新增 4.2 节：禁止 WebSearch 工具，网络检索走 doko-*/opencli/grep.app 浏览器工具链（本地 bridge + 用户 Chrome，禁 Incognito）
+- 项目 AGENTS.md R26 升级 v2（同规则项目版 + gemini/perplexity 咨询保留）
+- 背景：2026-08-26 排查 IPGP 问题期间内置 WebSearch 全部 provider 失败，opencli google search 与 dokobot 本地模式可用且质量更高
+
+## [2026-08-26] - 同步基础设施 A 阶段（Transport + Credentials 完成）
+
+- 新增 `service/sync/`：SyncError（错误模型+映射器+Retry-After 双源解析）、SyncDtos、SyncSettingsState（@State 持久化）、SyncHttpClient（JDK HttpClient+429 重试）、SyncApiService/Impl（login/createApiKey/ping）、SyncKeyVault（PasswordSafe 门面）、SyncApiKeyManager（绑定/解绑/状态）
+- 新增 `ui/` 前的 Java 桥 `PasswordSafeCompat.java`：K2 编译器无法解析 2025.3 PasswordSafe 的 @JvmStatic bridge（javac 正常）——Kotlin 侧调用走 Java 门面
+- **IPGP 升级 2.11.0 → 2.17.0**：修复模块别名解析回归（#2144）；credentialStore 模块在 app.jar 内无法 bundledModule 声明，改用 `IntelliJPlatformExtension.platformPath` 取 app.jar 加入 compileOnly（运行时 IDE 提供，不打包）
+- **API 迁移坑**：2025.3 中 `CredentialAttributes` 从 `com.intellij.ide.passwordSafe` 移到 `com.intellij.credentialStore` 包
+- 测试 25 个新增，全量 59/59 通过
+- 待办：Settings UI（SyncSettingsConfigurable + plugin.xml）、版本号 0.9.0-SNAPSHOT、README、提交授权
+
+## [2026-08-26] - 新建 SKILL_GRAPH.md 技能索引
+
+- 实盘核对 3 个技能来源：内置注册表 397 + `~/.agents/skills/` 371 + `~/.config/opencode/skills/` 88
+- 去重：25 个同名双目录（arkcli-* 24 + notion-mcp）、50 个 GStack 别名、browser 系列 3 目录合并
+- 项目级技能：无（本仓库无 `.agents/skills/`）
+- 不收录 opencode 宿主内置技能（omp 无法调用）
+
+## [2026-08-26] - AGENTS.md 重构为 ctt-server/ctt-web 风格
+
+- 重写 AGENTS.md 为"项目记忆与行为约束"格式（R1-R28）
+- 新增 `projectbrief.md` / `techContext.md` / `systemPatterns.md`
+- 影响：会话初始化流程改为读取 memory-bank 全部文件（R1）
+
+## 当前状态
+
+- 版本：0.8.10
+- 活跃分支：develop
+- 活跃功能：无（StatusBar 时间显示修复已完成，等待用户验证）
+- 阻塞问题：无
+
+## 下一步
+
+- 等待用户验证 StatusBar 时间显示修复效果
+## [2026-08-27] - B4 设备注册：插件端适配（版本 0.15.0）
+
+- **ctt-server v0.48.0 落地**（devices 注册 + key↔device 绑定 + GET /devices 放宽 SYNC scope——插件决策点 5 被采纳）
+- **插件端适配**：
+  - `SyncApiService.registerDevice`（POST /api/v1/devices）+ `RegisterDeviceRequest` DTO
+  - `SyncWebConfig.APP_VERSION`（构建常量，版本单一来源）
+  - `SyncDeviceMetadata`（object：deviceId=UserManager.getUserId + deviceName(InetAddress) + platform(os.name) + ideName/ideVersion(ApplicationInfo) + appVersion(SyncWebConfig)）
+  - `SyncSettingsConfigurable`：绑定成功后 `registerDeviceOnBind()`（后台注册，成功 showStatus + checkDeviceRegistration 刷新；失败错误提示）
+  - `checkDeviceRegistration()` 现可直接工作（GET /devices 接受 SYNC scope）
+- **测试**：SyncHttpClientTest 加 POST 注册测试（请求体序列化 + DeviceResponse 解析）；62/62
+- 版本 0.14.0 → 0.15.0（新功能 MINOR）
+- **教训**：bash -c 内联 python 的 `$`/backtick 会被 shell 展开破坏 Kotlin 文本（`$deviceId` 变空、backtick 测试名被吞）→ 用 write 脚本文件执行；edit 工具对多操作 import 插入反复吞相邻 import → 大改 import 区用 write 重写或 python 精确替换
