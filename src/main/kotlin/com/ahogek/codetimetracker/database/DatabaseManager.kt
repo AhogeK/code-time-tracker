@@ -11,6 +11,7 @@ object DatabaseManager {
     private val migrationManager = MigrationManager(connectionManager)
     private val sessionRepository = SessionRepository(connectionManager)
     private val statsRepository = StatsRepository(connectionManager)
+    private val syncCursorRepository = SyncCursorRepository(connectionManager)
 
     init {
         migrationManager.migrate()
@@ -31,6 +32,12 @@ object DatabaseManager {
     fun getUserIdFromDatabase(): String? {
         return sessionRepository.getUserIdFromDatabase()
     }
+
+    /** Exposes the session repository to sync services that need repository-level operations. */
+    fun getSessionRepository(): SessionRepository = sessionRepository
+
+    /** Exposes the sync watermark repository to sync services. */
+    fun getSyncCursorRepository(): SyncCursorRepository = syncCursorRepository
 
     fun getTotalCodingTime(projectName: String? = null): Duration {
         return statsRepository.getTotalCodingTime(projectName)

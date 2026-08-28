@@ -2,6 +2,7 @@ package com.ahogek.codetimetracker.ui
 
 import com.ahogek.codetimetracker.service.sync.SyncApiKeyManager
 import com.ahogek.codetimetracker.service.sync.SyncApiServiceImpl
+import com.ahogek.codetimetracker.service.sync.SyncCoordinator
 import com.ahogek.codetimetracker.service.sync.SyncResult
 import com.ahogek.codetimetracker.service.sync.SyncDeviceMetadata
 import com.ahogek.codetimetracker.service.sync.SyncError
@@ -51,6 +52,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private val settings = ApplicationManager.getApplication().getService(SyncSettingsState::class.java)
     private val keyManager = ApplicationManager.getApplication().getService(SyncApiKeyManager::class.java)
     private val apiService = ApplicationManager.getApplication().getService(SyncApiServiceImpl::class.java)
+    private val coordinator = ApplicationManager.getApplication().getService(SyncCoordinator::class.java)
 
     private val serverUrlField = JBTextField(settings.serverUrl, 40)
     private val syncEnabledCheckBox = JBCheckBox("Enable synchronization", settings.syncEnabled)
@@ -179,11 +181,17 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         val apiKey = keyManager.getApiKey() ?: return
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = apiService.registerDevice(SyncDeviceMetadata.registrationRequest(), apiKey)
+            // A freshly bound device runs an initial sync round right after registration so
+            // the local store converges with the server without further user action.
+            val syncResult = if (result is SyncResult.Success) coordinator.syncOnce() else null
             ApplicationManager.getApplication().invokeLater({
                 when (result) {
                     is SyncResult.Success -> {
                         showStatus("Device registered.")
                         checkDeviceRegistration()
+                        if (syncResult is SyncResult.Failure) {
+                            showStatus("Initial sync failed: ${syncResult.error.toUserMessage()}", error = true)
+                        }
                     }
                     is SyncResult.Failure -> showStatus(result.error.toUserMessage(), error = true)
                 }
