@@ -2,15 +2,18 @@ package com.ahogek.codetimetracker.statistics
 
 import com.ahogek.codetimetracker.action.ExportDataAction
 import com.ahogek.codetimetracker.action.ImportDataAction
+import com.ahogek.codetimetracker.ui.SyncSettingsConfigurable
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.intellij.icons.AllIcons
 import com.intellij.ide.BrowserUtil
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.actionSystem.ActionManager
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.actionSystem.DefaultActionGroup
+import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Disposer
 import com.intellij.ui.JBColor
 import com.intellij.ui.jcef.JBCefApp
@@ -37,7 +40,7 @@ import javax.swing.JPanel
  * @author AhogeK ahogek@gmail.com
  * @since 2025-10-05 20:32:16
  */
-class StatisticsView : JPanel(BorderLayout()), Disposable {
+class StatisticsView(private val project: Project) : JPanel(BorderLayout()), Disposable {
 
     private val jbCefClient: JBCefClient = JBCefApp.getInstance().createClient()
     private val browser: JBCefBrowser
@@ -169,6 +172,15 @@ class StatisticsView : JPanel(BorderLayout()), Disposable {
 
         // Export Action
         actionGroup.add(ExportDataAction())
+
+        actionGroup.addSeparator()
+
+        // Settings Action
+        actionGroup.add(object : AnAction("Settings", null, AllIcons.General.Settings) {
+            override fun actionPerformed(e: AnActionEvent) {
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, SyncSettingsConfigurable::class.java)
+            }
+        })
 
         val actionToolbar = ActionManager.getInstance()
             .createActionToolbar("StatisticsToolbar", actionGroup, true)

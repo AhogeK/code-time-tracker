@@ -6,10 +6,12 @@ import com.ahogek.codetimetracker.listeners.TimeTrackerListener
 import com.ahogek.codetimetracker.model.TimePeriod
 import com.ahogek.codetimetracker.service.TimeTrackerService
 import com.ahogek.codetimetracker.topics.TimeTrackerTopics
+import com.ahogek.codetimetracker.ui.SyncSettingsConfigurable
 import com.ahogek.codetimetracker.util.TimeRangeUtils
 import com.intellij.icons.AllIcons
 import com.intellij.ide.DataManager
 import com.intellij.ide.util.PropertiesComponent
+import com.intellij.openapi.options.ShowSettingsUtil
 import com.intellij.openapi.actionSystem.*
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.project.DumbAware
@@ -204,6 +206,16 @@ class CodeTimeTrackerWidget(private val project: Project) : StatusBarWidget, Cus
                 override fun getActionUpdateThread(): ActionUpdateThread = ActionUpdateThread.EDT
             })
         }
+
+        group.add(Separator.getInstance())
+
+        // Global entry point so the cloud sync settings are discoverable from the
+        // always-visible status bar, not only from the settings dialog search.
+        group.add(object : AnAction("Settings...", null, AllIcons.General.Settings), DumbAware {
+            override fun actionPerformed(e: AnActionEvent) {
+                ShowSettingsUtil.getInstance().showSettingsDialog(project, SyncSettingsConfigurable::class.java)
+            }
+        })
 
         return group
     }
