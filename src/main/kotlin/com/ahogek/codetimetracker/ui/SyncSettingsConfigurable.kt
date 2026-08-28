@@ -31,6 +31,9 @@ import javax.swing.JComponent
 import javax.swing.JPanel
 import javax.swing.Timer
 
+private val SERVER_URL_PATTERN = Regex("^https?://.+")
+private val STATUS_SUCCESS_COLOR = JBColor(0x1B7F3B, 0x4E9A51)
+
 /**
  * Settings page for the sync feature: server address, web console URL, sync toggle,
  * API key binding (manual paste), unbinding and server connectivity check.
@@ -63,7 +66,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     }.apply { isRepeats = false }
     private var panel: JComponent? = null
 
-    override fun getDisplayName(): String = "Code Time Tracker Sync"
+    override fun getDisplayName(): String = DISPLAY_NAME
 
     override fun getId(): String = "com.ahogek.codetimetracker.syncSettings"
 
@@ -157,18 +160,18 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             }
             ApplicationManager.getApplication().invokeLater({
                 setBusy(false)
-                handleBindingResult(result, "API key bound successfully.")
+                handleBindingResult(result)
             }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
     }
 
-    private fun handleBindingResult(result: SyncResult<Unit>, successMessage: String) {
+    private fun handleBindingResult(result: SyncResult<Unit>) {
         when (result) {
             is SyncResult.Success -> {
                 // Credential hygiene: the secret must not linger in the component.
                 manualKeyField.text = ""
-                showStatus(successMessage)
-                notify(successMessage, MessageType.INFO)
+                showStatus(BIND_SUCCESS_MESSAGE)
+                notify(BIND_SUCCESS_MESSAGE, MessageType.INFO)
             }
             is SyncResult.Failure -> {
                 showStatus(result.error.toUserMessage(), error = true)
@@ -239,7 +242,6 @@ class SyncSettingsConfigurable : SearchableConfigurable {
                     "Not bound"
                 }
                 unbindButton.isEnabled = bound
-                testButton.isEnabled = !bound
             }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
     }
@@ -247,11 +249,9 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private fun setBusy(busy: Boolean) {
         listOf(pasteButton, unbindButton, testButton).forEach { it.isEnabled = !busy }
         if (!busy) {
-            // Restore the binding-aware state: the busy flag must not enable Unbind
-            // (or disable Test connection) for an unbound account.
-            val bound = settings.apiKeyPrefix != null
-            unbindButton.isEnabled = bound
-            testButton.isEnabled = !bound
+            // Unbind is binding-aware; Test connection stays available regardless of
+            // the binding state (it only checks server reachability).
+            unbindButton.isEnabled = settings.apiKeyPrefix != null
         }
     }
 
@@ -272,14 +272,14 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         }
         NotificationGroupManager.getInstance()
             .getNotificationGroup(NOTIFICATION_GROUP_ID)
-            .createNotification("Code Time Tracker Sync", message, notificationType)
+            .createNotification(DISPLAY_NAME, message, notificationType)
             .notify(null)
     }
 
     companion object {
-        const val NOTIFICATION_GROUP_ID = "Code Time Tracker Sync"
-        private val SERVER_URL_PATTERN = Regex("^https?://.+")
+        const val DISPLAY_NAME = "Code Time Tracker Sync"
+        const val NOTIFICATION_GROUP_ID = DISPLAY_NAME
+        private const val BIND_SUCCESS_MESSAGE = "API key bound successfully."
         private const val STATUS_MESSAGE_MS = 5_000
-        private val STATUS_SUCCESS_COLOR = JBColor(0x1B7F3B, 0x4E9A51)
     }
 }
