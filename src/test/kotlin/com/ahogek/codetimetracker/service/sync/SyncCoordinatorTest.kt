@@ -15,6 +15,8 @@ import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 class SyncCoordinatorTest {
 
@@ -179,7 +181,39 @@ class SyncCoordinatorTest {
         assertThat(sessionRepository.getDirtySessions().map { it.sessionUuid }).containsExactly(dirtyUuid)
     }
 
-    private class FakeApi : SyncApiService {
+    @Test
+    fun `should skip a second round while one is in progress`() {
+        val holdFirst = CountDownLatch(1)
+        val releaseFirst = CountDownLatch(1)
+        val blockingApi = object : FakeApi() {
+            override fun pull(request: SyncPullRequest, apiKey: String): SyncResult<SyncPullResponse> {
+                pullCalls.add(request)
+                holdFirst.countDown()
+                releaseFirst.await(5, TimeUnit.SECONDS)
+                return SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 0))
+            }
+        }
+        val blockingCoordinator = SyncCoordinator(
+            settings = settings,
+            keyManager = keyManager,
+            api = blockingApi,
+            cursorRepository = cursorRepository,
+            sessionRepository = sessionRepository,
+        )
+
+        val first = Thread { blockingCoordinator.syncOnce() }.also { it.start() }
+        holdFirst.await(5, TimeUnit.SECONDS)
+        val second = blockingCoordinator.syncOnce()
+        releaseFirst.countDown()
+        first.join(5_000)
+
+        // The overlapping trigger is a no-op, not a second round. One round performs two
+        // pulls (initial + post-push reconcile), so exactly two pulls means one round ran.
+        assertThat(second).isInstanceOf(SyncResult.Success::class.java)
+        assertThat(blockingApi.pullCalls).hasSize(2)
+    }
+
+    private open class FakeApi : SyncApiService {
         val pullCalls = mutableListOf<SyncPullRequest>()
         val pushCalls = mutableListOf<SyncPushRequest>()
         val pullResponses = ArrayDeque<SyncResult<SyncPullResponse>>()

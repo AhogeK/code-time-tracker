@@ -21,6 +21,7 @@ class SyncSettingsState : PersistentStateComponent<SyncSettingsState.State> {
         var serverUrl: String = DEFAULT_SERVER_URL,
         var syncEnabled: Boolean = false,
         var apiKeyPrefix: String? = null,
+        var syncIntervalMinutes: Int = DEFAULT_SYNC_INTERVAL_MINUTES,
     )
 
     @Volatile
@@ -50,9 +51,17 @@ class SyncSettingsState : PersistentStateComponent<SyncSettingsState.State> {
             state = state.copy(apiKeyPrefix = value)
         }
 
+    var syncIntervalMinutes: Int
+        get() = state.syncIntervalMinutes
+        set(value) {
+            state = state.copy(syncIntervalMinutes = value.coerceAtLeast(0))
+        }
+
     companion object {
+        /** Periodic sync fallback interval in minutes (0 disables the timer). */
+        const val DEFAULT_SYNC_INTERVAL_MINUTES = 5
         // Default server URL is injected at build time (see .env.example); the settings
         // page can still override it at runtime per user.
-        val DEFAULT_SERVER_URL: String = SyncWebConfig.DEFAULT_SERVER_URL
+        const val DEFAULT_SERVER_URL: String = SyncWebConfig.DEFAULT_SERVER_URL
     }
 }
