@@ -31,6 +31,7 @@ class SyncHttpClientTest {
         server.createContext("/always-429") { exchange -> handleAlwaysRateLimited(exchange) }
         server.createContext("/rate-limit-body") { exchange -> handleRateLimitBody(exchange) }
         server.createContext("/rate-limit-huge") { exchange -> handleRateLimitHuge(exchange) }
+        server.createContext("/devices") { exchange -> handleDevices(exchange) }
         server.start()
 
         settings = SyncSettingsState()
@@ -200,6 +201,7 @@ class SyncHttpClientTest {
         }
     }
 
+
     private fun handleRateLimitHuge(exchange: HttpExchange) {
         hugeRetryRequests.incrementAndGet()
         respond(
@@ -208,6 +210,32 @@ class SyncHttpClientTest {
             """{"success":false,"message":"Too many requests","data":{"code": "RATE_LIMIT_001", "message": "Too many requests"}}""",
             "Retry-After" to "86400",
         )
+    }
+
+    private fun handleDevices(exchange: HttpExchange) {
+        respond(
+            exchange,
+            200,
+            """{"success":true,"data":[
+                {"id":"dev-1","deviceName":"MacBook Pro","platform":"macOS","ideName":"IntelliJ IDEA","ideVersion":"2026.1","appVersion":"0.13.0","createdAt":"2026-03-01T10:00:00Z","lastSeenAt":"2026-04-28T15:30:00Z"}
+            ],"timestamp":"2026-08-27T00:00:00Z"}""",
+        )
+    }
+
+    @Test
+    fun `should deserialize a typed list response via TypeToken`() {
+        val result = client.execute<List<DeviceResponse>>(
+            SyncRequest(method = "GET", path = "/devices"),
+            object : com.google.gson.reflect.TypeToken<List<DeviceResponse>>() {}.type,
+        )
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        val devices = (result as SyncResult.Success).data
+        assertThat(devices).hasSize(1)
+        assertThat(devices[0].id).isEqualTo("dev-1")
+        assertThat(devices[0].deviceName).isEqualTo("MacBook Pro")
+        assertThat(devices[0].platform).isEqualTo("macOS")
+        assertThat(devices[0].ideName).isEqualTo("IntelliJ IDEA")
     }
 
     private fun respond(

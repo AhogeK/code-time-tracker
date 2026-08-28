@@ -8,6 +8,7 @@ import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
 import java.io.IOException
+import java.lang.reflect.Type
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -77,10 +78,19 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
      *
      * @param responseType the class used to deserialise a 2xx response body
      */
-    fun <T> execute(request: SyncRequest, responseType: Class<T>): SyncResult<T> {
+    fun <T> execute(request: SyncRequest, responseType: Class<T>): SyncResult<T> =
+        execute(request, responseType as Type)
+
+    /**
+     * Executes [request], retrying rate-limited responses up to [MAX_RETRIES] times.
+     *
+     * @param responseType the type used to deserialise a 2xx response body; use a
+     * [com.google.gson.reflect.TypeToken] for parameterised types such as lists
+     */
+    fun <T> execute(request: SyncRequest, responseType: Type): SyncResult<T> {
         var attempt = 0
         while (true) {
-            when (val outcome = trySend(request, responseType)) {
+            when (val outcome = trySend<T>(request, responseType)) {
                 is Outcome.Success -> return SyncResult.Success(outcome.data)
                 is Outcome.HttpFailure -> {
                     val retryAfter = SyncErrorMapper.parseRetryAfter(
@@ -134,7 +144,7 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
         data class TransportFailure(val error: SyncError) : Outcome<Nothing>
     }
 
-    private fun <T> trySend(request: SyncRequest, responseType: Class<T>): Outcome<T> {
+    private fun <T> trySend(request: SyncRequest, responseType: Type): Outcome<T> {
         val uri = URI.create(settings.serverUrl.trimEnd('/') + request.path)
         val builder = HttpRequest.newBuilder(uri)
             .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
@@ -152,7 +162,7 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
             val response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString())
             val status = response.statusCode()
             if (status in 200..299) {
-                val data = parseBody(response.body(), responseType)
+                val data = parseBody<T>(response.body(), responseType)
                 if (data != null) {
                     Outcome.Success(data)
                 } else {
@@ -167,17 +177,17 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
                     retryAfterHeader = response.headers().firstValue("Retry-After").orElse(null),
                 )
             }
-        } catch (e: HttpTimeoutException) {
+        } catch (_: HttpTimeoutException) {
             Outcome.TransportFailure(SyncError(SyncErrorKind.TIMEOUT))
-        } catch (e: IOException) {
+        } catch (_: IOException) {
             Outcome.TransportFailure(SyncError(SyncErrorKind.NETWORK_ERROR))
-        } catch (e: InterruptedException) {
+        } catch (_: InterruptedException) {
             Thread.currentThread().interrupt()
             Outcome.TransportFailure(SyncError(SyncErrorKind.UNKNOWN))
         }
     }
 
-    private fun <T> parseBody(body: String, type: Class<T>): T? = try {
+    private fun <T> parseBody(body: String, type: Type): T? = try {
         val envelope = gson.fromJson(body, RestApiEnvelope::class.java)
         envelope.data?.let { gson.fromJson(it, type) }
     } catch (e: JsonSyntaxException) {
@@ -189,7 +199,7 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
         gson.fromJson(body, RestApiEnvelope::class.java).data
             ?.takeIf { it.isJsonObject }
             ?.let { gson.fromJson(it, ErrorData::class.java) }
-    } catch (e: JsonSyntaxException) {
+    } catch (_: JsonSyntaxException) {
         null
     }
 
@@ -201,7 +211,7 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
     private fun sleepQuietly(millis: Long): Boolean = try {
         Thread.sleep(millis)
         true
-    } catch (e: InterruptedException) {
+    } catch (_: InterruptedException) {
         Thread.currentThread().interrupt()
         false
     }
