@@ -1,6 +1,14 @@
 # Active Context
 
 > 当前工作上下文（保留最近30天，删除>90天前）
+## [2026-08-27] - B 阶段：本地模型对齐（逻辑层，版本 0.13.0）
+
+- **B1 DTO 对齐**：SyncDtos.kt 加 sync 契约 DTO（SyncPullRequest/Response、SyncPushRequest/Response、SyncSessionDto、SyncChangeDto、ChangeOp 枚举、DeviceResponse）——字段严格对齐 ctt-server @Schema（含 deleted 契约字段）
+- **B2 字段映射**：SyncSessionMapper.kt（CodingSession→SyncSessionDto）：lastModified→clientModifiedAt、syncVersion→clientVersion、LocalDateTime→ISO-8601 Instant（系统时区）；platform/ideName 不上报（设备信息由设备注册承载）；测试 2 个（字段零偏差 + deleted 恒 false）
+- **B3 软删取消（用户否决）**：插件已发布且设计不想要软删 → 不动 DB、CodingSession 不加 deleted；SyncSessionDto.deleted 契约字段保留但映射恒 false
+- **B4 设备注册（逻辑层）**：SyncHttpClient 支持 TypeToken 泛型（execute/parseBody 改 Type 签名）；SyncApiService.listDevices(apiKey)（GET /api/v1/devices）——设备注册状态可查询；UI 引导路径（设置页设备状态显示）待下段
+- **契约来源**：ctt-server（sync/dto/ + device/）实测：SyncSessionDto 8 字段、SyncPullRequest(deviceId,lastPulledChangeId)、SyncPushRequest(deviceId,sessions)、ChangeOp{UPSERT,DELETE}、Device 端点 GET /devices + DELETE /{id}（无自动注册）
+- 测试 60/60（+2 mapper）；版本 0.12.0 → 0.13.0（新功能 MINOR）
 ## [2026-08-27] - AGENTS.md R16 升级：记忆归档流程（用户约束）
 
 - **用户约束**：记忆可优化但不可删除；超限/过时内容必须归档（冷数据，未来可能不用但非 100% 不用）
