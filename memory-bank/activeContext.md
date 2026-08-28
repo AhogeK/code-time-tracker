@@ -47,3 +47,15 @@
 - **验收结论**：C 阶段验收标准全部达成（push→pull→再 pull 空 + 游标断点续传 + sessionUuid 契约 + 幂等）
 - **收尾**：progress.md 更新（B/C 完成）；README 功能描述待更新（云同步 + Privacy 修正）；C 阶段设计文档待写
 
+
+## [2026-08-29] - D 阶段批次 1：调度与集成核心（版本 0.18.0）
+
+- **触发策略（判断）**：手动（SyncScheduler.syncNow 统一入口）+ 定时兜底（可配置间隔，默认 5 分钟）+ IDE 关闭前 flush（AppLifecycleListener.appWillBeClosed）+ 绑定后初始同步（既有）；**会话结束与项目打开不做显式触发**——每次空闲持久化（60s）就同步 = 频繁网络请求 + 侵入追踪核心；项目打开同步已试做（ProjectManagerListener.projectOpened）但 2026.1 将其 @Deprecated(forRemoval=true) 且无替代 open 事件，IDE inspection 无法用 Kotlin @Suppress 压制（Java 侧检查），故移除该触发点，由定时兜底（5 分钟）覆盖
+- **SyncScheduler**（新 @Service，Disposable）：单线程 daemon ScheduledExecutor，scheduleWithFixedDelay（固定延迟 = 间隔语义）；`start()` 启动、`reschedule()` 按 settings.syncIntervalMinutes 重排（0 或未启用 = 停表）、`syncNow()` 后台统一触发入口（EDT/事件/生命周期安全）
+- **SyncCoordinator 并发锁**：AtomicBoolean CAS 防重入（重叠触发 no-op）；状态记录 `lastSyncAt`/`lastSyncError`（@Volatile，设置页展示用，成功清错误）
+- **SyncSettingsState**：+syncIntervalMinutes（默认 5，0 关闭定时，coerceAtLeast(0)）
+- **SyncLifecycleListener**（新 listener）：appFrameCreated → scheduler.start()；appWillBeClosed → syncNow()（best-effort flush；脏会话已落本地，中断只延迟下次启动补传）——2026.1 API 坑：AppLifecycleListener 在 `com.intellij.ide` 包；appStarted/beforeAppWillBeClosed 标 @ApiStatus.Internal（不可 override）→ 用 appFrameCreated 启动（非 Internal）；关闭方法名 appWillBeClosed(boolean)（无 appWillExit）
+- **ProjectCloseListener 拆分**：平台 2026.1 将 ProjectManagerListener 全方法 @Deprecated(forRemoval=true)；关闭侧有替代（com.intellij.openapi.project.ProjectCloseListener 新 API），打开侧无替代 → 拆成 `ProjectCloseTrackingListener`（新 API，projectClosing 停追踪）+ `ProjectSyncListener`（旧 API，已删除）；项目打开同步由定时兜底覆盖
+- plugin.xml 注册 SyncLifecycleListener
+- **测试**：+4（SyncScheduler 3：syncNow 后台触发/未启用停表/间隔 0 停表；SyncCoordinator 并发锁 1：重叠触发 no-op 只跑一轮）；89/89；配置缓存兼容
+- 版本 0.17.0 → 0.18.0（新功能 MINOR）
