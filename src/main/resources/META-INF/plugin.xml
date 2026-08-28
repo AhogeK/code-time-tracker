@@ -110,8 +110,12 @@
                 class="com.ahogek.codetimetracker.listeners.GlobalActionListener"
                 topic="com.intellij.openapi.actionSystem.ex.AnActionListener"/>
         <listener
-                class="com.ahogek.codetimetracker.listeners.ProjectCloseListener"
-                topic="com.intellij.openapi.project.ProjectManagerListener"/>
+                class="com.ahogek.codetimetracker.listeners.ProjectCloseTrackingListener"
+                topic="com.intellij.openapi.project.ProjectCloseListener"/>
+
+        <listener
+                class="com.ahogek.codetimetracker.listeners.SyncLifecycleListener"
+                topic="com.intellij.AppLifecycleListener"/>
     </applicationListeners>
 
 </idea-plugin>
