@@ -186,6 +186,115 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         return sessions
     }
 
+    /**
+     * Returns the active local rows for the given session uuids as a map keyed by session
+     * uuid. Soft-deleted rows are excluded so a pull change can never revive them. Used by
+     * the sync pull path to decide how to apply a remote change: rows already present and
+     * clean are overwritten, dirty rows are left untouched.
+     */
+    fun findBySessionUuids(sessionUuids: Collection<String>): Map<String, CodingSession> {
+        if (sessionUuids.isEmpty()) return emptyMap()
+        val placeholders = sessionUuids.joinToString(",") { "?" }
+        val sql = """
+            SELECT
+                session_uuid, user_id, project_name, language, platform, ide_name,
+                start_time, end_time, last_modified, is_synced, synced_at, sync_version
+            FROM coding_sessions
+            WHERE session_uuid IN ($placeholders) AND is_deleted = 0
+        """.trimIndent()
+        val result = mutableMapOf<String, CodingSession>()
+        try {
+            connectionManager.withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    sessionUuids.forEachIndexed { index, uuid -> pstmt.setString(index + 1, uuid) }
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            rs.toCodingSession().let { result[it.sessionUuid] = it }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to retrieve sessions by uuids", e)
+        }
+        return result
+    }
+
+    /**
+     * Inserts a session state received from the server (pull), or updates the existing
+     * row in place. The row is marked synced. `ON CONFLICT` guards against a concurrent
+     * local write between the lookup and this insert.
+     */
+    fun upsertSyncedSession(session: CodingSession) {
+        val sql = """
+            INSERT INTO coding_sessions(
+                session_uuid, user_id, project_name, language, platform, ide_name,
+                start_time, end_time, last_modified, is_synced, synced_at, sync_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+            ON CONFLICT(session_uuid) DO UPDATE SET
+                project_name = excluded.project_name,
+                language = excluded.language,
+                start_time = excluded.start_time,
+                end_time = excluded.end_time,
+                last_modified = excluded.last_modified,
+                is_synced = 1,
+                synced_at = excluded.synced_at,
+                sync_version = excluded.sync_version
+        """.trimIndent()
+        try {
+            connectionManager.withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, session.sessionUuid)
+                    pstmt.setString(2, session.userId)
+                    pstmt.setSessionCoreParams(3, session)
+                    pstmt.setString(9, dateTimeFormatter.format(session.lastModified))
+                    pstmt.setString(10, dateTimeFormatter.format(session.syncedAt ?: LocalDateTime.now()))
+                    pstmt.setInt(11, session.syncVersion)
+                    pstmt.executeUpdate()
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to upsert synced session ${session.sessionUuid}", e)
+        }
+    }
+
+    /** Marks the given session uuids as synced (used after a successful push). */
+    fun markSynced(sessionUuids: Collection<String>) {
+        if (sessionUuids.isEmpty()) return
+        val placeholders = sessionUuids.joinToString(",") { "?" }
+        val sql = """
+            UPDATE coding_sessions
+            SET is_synced = 1, synced_at = ?
+            WHERE session_uuid IN ($placeholders) AND is_deleted = 0
+        """.trimIndent()
+        try {
+            connectionManager.withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(LocalDateTime.now()))
+                    sessionUuids.forEachIndexed { index, uuid -> pstmt.setString(index + 2, uuid) }
+                    pstmt.executeUpdate()
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to mark sessions as synced", e)
+        }
+    }
+
+    /** Soft-deletes a local session after the server confirmed a DELETE change (pull). */
+    fun markDeleted(sessionUuid: String) {
+        val sql = "UPDATE coding_sessions SET is_deleted = 1 WHERE session_uuid = ? AND is_deleted = 0"
+        try {
+            connectionManager.withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, sessionUuid)
+                    pstmt.executeUpdate()
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to mark session $sessionUuid as deleted", e)
+        }
+    }
+
     private fun java.sql.ResultSet.toCodingSession(): CodingSession = CodingSession(
         sessionUuid = getString("session_uuid"),
         userId = getString("user_id"),
