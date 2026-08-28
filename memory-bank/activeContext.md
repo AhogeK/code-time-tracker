@@ -164,3 +164,10 @@
 - **测试**：SyncHttpClientTest 加 POST 注册测试（请求体序列化 + DeviceResponse 解析）；62/62
 - 版本 0.14.0 → 0.15.0（新功能 MINOR）
 - **教训**：bash -c 内联 python 的 `$`/backtick 会被 shell 展开破坏 Kotlin 文本（`$deviceId` 变空、backtick 测试名被吞）→ 用 write 脚本文件执行；edit 工具对多操作 import 插入反复吞相邻 import → 大改 import 区用 write 重写或 python 精确替换
+## [2026-08-27] - B 阶段变更追踪补全：getDirtySessions（版本 0.16.0）
+
+- **B 阶段目标"建立脏数据追踪"补全**：SessionRepository 加 `getDirtySessions()`（is_deleted=0 AND is_synced=0，识别待同步本地变更，C 阶段 push 前置）
+- **重构**：行映射提取 `ResultSet.toCodingSession()` helper（getSessions 复用，消除重复）
+- 测试 +1（getDirtySessions：返回未同步会话 + 标记同步后为空）；63/63
+- **B 阶段最终状态**：B1 DTO 对齐 ✅ / B2 字段映射 + isSynced 脏标记 ✅ / B3 软删（用户否决，不实施）✅ 取消 / B4 设备注册（后端 v0.48.0 + 插件适配）✅ / 变更追踪（脏会话查询）✅
+- 版本 0.15.0 → 0.16.0（新功能 MINOR）
