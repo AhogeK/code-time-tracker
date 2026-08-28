@@ -39,4 +39,10 @@ class SyncApiServiceImpl(private val client: SyncHttpClient) : SyncApiService {
             SyncRequest(method = "GET", path = "/api/v1/devices", bearerToken = apiKey),
             object : com.google.gson.reflect.TypeToken<List<DeviceResponse>>() {}.type,
         )
+
+    override fun registerDevice(request: RegisterDeviceRequest, apiKey: String): SyncResult<DeviceResponse> =
+        client.execute(
+            SyncRequest(method = "POST", path = "/api/v1/devices", body = request, bearerToken = apiKey),
+            DeviceResponse::class.java,
+        )
 }

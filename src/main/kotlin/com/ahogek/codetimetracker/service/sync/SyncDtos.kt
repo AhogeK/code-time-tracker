@@ -94,6 +94,20 @@ data class DeviceResponse(
     val lastSeenAt: String? = null,
 )
 
+/**
+ * POST /api/v1/devices request body: registers or updates the client device.
+ * The server upserts by [deviceId] for the authenticated user and binds the device
+ * to the current API key (key <-> device).
+ */
+data class RegisterDeviceRequest(
+    val deviceId: String? = null,
+    val deviceName: String? = null,
+    val platform: String? = null,
+    val ideName: String? = null,
+    val ideVersion: String? = null,
+    val appVersion: String? = null,
+)
+
 /** ctt-server unified response envelope: {success, message, data, timestamp}. */
 data class RestApiEnvelope(
     val success: Boolean = false,

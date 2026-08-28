@@ -32,6 +32,7 @@ class SyncHttpClientTest {
         server.createContext("/rate-limit-body") { exchange -> handleRateLimitBody(exchange) }
         server.createContext("/rate-limit-huge") { exchange -> handleRateLimitHuge(exchange) }
         server.createContext("/devices") { exchange -> handleDevices(exchange) }
+        server.createContext("/devices-register") { exchange -> handleDevicesRegister(exchange) }
         server.start()
 
         settings = SyncSettingsState()
@@ -222,6 +223,16 @@ class SyncHttpClientTest {
         )
     }
 
+    private fun handleDevicesRegister(exchange: HttpExchange) {
+        val body = exchange.requestBody.readBytes().toString(Charsets.UTF_8)
+        val deviceId = if (body.contains("\"deviceId\"")) "dev-1" else "unknown"
+        respond(
+            exchange,
+            200,
+            """{"success":true,"data":{"id":"$deviceId","deviceName":"MacBook Pro","platform":"macOS","ideName":"IntelliJ IDEA","ideVersion":"2026.1","appVersion":"0.15.0"}}""",
+        )
+    }
+
     @Test
     fun `should deserialize a typed list response via TypeToken`() {
         val result = client.execute<List<DeviceResponse>>(
@@ -236,6 +247,31 @@ class SyncHttpClientTest {
         assertThat(devices[0].deviceName).isEqualTo("MacBook Pro")
         assertThat(devices[0].platform).isEqualTo("macOS")
         assertThat(devices[0].ideName).isEqualTo("IntelliJ IDEA")
+    }
+
+    @Test
+    fun `should serialize a request body and parse a typed response on POST`() {
+        val result = client.execute(
+            SyncRequest(
+                method = "POST",
+                path = "/devices-register",
+                body = RegisterDeviceRequest(
+                    deviceId = "dev-1",
+                    deviceName = "MacBook Pro",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    ideVersion = "2026.1",
+                    appVersion = "0.15.0",
+                ),
+            ),
+            DeviceResponse::class.java,
+        )
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        val device = (result as SyncResult.Success).data
+        assertThat(device.id).isEqualTo("dev-1")
+        assertThat(device.deviceName).isEqualTo("MacBook Pro")
+        assertThat(device.platform).isEqualTo("macOS")
     }
 
     private fun respond(
