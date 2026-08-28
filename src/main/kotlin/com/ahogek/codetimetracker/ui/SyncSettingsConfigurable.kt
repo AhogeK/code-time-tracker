@@ -91,11 +91,18 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             add(testButton)
         }
 
+        val statusRow = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
+            add(bindingStatusLabel)
+            add(Box.createHorizontalStrut(8))
+            add(deviceStatusLabel)
+        }
+
         val formPanel = FormBuilder.createFormBuilder()
             .addLabeledComponent(JBLabel("Server address:"), serverUrlField)
             .addComponent(syncEnabledCheckBox)
             .addSeparator()
-            .addLabeledComponent(JBLabel("API key:"), bindingStatusLabel)
+            .addLabeledComponent(JBLabel("API key:"), statusRow)
             .addComponent(getKeyButton)
             .addLabeledComponent(JBLabel("Or paste an API key:"), manualKeyField)
             .addComponent(pasteButton)
@@ -111,7 +118,6 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             )
             .addComponent(actionPanel)
             .addComponent(statusLabel)
-            .addComponent(deviceStatusLabel)
             .panel
 
         val root = JPanel(BorderLayout()).apply {
