@@ -59,3 +59,13 @@
 - plugin.xml 注册 SyncLifecycleListener
 - **测试**：+4（SyncScheduler 3：syncNow 后台触发/未启用停表/间隔 0 停表；SyncCoordinator 并发锁 1：重叠触发 no-op 只跑一轮）；89/89；配置缓存兼容
 - 版本 0.17.0 → 0.18.0（新功能 MINOR）
+
+## [2026-08-29] - D 阶段批次 2：设置页同步 UI（版本 0.19.0）
+
+- **Sync now 手动按钮**：actionPanel 第三按钮（Unbind / Test connection / Sync now）；未绑定/未启用时提示先绑定；后台 coordinator.syncOnce()（拿结果反馈成功/失败）；busy 期间禁用 + 绑定感知
+- **同步状态行**（syncStatusLabel）：`Last sync: HH:mm:ss（或 Never synced） • Pending: N • Last error: <msg>`——lastSyncAt/lastSyncError 来自 SyncCoordinator（批次 1 状态），Pending = getDirtySessions().size（后台线程读 DB）；错误时红色；刷新时机：打开设置页 / 绑定解绑后 / Sync now 后 / apply 后
+- **间隔配置**（syncIntervalField，分钟，0=off）：isModified/apply/reset 接线（非法回默认 5）；apply 里 scheduler.reschedule() 使新间隔/开关即时生效（不重启）
+- **实现细节**：LocalDateTime.format 用 java.time 自带（无冗余 extension）；待同步数用 DatabaseManager.getSessionRepository（后台线程）
+- 测试 90/90（UI 无单测，手动验收）；配置缓存兼容
+- 版本 0.18.0 → 0.19.0（新功能 MINOR）
+- **D 阶段状态**：D1 触发（批次 1）✅ / D2 状态展示（批次 2）✅ / D3 后台执行（批次 1）✅ / D4 配置持久化（批次 1 间隔字段 + 批次 2 UI）✅
