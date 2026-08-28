@@ -13,4 +13,11 @@ interface SyncApiService {
      * 401/403) counts as reachable; only transport failures are reported.
      */
     fun pingServer(): SyncResult<Unit>
+
+    /**
+     * Lists the registered devices for the authenticated user, used to verify the
+     * current device is registered before syncing. [apiKey] authenticates with the
+     * SYNC-scoped API key.
+     */
+    fun listDevices(apiKey: String): SyncResult<List<DeviceResponse>>
 }
