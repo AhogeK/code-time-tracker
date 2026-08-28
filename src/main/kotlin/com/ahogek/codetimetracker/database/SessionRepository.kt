@@ -143,27 +143,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
                     }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            sessions.add(
-                                CodingSession(
-                                    sessionUuid = rs.getString("session_uuid"),
-                                    userId = rs.getString("user_id"),
-                                    projectName = rs.getString("project_name"),
-                                    language = rs.getString("language"),
-                                    platform = rs.getString("platform"),
-                                    ideName = rs.getString("ide_name"),
-                                    startTime = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter),
-                                    endTime = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter),
-                                    lastModified = LocalDateTime.parse(
-                                        rs.getString("last_modified"),
-                                        dateTimeFormatter
-                                    ),
-                                    isSynced = rs.getInt("is_synced") == 1,
-                                    syncedAt = rs.getString("synced_at")?.let {
-                                        LocalDateTime.parse(it, dateTimeFormatter)
-                                    },
-                                    syncVersion = rs.getInt("sync_version")
-                                )
-                            )
+                            sessions.add(rs.toCodingSession())
                         }
                     }
                 }
@@ -174,6 +154,52 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
 
         return sessions
     }
+
+    /**
+     * Returns sessions with local changes not yet synced (is_synced = 0); this is the
+     * change-tracking view used by the push path to decide what to send to the server.
+     */
+    fun getDirtySessions(): List<CodingSession> {
+        val sql = """
+            SELECT
+                session_uuid, user_id, project_name, language, platform, ide_name,
+                start_time, end_time, last_modified, is_synced, synced_at, sync_version
+            FROM coding_sessions
+            WHERE is_deleted = 0 AND is_synced = 0
+            ORDER BY last_modified
+        """.trimIndent()
+
+        val sessions = mutableListOf<CodingSession>()
+        try {
+            connectionManager.withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.executeQuery().use { rs ->
+                        while (rs.next()) {
+                            sessions.add(rs.toCodingSession())
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to retrieve dirty sessions", e)
+        }
+        return sessions
+    }
+
+    private fun java.sql.ResultSet.toCodingSession(): CodingSession = CodingSession(
+        sessionUuid = getString("session_uuid"),
+        userId = getString("user_id"),
+        projectName = getString("project_name"),
+        language = getString("language"),
+        platform = getString("platform"),
+        ideName = getString("ide_name"),
+        startTime = LocalDateTime.parse(getString("start_time"), dateTimeFormatter),
+        endTime = LocalDateTime.parse(getString("end_time"), dateTimeFormatter),
+        lastModified = LocalDateTime.parse(getString("last_modified"), dateTimeFormatter),
+        isSynced = getInt("is_synced") == 1,
+        syncedAt = getString("synced_at")?.let { LocalDateTime.parse(it, dateTimeFormatter) },
+        syncVersion = getInt("sync_version"),
+    )
 
     fun getAllSessionUuids(): Set<String> {
         val sql = "SELECT session_uuid FROM coding_sessions WHERE is_deleted = 0"

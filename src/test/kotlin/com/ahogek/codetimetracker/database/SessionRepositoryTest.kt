@@ -294,4 +294,34 @@ class SessionRepositoryTest {
         assertThat(times.first().startTime).isEqualTo(LocalDateTime.of(2026, 1, 1, 10, 0))
         assertThat(times.first().endTime).isEqualTo(LocalDateTime.of(2026, 1, 1, 12, 0))
     }
+
+    @Test
+    fun `getDirtySessions should return only unsynced sessions`() {
+        val uuid = UUID.randomUUID().toString()
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = uuid,
+                    userId = "test-user",
+                    projectName = "Project1",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 12, 0),
+                    lastModified = LocalDateTime.now()
+                )
+            )
+        )
+
+        assertThat(sessionRepository.getDirtySessions()).hasSize(1)
+        assertThat(sessionRepository.getDirtySessions().first().sessionUuid).isEqualTo(uuid)
+
+        connectionManager.withConnection { conn ->
+            conn.createStatement().use {
+                it.executeUpdate("UPDATE coding_sessions SET is_synced = 1 WHERE session_uuid = '$uuid'")
+            }
+        }
+        assertThat(sessionRepository.getDirtySessions()).isEmpty()
+    }
 }
