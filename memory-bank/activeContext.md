@@ -1,6 +1,18 @@
 # Active Context
 
 > 当前工作上下文（保留最近30天，删除>90天前）
+## [2026-08-27] - B4 设备注册：插件侧状态显示 + 需求报告（版本 0.14.0）
+
+- **应然设计确认（用户纠正）**：绑定 API key 即绑定设备是正确架构（同步游标按设备隔离、设备归属 key 持有者），不是可选期待；ctt-server 当前契约不支持（API key 无 deviceId 关联）——**契约缺陷**
+- **需求报告**：`.omp/ctt-server-device-registration-requirement.md`（可复制转交负责人）——现状/应然设计/方案 A（key 创建带 deviceId，推荐）/B（新增 POST /devices）/C（Sync 时自动 upsert）/影响面/验收
+- **插件侧状态显示**（不依赖后端）：`SyncSettingsConfigurable.checkDeviceRegistration()`——绑定后异步查 `listDevices` 比较本设备（`UserManager.getUserId()`）→ 设置页显示 Device registered / not registered（绿/红）；未绑定时清空
+- **待后端**：绑定流程自动注册（需求报告落地后插件侧适配）
+- 测试 61/61；版本 0.13.0 → 0.14.0（新功能 MINOR）
+## [2026-08-27] - AGENTS.md R3 升级：需求报告流程（用户约束）
+
+- **用户约束**：绝不自行修改 ctt-server/ctt-web（含理由）；依赖关联项目改动时输出**可复制的需求报告**（Markdown 可转交项目负责人），由用户联系负责人开发，结果反馈后插件侧对接
+- **R3 更新**：明确"只读研究契约允许且必须（验证不猜测）"+"严禁修改关联项目（无论理由）"+"需求报告流程 4 步"（现状/期望/理由/影响面/验收 → 交用户 → 负责人开发 → 反馈对接）
+- **B4 契约发现**：ctt-server 设备端点仅 GET /devices + DELETE /{id}（**无自动注册端点**）；设备创建在登录流程（createRefreshToken 用 deviceId）+ SyncPull/Push 校验 deviceId 归属；**插件手动粘贴 key 不登录 → 设备无法自动注册**——B4 引导路径待用户决策（插件侧引导去 Web 登录 vs 需求报告让 ctt-server 加自动注册端点）
 ## [2026-08-27] - B 阶段：本地模型对齐（逻辑层，版本 0.13.0）
 
 - **B1 DTO 对齐**：SyncDtos.kt 加 sync 契约 DTO（SyncPullRequest/Response、SyncPushRequest/Response、SyncSessionDto、SyncChangeDto、ChangeOp 枚举、DeviceResponse）——字段严格对齐 ctt-server @Schema（含 deleted 契约字段）
@@ -140,3 +152,15 @@
 ## 下一步
 
 - 等待用户验证 StatusBar 时间显示修复效果
+## [2026-08-27] - B4 设备注册：插件端适配（版本 0.15.0）
+
+- **ctt-server v0.48.0 落地**（devices 注册 + key↔device 绑定 + GET /devices 放宽 SYNC scope——插件决策点 5 被采纳）
+- **插件端适配**：
+  - `SyncApiService.registerDevice`（POST /api/v1/devices）+ `RegisterDeviceRequest` DTO
+  - `SyncWebConfig.APP_VERSION`（构建常量，版本单一来源）
+  - `SyncDeviceMetadata`（object：deviceId=UserManager.getUserId + deviceName(InetAddress) + platform(os.name) + ideName/ideVersion(ApplicationInfo) + appVersion(SyncWebConfig)）
+  - `SyncSettingsConfigurable`：绑定成功后 `registerDeviceOnBind()`（后台注册，成功 showStatus + checkDeviceRegistration 刷新；失败错误提示）
+  - `checkDeviceRegistration()` 现可直接工作（GET /devices 接受 SYNC scope）
+- **测试**：SyncHttpClientTest 加 POST 注册测试（请求体序列化 + DeviceResponse 解析）；62/62
+- 版本 0.14.0 → 0.15.0（新功能 MINOR）
+- **教训**：bash -c 内联 python 的 `$`/backtick 会被 shell 展开破坏 Kotlin 文本（`$deviceId` 变空、backtick 测试名被吞）→ 用 write 脚本文件执行；edit 工具对多操作 import 插入反复吞相邻 import → 大改 import 区用 write 重写或 python 精确替换
