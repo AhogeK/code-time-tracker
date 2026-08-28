@@ -7,6 +7,8 @@ import com.ahogek.codetimetracker.user.UserManager
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import java.time.LocalDateTime
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Orchestrates one sync round: pull remote changes and apply them, push the local dirty
@@ -49,16 +51,50 @@ class SyncCoordinator(
         private val log = Logger.getInstance(SyncCoordinator::class.java)
     }
 
+    /** Guards against concurrent sync rounds from overlapping triggers (timer, events, manual). */
+    private val syncInProgress = AtomicBoolean(false)
+
+    /** Last successful sync completion time, exposed to the settings UI. */
+    @Volatile
+    var lastSyncAt: LocalDateTime? = null
+        private set
+
+    /** Last sync failure message, exposed to the settings UI (cleared on success). */
+    @Volatile
+    var lastSyncError: String? = null
+        private set
+
     /**
      * Runs a single sync round: pull and apply remote changes, push local dirty sessions,
      * then pull again so the local store converges on the server-authoritative state.
-     * Returns [SyncResult.Success] when sync is disabled or nothing needed to sync;
-     * otherwise returns the first failure.
+     * Returns [SyncResult.Success] when sync is disabled, already running or nothing needed
+     * to sync; otherwise returns the first failure.
      */
     fun syncOnce(): SyncResult<Unit> {
+        // A skipped round (disabled or unbound) is not a sync and must not touch the
+        // status fields; an overlapping round is a no-op for the same reason.
         if (!settings.syncEnabled || !keyManager.isBound()) {
             return SyncResult.Success(Unit)
         }
+        if (!syncInProgress.compareAndSet(false, true)) {
+            return SyncResult.Success(Unit)
+        }
+        return try {
+            doSyncOnce().also { result ->
+                when (result) {
+                    is SyncResult.Success -> {
+                        lastSyncAt = LocalDateTime.now()
+                        lastSyncError = null
+                    }
+                    is SyncResult.Failure -> lastSyncError = result.error.toUserMessage()
+                }
+            }
+        } finally {
+            syncInProgress.set(false)
+        }
+    }
+
+    private fun doSyncOnce(): SyncResult<Unit> {
         val apiKey = keyManager.getApiKey() ?: return SyncResult.Failure(
             SyncError(SyncErrorKind.API_KEY_INVALID, message = "No API key stored for sync"),
         )
