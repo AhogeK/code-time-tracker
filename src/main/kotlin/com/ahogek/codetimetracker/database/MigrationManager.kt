@@ -65,11 +65,24 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
             """.trimIndent()
         )
 
+        val cursorTableSql = """
+            CREATE TABLE IF NOT EXISTS sync_cursor (
+                user_id TEXT NOT NULL,
+                device_id TEXT NOT NULL,
+                last_pulled_change_id INTEGER NOT NULL DEFAULT 0,
+                last_push_at TEXT,
+                updated_at TEXT NOT NULL,
+                PRIMARY KEY (user_id, device_id)
+            );
+        """.trimIndent()
+
         try {
             connectionManager.withConnection { conn ->
                 conn.createStatement().use { stmt ->
                     stmt.execute(tableCreationSql)
                     log.info("Database table 'coding_sessions' is ready.")
+                    stmt.execute(cursorTableSql)
+                    log.info("Database table 'sync_cursor' is ready.")
                 }
 
                 indexes.forEach { (indexName, indexSql) ->
