@@ -107,15 +107,31 @@ val syncServerUrl: String = providers.gradleProperty("ctt.serverUrl").orNull
     ?: System.getenv("CTT_SERVER_URL")
     ?: dotEnv["CTT_SERVER_URL"]
     ?: "http://localhost:8080/ctt-server"
+// Captured at configuration time: reading project.version inside doLast is
+// unsupported with the configuration cache (execution-time Task.project access).
+val syncAppVersion: String = project.version.toString()
 
-val generateSyncConfig by tasks.registering {
-    val outputDir = layout.buildDirectory.dir("generated/syncConfig/kotlin")
-    outputs.dir(outputDir)
-    doLast {
-        val file = outputDir.get().file("com/ahogek/codetimetracker/service/sync/SyncWebConfig.kt").asFile
-        file.parentFile.mkdirs()
-        file.writeText(
-            """
+/**
+ * Generates SyncWebConfig.kt with the build-time sync URLs and app version.
+ * Implemented as a task class with injected properties so the build stays
+ * configuration-cache compatible (no execution-time access to script objects).
+ */
+abstract class GenerateSyncConfig : DefaultTask() {
+    @get:Input
+    abstract val webUrl: Property<String>
+
+    @get:Input
+    abstract val serverUrl: Property<String>
+
+    @get:Input
+    abstract val appVersion: Property<String>
+
+    @get:OutputFile
+    abstract val outputFile: RegularFileProperty
+
+    @TaskAction
+    fun generate() {
+        val content = """
             |package com.ahogek.codetimetracker.service.sync
             |
             |/**
@@ -124,13 +140,24 @@ val generateSyncConfig by tasks.registering {
             | * the server URL at runtime; the web console URL is fixed per build.
             | */
             |object SyncWebConfig {
-            |    const val WEB_URL: String = "$syncWebUrl"
-            |    const val DEFAULT_SERVER_URL: String = "$syncServerUrl"
-            |    const val APP_VERSION: String = "${project.version}"
+            |    const val WEB_URL: String = "${webUrl.get()}"
+            |    const val DEFAULT_SERVER_URL: String = "${serverUrl.get()}"
+            |    const val APP_VERSION: String = "${appVersion.get()}"
             |}
-            |""".trimMargin(),
-        )
+            |""".trimMargin()
+        val out = outputFile.get().asFile
+        out.parentFile.mkdirs()
+        out.writeText(content)
     }
+}
+
+val generateSyncConfig by tasks.registering(GenerateSyncConfig::class) {
+    webUrl.set(syncWebUrl)
+    serverUrl.set(syncServerUrl)
+    appVersion.set(syncAppVersion)
+    outputFile.set(
+        layout.buildDirectory.file("generated/syncConfig/kotlin/com/ahogek/codetimetracker/service/sync/SyncWebConfig.kt"),
+    )
 }
 
 kotlin {
