@@ -20,4 +20,12 @@ interface SyncApiService {
      * SYNC-scoped API key.
      */
     fun listDevices(apiKey: String): SyncResult<List<DeviceResponse>>
+
+    /**
+     * Registers (or updates) the client device so it can sync. The server upserts by
+     * [RegisterDeviceRequest.deviceId] for the authenticated user and binds the device
+     * to the current API key. Idempotent; safe to call on every bind. [apiKey]
+     * authenticates with the SYNC-scoped API key.
+     */
+    fun registerDevice(request: RegisterDeviceRequest, apiKey: String): SyncResult<DeviceResponse>
 }

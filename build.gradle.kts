@@ -126,6 +126,7 @@ val generateSyncConfig by tasks.registering {
             |object SyncWebConfig {
             |    const val WEB_URL: String = "$syncWebUrl"
             |    const val DEFAULT_SERVER_URL: String = "$syncServerUrl"
+            |    const val APP_VERSION: String = "${project.version}"
             |}
             |""".trimMargin(),
         )

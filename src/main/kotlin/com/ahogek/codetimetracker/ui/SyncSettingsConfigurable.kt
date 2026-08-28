@@ -3,10 +3,12 @@ package com.ahogek.codetimetracker.ui
 import com.ahogek.codetimetracker.service.sync.SyncApiKeyManager
 import com.ahogek.codetimetracker.service.sync.SyncApiServiceImpl
 import com.ahogek.codetimetracker.service.sync.SyncResult
+import com.ahogek.codetimetracker.service.sync.SyncDeviceMetadata
 import com.ahogek.codetimetracker.service.sync.SyncError
 import com.ahogek.codetimetracker.service.sync.SyncErrorKind
 import com.ahogek.codetimetracker.service.sync.SyncSettingsState
 import com.ahogek.codetimetracker.service.sync.SyncWebConfig
+import com.ahogek.codetimetracker.user.UserManager
 import com.intellij.ide.BrowserUtil
 import com.intellij.notification.NotificationType
 import com.intellij.notification.NotificationGroupManager
@@ -60,6 +62,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private val unbindButton = JButton("Unbind API key")
     private val testButton = JButton("Test connection")
     private val statusLabel = JBLabel(" ").apply { foreground = JBColor.GRAY }
+    private val deviceStatusLabel = JBLabel(" ")
     private val statusTimer = Timer(STATUS_MESSAGE_MS) {
         statusLabel.text = " "
         statusLabel.foreground = JBColor.GRAY
@@ -108,6 +111,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             )
             .addComponent(actionPanel)
             .addComponent(statusLabel)
+            .addComponent(deviceStatusLabel)
             .panel
 
         val root = JPanel(BorderLayout()).apply {
@@ -165,6 +169,22 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         }
     }
 
+    private fun registerDeviceOnBind() {
+        val apiKey = keyManager.getApiKey() ?: return
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val result = apiService.registerDevice(SyncDeviceMetadata.registrationRequest(), apiKey)
+            ApplicationManager.getApplication().invokeLater({
+                when (result) {
+                    is SyncResult.Success -> {
+                        showStatus("Device registered.")
+                        checkDeviceRegistration()
+                    }
+                    is SyncResult.Failure -> showStatus(result.error.toUserMessage(), error = true)
+                }
+            }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
+        }
+    }
+
     private fun handleBindingResult(result: SyncResult<Unit>) {
         when (result) {
             is SyncResult.Success -> {
@@ -172,6 +192,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
                 manualKeyField.text = ""
                 showStatus(BIND_SUCCESS_MESSAGE)
                 notify(BIND_SUCCESS_MESSAGE, MessageType.INFO)
+                registerDeviceOnBind()
             }
             is SyncResult.Failure -> {
                 showStatus(result.error.toUserMessage(), error = true)
@@ -241,7 +262,34 @@ class SyncSettingsConfigurable : SearchableConfigurable {
                 } else {
                     "Not bound"
                 }
-                unbindButton.isEnabled = bound
+                if (bound) {
+                    checkDeviceRegistration()
+                } else {
+                    deviceStatusLabel.text = ""
+                }
+            }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
+        }
+    }
+
+    private fun checkDeviceRegistration() {
+        val apiKey = keyManager.getApiKey() ?: return
+        val deviceId = UserManager.getUserId()
+        ApplicationManager.getApplication().executeOnPooledThread {
+            val result = apiService.listDevices(apiKey)
+            ApplicationManager.getApplication().invokeLater({
+                when (result) {
+                    is SyncResult.Success -> {
+                        val registered = result.data.any { it.id == deviceId }
+                        deviceStatusLabel.foreground =
+                            if (registered) STATUS_SUCCESS_COLOR else UIUtil.getErrorForeground()
+                        deviceStatusLabel.text = if (registered) {
+                            "Device registered"
+                        } else {
+                            "Device not registered - it will be registered on first sync with the server"
+                        }
+                    }
+                    is SyncResult.Failure -> deviceStatusLabel.text = ""
+                }
             }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
     }
