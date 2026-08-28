@@ -44,6 +44,40 @@ class SyncApiIntegrationTest {
         assertThat(error.code).isNotNull
     }
 
+    @Test
+    fun `should hit the real pull endpoint and require auth`() {
+        val api = newApi()
+        assumeTrue(api.pingServer() is SyncResult.Success, "ctt-server not reachable at $baseUrl")
+
+        val result = api.pull(
+            SyncPullRequest(
+                deviceId = "00000000-0000-0000-0000-000000000000",
+                lastPulledChangeId = 0,
+            ),
+            "",
+        )
+
+        assertThat(result).isInstanceOf(SyncResult.Failure::class.java)
+        assertThat((result as SyncResult.Failure).error.httpStatus).isIn(401, 403)
+    }
+
+    @Test
+    fun `should hit the real push endpoint and require auth`() {
+        val api = newApi()
+        assumeTrue(api.pingServer() is SyncResult.Success, "ctt-server not reachable at $baseUrl")
+
+        val result = api.push(
+            SyncPushRequest(
+                deviceId = "00000000-0000-0000-0000-000000000000",
+                sessions = emptyList(),
+            ),
+            "",
+        )
+
+        assertThat(result).isInstanceOf(SyncResult.Failure::class.java)
+        assertThat((result as SyncResult.Failure).error.httpStatus).isIn(401, 403)
+    }
+
     private fun newSettings(): SyncSettingsState = SyncSettingsState().apply {
         serverUrl = baseUrl
     }
