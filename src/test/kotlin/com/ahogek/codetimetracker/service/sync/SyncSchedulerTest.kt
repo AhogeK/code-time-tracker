@@ -124,6 +124,9 @@ class SyncSchedulerTest {
 
         override fun push(request: SyncPushRequest, apiKey: String): SyncResult<SyncPushResponse> =
             SyncResult.Success(SyncPushResponse())
+
+        override fun currentUser(apiKey: String): SyncResult<CurrentUserResponse> =
+            SyncResult.Success(CurrentUserResponse(id = "user-1"))
     }
 
     private class InMemoryVault : SyncKeyVault {
