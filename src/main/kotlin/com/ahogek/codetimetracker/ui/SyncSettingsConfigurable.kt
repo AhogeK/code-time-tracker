@@ -25,6 +25,7 @@ import javax.swing.*
 
 private val SERVER_URL_PATTERN = Regex("^https?://.+")
 private val STATUS_SUCCESS_COLOR = JBColor(0x1B7F3B, 0x4E9A51)
+private val SYNC_DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
 
 /**
  * Settings page for the sync feature: server address, web console URL, sync toggle,
@@ -46,7 +47,7 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private val coordinator = ApplicationManager.getApplication().getService(SyncCoordinator::class.java)
     private val scheduler = ApplicationManager.getApplication().getService(SyncScheduler::class.java)
 
-    private val serverUrlField = JBTextField(settings.serverUrl, 40)
+    private val serverUrlField = JBTextField(settings.serverUrl, 24)
     private val syncEnabledCheckBox = JBCheckBox("Enable synchronization", settings.syncEnabled)
 
     private val bindingStatusLabel = JBLabel()
@@ -56,15 +57,38 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private val unbindButton = JButton("Unbind API key")
     private val testButton = JButton("Test connection")
     private val syncNowButton = JButton("Sync now")
-    private val syncIntervalField = JBTextField(settings.syncIntervalMinutes.toString(), 5)
+    // Bound to its preferred size: FormBuilder stretches the row and BoxLayout would
+    // otherwise expand the field (unbounded maximum size) to fill the whole width.
+    private val syncIntervalField = JBTextField(settings.syncIntervalMinutes.toString(), 4).apply {
+        maximumSize = preferredSize
+    }
     private val statusLabel = JBLabel(" ").apply { foreground = JBColor.GRAY }
     private val deviceStatusLabel = JBLabel(" ")
     private val syncStatusLabel = JBLabel(" ").apply { foreground = JBColor.GRAY }
+    private val testStatusLabel = JBLabel(" ").apply { foreground = JBColor.GRAY }
     private val sessionRepository = DatabaseManager.getSessionRepository()
     private val statusTimer = Timer(STATUS_MESSAGE_MS) {
         statusLabel.text = " "
         statusLabel.foreground = JBColor.GRAY
+        testStatusLabel.text = " "
+        testStatusLabel.foreground = JBColor.GRAY
+        // Restore the sync status row after a transient message (e.g. the Sync-now gate).
+        refreshSyncStatus()
     }.apply { isRepeats = false }
+
+    // The message bus notifies this page right after every sync round, so the status
+    // row refreshes immediately (no polling) while the page is open.
+    private val syncStateConnection = ApplicationManager.getApplication().messageBus.connect().apply {
+        subscribe(
+            SyncStateListener.TOPIC,
+            SyncStateListener {
+                val target = panel ?: return@SyncStateListener
+                ApplicationManager.getApplication().invokeLater({
+                    refreshSyncStatus()
+                }, ModalityState.stateForComponent(target))
+            },
+        )
+    }
     private var panel: JComponent? = null
 
     override fun getDisplayName(): String = DISPLAY_NAME
@@ -81,13 +105,30 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         testButton.addActionListener { testConnection() }
         syncNowButton.addActionListener { syncNow() }
 
-        val actionPanel = JPanel().apply {
-            // BoxLayout avoids FlowLayout's default 5px insets, keeping the buttons
-            // left-aligned with the "Bind pasted API key" button above.
+        val serverRow = JPanel().apply {
             layout = BoxLayout(this, BoxLayout.X_AXIS)
-            add(unbindButton)
+            add(serverUrlField)
             add(Box.createHorizontalStrut(4))
             add(testButton)
+        }
+
+        // Test feedback lives on its own row (left), sharing it with the sync toggle
+        // (right), so message length changes never reflow the controls above.
+        val statusAndToggleRow = JPanel(BorderLayout()).apply {
+            add(syncEnabledCheckBox, BorderLayout.WEST)
+            add(testStatusLabel, BorderLayout.EAST)
+        }
+
+        val bindRow = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
+            add(pasteButton)
+            add(Box.createHorizontalStrut(4))
+            add(unbindButton)
+        }
+
+        val intervalRow = JPanel().apply {
+            layout = BoxLayout(this, BoxLayout.X_AXIS)
+            add(syncIntervalField)
             add(Box.createHorizontalStrut(4))
             add(syncNowButton)
         }
@@ -100,13 +141,13 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         }
 
         val formPanel = FormBuilder.createFormBuilder()
-            .addLabeledComponent(JBLabel("Server address:"), serverUrlField)
-            .addComponent(syncEnabledCheckBox)
+            .addLabeledComponent(JBLabel("Server address:"), serverRow)
+            .addComponent(statusAndToggleRow)
             .addSeparator()
             .addLabeledComponent(JBLabel("API key:"), statusRow)
             .addComponent(getKeyButton)
             .addLabeledComponent(JBLabel("Or paste an API key:"), manualKeyField)
-            .addComponent(pasteButton)
+            .addComponent(bindRow)
             .addComponent(
                 JBLabel(
                     "<html>Keys are stored in the IDE credential store and used with the SYNC scope.<br>" +
@@ -117,10 +158,9 @@ class SyncSettingsConfigurable : SearchableConfigurable {
                     UIUtil.applyStyle(UIUtil.ComponentStyle.SMALL, this)
                 },
             )
-            .addComponent(actionPanel)
             .addComponent(statusLabel)
             .addSeparator()
-            .addLabeledComponent(JBLabel("Sync interval (minutes, 0 = off):"), syncIntervalField)
+            .addLabeledComponent(JBLabel("Sync interval (min):"), intervalRow)
             .addComponent(syncStatusLabel)
             .panel
 
@@ -132,6 +172,10 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         refreshBindingState()
         refreshSyncStatus()
         return root
+    }
+
+    override fun disposeUIResources() {
+        syncStateConnection.dispose()
     }
 
     override fun isModified(): Boolean =
@@ -173,6 +217,9 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         }
         setBusy(true)
         statusLabel.text = "Connecting to ctt-server..."
+        // A switch of the bound key resets the sync context so the previous user's
+        // sessions are never pushed to the newly bound account.
+        val wasBound = keyManager.isBound()
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = try {
                 keyManager.bindWithManualKey(rawKey)
@@ -181,17 +228,30 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             }
             ApplicationManager.getApplication().invokeLater({
                 setBusy(false)
-                handleBindingResult(result)
+                handleBindingResult(result, wasBound)
             }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
     }
 
-    private fun registerDeviceOnBind() {
+    private fun registerDeviceOnBind(wasBound: Boolean = false) {
         val apiKey = keyManager.getApiKey() ?: return
         ApplicationManager.getApplication().executeOnPooledThread {
             val result = apiService.registerDevice(SyncDeviceMetadata.registrationRequest(), apiKey)
-            // A freshly bound device runs an initial sync round right after registration so
-            // the local store converges with the server without further user action.
+            // Resolve the account scope first so the initial sync marks sessions with the
+            // bound user's id and statistics only cover that account.
+            val userResult = apiService.currentUser(apiKey)
+            val newUserId = (userResult as? SyncResult.Success)?.data?.id
+            // A re-bind only resets the sync context when the account actually changed:
+            // re-binding the same user's key must keep the cursor and the owner scope,
+            // otherwise every bind would re-pull everything and briefly drop the stats
+            // owner (the transient wrong-statistics window).
+            if (wasBound && newUserId != null && newUserId != settings.serverUserId) {
+                coordinator.resetForUserSwitch()
+            }
+            if (newUserId != null) {
+                settings.serverUserId = newUserId
+                DatabaseManager.setStatsOwner(newUserId)
+            }
             val syncResult = if (result is SyncResult.Success) {
                 // Binding enables sync; re-arm the periodic fallback so it applies
                 // without waiting for an IDE restart.
@@ -215,14 +275,14 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         }
     }
 
-    private fun handleBindingResult(result: SyncResult<Unit>) {
+    private fun handleBindingResult(result: SyncResult<Unit>, wasBound: Boolean = false) {
         when (result) {
             is SyncResult.Success -> {
                 // Credential hygiene: the secret must not linger in the component.
                 manualKeyField.text = ""
                 showStatus(BIND_SUCCESS_MESSAGE)
                 notify(BIND_SUCCESS_MESSAGE, MessageType.INFO)
-                registerDeviceOnBind()
+                registerDeviceOnBind(wasBound)
             }
             is SyncResult.Failure -> {
                 showStatus(result.error.toUserMessage(), error = true)
@@ -243,6 +303,8 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         )
         if (choice == Messages.YES) {
             keyManager.unbind()
+            settings.serverUserId = null
+            DatabaseManager.setStatsOwner(null)
             refreshBindingState()
             refreshSyncStatus()
             showStatus("API key removed.")
@@ -257,7 +319,8 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             return
         }
         setBusy(true)
-        statusLabel.text = "Testing connection to $url..."
+        testStatusLabel.text = "Testing connection..."
+        testStatusLabel.foreground = JBColor.GRAY
         ApplicationManager.getApplication().executeOnPooledThread {
             // Ping the URL the user is editing, not the last applied one; the settings
             // value is restored afterwards so an un-applied edit is not persisted.
@@ -268,8 +331,8 @@ class SyncSettingsConfigurable : SearchableConfigurable {
                 ApplicationManager.getApplication().invokeLater({
                     setBusy(false)
                     when (result) {
-                        is SyncResult.Success -> showStatus("Server is reachable.")
-                        is SyncResult.Failure -> showStatus(result.error.toUserMessage(), error = true)
+                        is SyncResult.Success -> showTestStatus("Server is reachable.")
+                        is SyncResult.Failure -> showTestStatus(result.error.toUserMessage(), error = true)
                     }
                 }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
             } finally {
@@ -280,7 +343,12 @@ class SyncSettingsConfigurable : SearchableConfigurable {
 
     private fun syncNow() {
         if (!settings.syncEnabled || keyManager.getApiKey() == null) {
-            showStatus("Bind an API key and enable synchronization first.", error = true)
+            // This action lives in the sync section, so the gate message belongs on the
+            // sync status row (next to the button), not on the binding operation row.
+            // It auto-clears like the other transient messages (statusTimer restores the row).
+            syncStatusLabel.foreground = UIUtil.getErrorForeground()
+            syncStatusLabel.text = "Bind an API key and enable synchronization first."
+            statusTimer.restart()
             return
         }
         setBusy(true)
@@ -289,10 +357,15 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             val result = coordinator.syncOnce()
             ApplicationManager.getApplication().invokeLater({
                 setBusy(false)
+                // Success is reflected by the refreshed status row (Last sync advances);
+                // a failure surfaces in the status row and as a notification, without
+                // pushing an operation message up to the binding section.
                 refreshSyncStatus()
-                when (result) {
-                    is SyncResult.Success -> showStatus("Sync completed.")
-                    is SyncResult.Failure -> showStatus("Sync failed: ${result.error.toUserMessage()}", error = true)
+                if (result is SyncResult.Failure) {
+                    val message = "Sync failed: ${result.error.toUserMessage()}"
+                    syncStatusLabel.text = message
+                    syncStatusLabel.foreground = UIUtil.getErrorForeground()
+                    notify(message, MessageType.ERROR)
                 }
             }, ModalityState.stateForComponent(panel ?: return@executeOnPooledThread))
         }
@@ -303,12 +376,14 @@ class SyncSettingsConfigurable : SearchableConfigurable {
     private fun refreshSyncStatus() {
         val app = ApplicationManager.getApplication()
         app.executeOnPooledThread {
+            // Both reads hit the database (dirty count, persisted push time) and must
+            // run off the EDT; only the label update happens on it.
             val pending = runCatching { sessionRepository.getDirtySessions().size }.getOrDefault(0)
+            val lastSync = runCatching { coordinator.lastSyncAt() }.getOrNull()
+            val error = coordinator.lastSyncError
             app.invokeLater({
-                val lastSync = coordinator.lastSyncAt
-                val error = coordinator.lastSyncError
                 val parts = mutableListOf<String>()
-                parts.add(if (lastSync != null) "Last sync: ${lastSync.format(SYNC_TIME_FORMATTER)}" else "Never synced")
+                parts.add(if (lastSync != null) "Last sync: ${lastSync.format(SYNC_DATETIME_FORMATTER)}" else "Never synced")
                 parts.add("Pending: $pending")
                 if (error != null) {
                     parts.add("Last error: $error")
@@ -377,6 +452,12 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         }
     }
 
+    private fun showTestStatus(message: String, error: Boolean = false) {
+        testStatusLabel.foreground = if (error) UIUtil.getErrorForeground() else STATUS_SUCCESS_COLOR
+        testStatusLabel.text = message
+        statusTimer.restart()
+    }
+
     private fun isValidServerUrl(url: String): Boolean =
         url.matches(SERVER_URL_PATTERN)
 
@@ -403,6 +484,5 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         const val NOTIFICATION_GROUP_ID = DISPLAY_NAME
         private const val BIND_SUCCESS_MESSAGE = "API key bound successfully."
         private const val STATUS_MESSAGE_MS = 5_000
-        private val SYNC_TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss")
     }
 }
