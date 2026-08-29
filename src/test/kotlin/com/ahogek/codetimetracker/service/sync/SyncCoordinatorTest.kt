@@ -201,6 +201,27 @@ class SyncCoordinatorTest {
     }
 
     @Test
+    fun `should re-register the device and retry when the server reports it revoked`() {
+        val dirtyUuid = "dirty-1"
+        sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
+        // First round: the initial pull reports the device revoked (404 COMMON_002).
+        api.pullResponses.add(
+            SyncResult.Failure(SyncError(SyncErrorKind.DEVICE_NOT_FOUND)),
+        )
+        // After re-registration the retried pull and the reconcile pull succeed.
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 1)))
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 1)))
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        // The device was re-registered exactly once, then sync completed normally.
+        assertThat(api.registerCalls).isEqualTo(1)
+        assertThat(api.pushCalls).hasSize(1)
+        assertThat(sessionRepository.getDirtySessions()).isEmpty()
+    }
+
+    @Test
     fun `should keep dirty markers when the push fails`() {
         val dirtyUuid = "dirty-1"
         sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
@@ -265,6 +286,7 @@ class SyncCoordinatorTest {
     private open class FakeApi : SyncApiService {
         val pullCalls = mutableListOf<SyncPullRequest>()
         val pushCalls = mutableListOf<SyncPushRequest>()
+        var registerCalls = 0
         val pullResponses = ArrayDeque<SyncResult<SyncPullResponse>>()
         var pushResult: SyncResult<SyncPushResponse> = SyncResult.Success(SyncPushResponse())
 
@@ -273,8 +295,10 @@ class SyncCoordinatorTest {
         override fun listDevices(apiKey: String): SyncResult<List<DeviceResponse>> =
             SyncResult.Success(emptyList())
 
-        override fun registerDevice(request: RegisterDeviceRequest, apiKey: String): SyncResult<DeviceResponse> =
-            SyncResult.Success(DeviceResponse())
+        override fun registerDevice(request: RegisterDeviceRequest, apiKey: String): SyncResult<DeviceResponse> {
+            registerCalls++
+            return SyncResult.Success(DeviceResponse())
+        }
 
         override fun pull(request: SyncPullRequest, apiKey: String): SyncResult<SyncPullResponse> {
             pullCalls.add(request)

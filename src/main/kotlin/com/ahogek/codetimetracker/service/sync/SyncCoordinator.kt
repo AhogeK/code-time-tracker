@@ -117,6 +117,23 @@ class SyncCoordinator(
         }
     }
 
+    /**
+     * Re-registers this device when the server reports it revoked (404 COMMON_002):
+     * the server keeps the device row for audit but stops sync; posting the same
+     * registration clears revoked_at and resumes sync without re-binding the key.
+     */
+    private fun reRegisterDevice(apiKey: String) {
+        api.registerDevice(deviceMetadataProvider(), apiKey)
+    }
+
+    /**
+     * Returns true when a sync failure is the server reporting this device as
+     * revoked/unknown (404 COMMON_002), which the device can self-heal by
+     * re-registering.
+     */
+    private fun isDeviceRevoked(result: SyncResult<*>): Boolean =
+        result is SyncResult.Failure && result.error.kind == SyncErrorKind.DEVICE_NOT_FOUND
+
     private fun doSyncOnce(): SyncResult<Unit> {
         val apiKey = keyManager.getApiKey() ?: return SyncResult.Failure(
             SyncError(SyncErrorKind.API_KEY_INVALID, message = "No API key stored for sync"),
@@ -127,7 +144,16 @@ class SyncCoordinator(
 
         var cursor = cursorRepository.getPullCursor(deviceId)
 
-        when (val pull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)) {
+        // The server may have revoked this device since the last round (404 COMMON_002);
+        // re-registering the same id clears the revocation and resumes sync. The retry
+        // fires at most once per round and only when the error is device-not-found.
+        var firstPull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
+        if (isDeviceRevoked(firstPull)) {
+            reRegisterDevice(apiKey)
+            firstPull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
+        }
+        val pull = firstPull
+        when (pull) {
             is SyncResult.Failure -> return pull
             is SyncResult.Success -> {
                 applier.apply(
@@ -148,7 +174,12 @@ class SyncCoordinator(
                 deviceId = deviceId,
                 sessions = dirty.map { SyncSessionMapper.toSyncDto(it) },
             )
-            when (val push = api.push(request, apiKey)) {
+            var push = api.push(request, apiKey)
+            if (isDeviceRevoked(push)) {
+                reRegisterDevice(apiKey)
+                push = api.push(request, apiKey)
+            }
+            when (push) {
                 is SyncResult.Failure -> return push
                 is SyncResult.Success -> {
                     sessionRepository.markSynced(dirty.map { it.sessionUuid }, settings.serverUserId)
