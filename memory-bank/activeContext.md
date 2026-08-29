@@ -1,4 +1,11 @@
 # Active Context
+## [2026-08-29] - AGENTS.md R26 升级 v3：网络检索多工具可选（用户决策）
+
+- 背景: 用户解除"禁用内置 WebSearch"限制——WebSearch 与浏览器类技能（doko/opencli/browser-use）均可使用、按场景配合
+- 变更: R26 v2 → v3：删"禁止使用内置 WebSearch 工具"；改为"网络检索可选用内置 WebSearch 或浏览器类技能/工具链，按场景择优，允许配合使用"；保留浏览器安全红线（用户浏览器、禁 Incognito）与高级 AI 咨询（gemini/perplexity）
+- 顺带: 删除 R26 末尾与 275 行重复的遗留行（"可使用skills访问 gemini..."）
+- 同步: 全局 ~/.omp/agent/AGENTS.md 4.2 同批改写为"网络检索工具选择"（多工具可用）
+- 状态: ✅ 完成，待提交
 
 > 当前工作上下文（保留最近30天，删除>90天前）
 

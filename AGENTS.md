@@ -266,15 +266,13 @@
 
 使用某类型Skills前先列出所有同类Skills，可同时加载多个，不是只能选一个。
 
-### R26: 网络检索与外部 AI 咨询（强制 v2）
+### R26: 网络检索与外部 AI 咨询（强制 v3）
 
-- **禁止使用内置 WebSearch 工具**（多 provider 不稳定/易失败）
-- 网络检索必须走浏览器类工具链：`doko-search`/`dokobot`（本地 bridge + 用户 Chrome）、`opencli <site> search`（站点适配器）、`grep.app`（代码搜索）；使用前按 R25 列出同类技能并读对应技能文档
+- 网络检索可选用内置 `WebSearch` 或浏览器类技能/工具链，按场景择优，允许配合使用
+- 浏览器类工具链：`doko-search`/`dokobot`（本地 bridge + 用户 Chrome）、`opencli <site> search`（站点适配器）、`grep.app`（代码搜索）；使用前按 R25 列出同类技能并读对应技能文档
 - 已知 URL 优先内置 `read` 直读（静态页）；需要已登录/JS 渲染页面才用浏览器工具
 - 浏览器行为必须发生在用户在用或包含用户数据的浏览器上，禁止 Incognito 模式
 - 高级 AI 咨询保留：可使用 `ai-chat-browser` / `opencli` 访问 gemini.google.com / perplexity.ai（需选择模型）
-
-可使用skills访问 gemini.google.com / perplexity.ai 咨询高级AI（需选择模型）及网络搜索。
 
 ### R27: 子任务只读约束（强制）
 
