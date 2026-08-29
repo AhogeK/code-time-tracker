@@ -107,3 +107,10 @@
   - E3: added README Cloud Sync Troubleshooting section (7 symptoms + LWW conflict explanation), fixed duplicated "Requests."
   - Test isolation: UserManager.setUserIdForTest (internal), SyncCoordinator deviceMetadataProvider + notifySyncCompleted injection points; SyncCoordinatorTest no longer requires IDE Application (was order-dependent on LightPlatformTestCase)
   - Version bumped 0.19.2 -> 0.19.3 (PATCH)
+
+[2026-08-29] - Build hygiene + dependency update (0.19.4):
+  - Group build.gradle.kts dependencies by destination (platform vs project vs test)
+  - Replace deprecated tasks.registering with tasks.register<Type>(name) (Gradle 9.6)
+  - Add description + build group to generateSyncConfig task
+  - Upgrade sqlite-jdbc 3.53.2.1 -> 3.53.4.0 (only upgradeable dep; clean build 105/105)
+  - Full dependencyUpdates audit: Kotlin 2.4.10 / IPGP 2.18.1 / ben-manes 0.61.0 / Gradle 9.7.1 / junit 6.1.3 all current
