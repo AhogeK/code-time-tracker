@@ -86,3 +86,10 @@
   - Fix SQL syntax error (missing leading space → "0AND") that broke record count
   - Move device registration UserManager.getUserId() off EDT to avoid UI freeze
   - Fix inline FQN for java.sql.* and java.util.UUID to correct imports
+
+[2026-08-29] - E phase: end-to-end cloud sync verification and documentation:
+  - Verified full end-to-end LWW conflict resolution (last-write-wins)
+  - Verified error recovery: network outage/429 backoff/invalid auth all fail-safe without data loss
+  - Updated README.md with complete cloud sync setup instructions and conflict resolution notes
+  - Verified account switching logic works correctly: unbind→bind correctly resets pull cursor and marks previous user's dirty sessions
+  - Verified statistics filtering correctly includes bound user + local uncommitted sessions
