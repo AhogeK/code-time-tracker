@@ -114,3 +114,10 @@
   - Add description + build group to generateSyncConfig task
   - Upgrade sqlite-jdbc 3.53.2.1 -> 3.53.4.0 (only upgradeable dep; clean build 105/105)
   - Full dependencyUpdates audit: Kotlin 2.4.10 / IPGP 2.18.1 / ben-manes 0.61.0 / Gradle 9.7.1 / junit 6.1.3 all current
+
+[2026-08-29] - Stats owner filter + device revoke handling (0.19.5):
+  - Fix: account-scoped stats excluded unowned local sessions (owner NULL) after re-bind/init; filter now (owner = ? OR owner IS NULL)
+  - ctt-server v0.50.0: revoke device stops sync (404 COMMON_002), GET /devices returns revokedAt
+  - Plugin: DeviceResponse.revokedAt + 3-state device status (registered/revoked/not registered)
+  - Plugin: sync self-heal - on DEVICE_NOT_FOUND re-register device and retry once (no key re-bind needed)
+  - Tests 107/107
