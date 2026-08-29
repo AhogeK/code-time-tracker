@@ -33,7 +33,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
             WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """
         private const val SQL_IS_NOT_DELETED = "is_deleted = 0"
-        private const val SQL_OWNER_FILTER = "owner_user_id = ?"
+        private const val SQL_OWNER_FILTER = "(owner_user_id = ? OR owner_user_id IS NULL)"
 
         private const val SQL_SELECT_MIN_MAX_TIME =
             "SELECT MIN(start_time), MAX(end_time) FROM coding_sessions WHERE is_deleted=0"
