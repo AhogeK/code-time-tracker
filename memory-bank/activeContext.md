@@ -93,3 +93,10 @@
   - Updated README.md with complete cloud sync setup instructions and conflict resolution notes
   - Verified account switching logic works correctly: unbind→bind correctly resets pull cursor and marks previous user's dirty sessions
   - Verified statistics filtering correctly includes bound user + local uncommitted sessions
+
+[2026-08-29] - E phase gap fixes (0.19.3):
+  - E1: added SyncConvergenceTest (4 scenarios): dual-device create/edit/delete/LWW-conflict convergence, in-memory ctt-server replica
+  - E2: added revoked-key re-bind prompt test (AUTH_012 -> toUserMessage), network-failure-retry-then-converge test
+  - E3: added README Cloud Sync Troubleshooting section (7 symptoms + LWW conflict explanation), fixed duplicated "Requests."
+  - Test isolation: UserManager.setUserIdForTest (internal), SyncCoordinator deviceMetadataProvider + notifySyncCompleted injection points; SyncCoordinatorTest no longer requires IDE Application (was order-dependent on LightPlatformTestCase)
+  - Version bumped 0.19.2 -> 0.19.3 (PATCH)
