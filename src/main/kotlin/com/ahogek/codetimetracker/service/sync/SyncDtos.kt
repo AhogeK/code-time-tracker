@@ -95,6 +95,7 @@ data class DeviceResponse(
     val appVersion: String? = null,
     val createdAt: String? = null,
     val lastSeenAt: String? = null,
+    val revokedAt: String? = null,
 )
 
 /**

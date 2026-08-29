@@ -431,13 +431,15 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             ApplicationManager.getApplication().invokeLater({
                 when (result) {
                     is SyncResult.Success -> {
-                        val registered = result.data.any { it.id == deviceId }
+                        val device = result.data.firstOrNull { it.id == deviceId }
+                        val revoked = device?.revokedAt != null
                         deviceStatusLabel.foreground =
-                            if (registered) STATUS_SUCCESS_COLOR else UIUtil.getErrorForeground()
-                        deviceStatusLabel.text = if (registered) {
-                            "Device registered"
-                        } else {
-                            "Device not registered - it will be registered on first sync with the server"
+                            if (device != null && !revoked) STATUS_SUCCESS_COLOR else UIUtil.getErrorForeground()
+                        deviceStatusLabel.text = when {
+                            device == null ->
+                                "Device not registered - it will be registered on first sync with the server"
+                            revoked -> "Device revoked - re-bind or sync to re-register"
+                            else -> "Device registered"
                         }
                     }
                     is SyncResult.Failure -> deviceStatusLabel.text = ""
