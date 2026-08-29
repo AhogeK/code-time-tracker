@@ -115,7 +115,7 @@
 
         <listener
                 class="com.ahogek.codetimetracker.listeners.SyncLifecycleListener"
-                topic="com.intellij.AppLifecycleListener"/>
+                topic="com.intellij.ide.AppLifecycleListener"/>
     </applicationListeners>
 
 </idea-plugin>

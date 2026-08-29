@@ -84,6 +84,12 @@ class SyncScheduler(
      * [SyncCoordinator] only allows one round at a time.
      */
     fun syncNow() {
+        // Safety net: any trigger (manual, project event) also arms the periodic task if
+        // the lifecycle start did not run (e.g. listener registration hiccup) or the
+        // enable flag changed after startup. Reschedule is idempotent.
+        if (periodicTask == null) {
+            reschedule()
+        }
         try {
             executor.execute { runSafely("trigger") }
         } catch (e: java.util.concurrent.RejectedExecutionException) {
