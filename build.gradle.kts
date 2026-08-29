@@ -30,11 +30,12 @@ dependencies {
         // Add necessary plugin dependencies for compilation here, example:
         // bundledPlugin("com.intellij.java")
         bundledPlugin("com.intellij.platform.images")
-
-        implementation(libs.sqlite.jdbc)
-        implementation(libs.gson)
-        implementation(libs.lgooddatepicker)
     }
+
+    // Third-party runtime libraries (not IntelliJ platform modules).
+    implementation(libs.sqlite.jdbc)
+    implementation(libs.gson)
+    implementation(libs.lgooddatepicker)
 
     // The credentialStore platform module (PasswordSafe) is bundled inside the IDE's app.jar,
     // which the IntelliJ Platform Gradle Plugin excludes from the compile classpath (no
@@ -44,10 +45,10 @@ dependencies {
 
     testImplementation(libs.junit.jupiter.api)
     testImplementation(libs.assertj.core)
+    testImplementation(libs.junit.vintage.engine)
 
     testRuntimeOnly(libs.junit.jupiter.engine)
     testRuntimeOnly(libs.junit.platform.launcher)
-    testImplementation(libs.junit.vintage.engine)
 }
 
 intellijPlatform {
@@ -151,7 +152,9 @@ abstract class GenerateSyncConfig : DefaultTask() {
     }
 }
 
-val generateSyncConfig by tasks.registering(GenerateSyncConfig::class) {
+val generateSyncConfig = tasks.register<GenerateSyncConfig>("generateSyncConfig") {
+    description = "Generates SyncWebConfig.kt with build-time sync URLs and app version."
+    group = "build"
     webUrl.set(syncWebUrl)
     serverUrl.set(syncServerUrl)
     appVersion.set(syncAppVersion)
