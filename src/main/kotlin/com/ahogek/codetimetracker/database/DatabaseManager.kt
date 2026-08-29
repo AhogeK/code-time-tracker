@@ -33,6 +33,53 @@ object DatabaseManager {
         return sessionRepository.getUserIdFromDatabase()
     }
 
+    /**
+     * Returns the stable installation-wide user id, creating and persisting it when
+     * missing. The id lives in the shared `app_user` table (independent of coding
+     * sessions), so every IDE on this machine resolves the same id from the first run
+     * onward; legacy rows in coding_sessions are migrated on first call.
+     */
+    fun getOrCreateUserId(): String {
+        return connectionManager.withConnection { conn ->
+            conn.createStatement().executeQuery("SELECT user_id FROM app_user LIMIT 1").use { rs ->
+                if (rs.next()) {
+                    return@withConnection rs.getString("user_id")
+                }
+            }
+            conn.createStatement().executeQuery(
+                "SELECT user_id FROM coding_sessions WHERE user_id IS NOT NULL LIMIT 1",
+            ).use { rs ->
+                if (rs.next()) {
+                    val legacy = rs.getString("user_id")
+                    persistUserId(conn, legacy)
+                    return@withConnection legacy
+                }
+            }
+            val fresh = java.util.UUID.randomUUID().toString()
+            persistUserId(conn, fresh)
+            fresh
+        }
+    }
+
+    private fun persistUserId(conn: java.sql.Connection, userId: String) {
+        conn.prepareStatement(
+            "INSERT OR IGNORE INTO app_user(user_id, created_at) VALUES (?, ?)",
+        ).use { pstmt ->
+            pstmt.setString(1, userId)
+            pstmt.setString(2, LocalDateTime.now().toString())
+            pstmt.executeUpdate()
+        }
+    }
+
+    /**
+     * Scopes statistics to [userId] (null restores the full local view). Called when an
+     * API key is bound or switched so stats only cover the currently bound account.
+     */
+    fun setStatsOwner(userId: String?) {
+        statsRepository.ownerUserId = userId
+        sessionRepository.ownerUserId = userId
+    }
+
     /** Exposes the session repository to sync services that need repository-level operations. */
     fun getSessionRepository(): SessionRepository = sessionRepository
 

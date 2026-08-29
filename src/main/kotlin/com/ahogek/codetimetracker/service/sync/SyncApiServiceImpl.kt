@@ -57,4 +57,10 @@ class SyncApiServiceImpl(private val client: SyncHttpClient) : SyncApiService {
             SyncRequest(method = "POST", path = "/api/v1/sync/push", body = request, bearerToken = apiKey),
             SyncPushResponse::class.java,
         )
+
+    override fun currentUser(apiKey: String): SyncResult<CurrentUserResponse> =
+        client.execute(
+            SyncRequest(method = "GET", path = "/api/v1/users/me", bearerToken = apiKey),
+            CurrentUserResponse::class.java,
+        )
 }

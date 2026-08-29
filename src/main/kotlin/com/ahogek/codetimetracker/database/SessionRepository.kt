@@ -16,6 +16,16 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
     private val dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
     /**
+     * Service-side user id that statistics-facing queries are scoped to (null = all local
+     * sessions). Set alongside [StatsRepository.ownerUserId] via [DatabaseManager.setStatsOwner].
+     */
+    @Volatile
+    var ownerUserId: String? = null
+        internal set
+
+    private fun ownerCondition(): String = if (ownerUserId != null) " AND owner_user_id = ?" else ""
+
+    /**
      * 设置 PreparedStatement 中 session 的核心字段（第 3-8 位参数）
      */
     private fun java.sql.PreparedStatement.setSessionCoreParams(startIndex: Int, session: CodingSession) {
@@ -225,12 +235,12 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
      * row in place. The row is marked synced. `ON CONFLICT` guards against a concurrent
      * local write between the lookup and this insert.
      */
-    fun upsertSyncedSession(session: CodingSession) {
+    fun upsertSyncedSession(session: CodingSession, ownerUserId: String? = null) {
         val sql = """
             INSERT INTO coding_sessions(
                 session_uuid, user_id, project_name, language, platform, ide_name,
-                start_time, end_time, last_modified, is_synced, synced_at, sync_version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+                start_time, end_time, last_modified, is_synced, synced_at, sync_version, owner_user_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             ON CONFLICT(session_uuid) DO UPDATE SET
                 project_name = excluded.project_name,
                 language = excluded.language,
@@ -239,7 +249,8 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
                 last_modified = excluded.last_modified,
                 is_synced = 1,
                 synced_at = excluded.synced_at,
-                sync_version = excluded.sync_version
+                sync_version = excluded.sync_version,
+                owner_user_id = excluded.owner_user_id
         """.trimIndent()
         try {
             connectionManager.withConnection { conn ->
@@ -250,6 +261,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
                     pstmt.setString(9, dateTimeFormatter.format(session.lastModified))
                     pstmt.setString(10, dateTimeFormatter.format(session.syncedAt ?: LocalDateTime.now()))
                     pstmt.setInt(11, session.syncVersion)
+                    pstmt.setString(12, ownerUserId)
                     pstmt.executeUpdate()
                 }
             }
@@ -259,24 +271,45 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
     }
 
     /** Marks the given session uuids as synced (used after a successful push). */
-    fun markSynced(sessionUuids: Collection<String>) {
+    fun markSynced(sessionUuids: Collection<String>, ownerUserId: String? = null) {
         if (sessionUuids.isEmpty()) return
         val placeholders = sessionUuids.joinToString(",") { "?" }
         val sql = """
             UPDATE coding_sessions
-            SET is_synced = 1, synced_at = ?
+            SET is_synced = 1, synced_at = ?, owner_user_id = ?
             WHERE session_uuid IN ($placeholders) AND is_deleted = 0
         """.trimIndent()
         try {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     pstmt.setString(1, dateTimeFormatter.format(LocalDateTime.now()))
-                    sessionUuids.forEachIndexed { index, uuid -> pstmt.setString(index + 2, uuid) }
+                    pstmt.setString(2, ownerUserId)
+                    sessionUuids.forEachIndexed { index, uuid -> pstmt.setString(index + 3, uuid) }
                     pstmt.executeUpdate()
                 }
             }
         } catch (e: Exception) {
             log.error("Failed to mark sessions as synced", e)
+        }
+    }
+
+    /**
+     * Marks every active local session as synced. Used on a user switch so sessions
+     * belonging to the previous user are kept locally but never pushed to the newly
+     * bound user's account.
+     */
+    fun markAllSynced(ownerUserId: String? = null) {
+        val sql = "UPDATE coding_sessions SET is_synced = 1, synced_at = ?, owner_user_id = ? WHERE is_synced = 0 AND is_deleted = 0"
+        try {
+            connectionManager.withConnection { conn ->
+                conn.prepareStatement(sql).use { pstmt ->
+                    pstmt.setString(1, dateTimeFormatter.format(LocalDateTime.now()))
+                    pstmt.setString(2, ownerUserId)
+                    pstmt.executeUpdate()
+                }
+            }
+        } catch (e: Exception) {
+            log.error("Failed to mark all sessions as synced", e)
         }
     }
 
@@ -333,7 +366,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         val sql = """
         SELECT start_time, end_time
         FROM coding_sessions
-        WHERE is_deleted = 0
+        WHERE is_deleted = 0${ownerCondition()}
         ORDER BY start_time
     """.trimIndent()
 
@@ -342,6 +375,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         try {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
+                    ownerUserId?.let { pstmt.setString(1, it) }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             sessions.add(
@@ -368,11 +402,12 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
     }
 
     fun getRecordCount(): Long {
-        val sql = "SELECT COUNT(*) as total FROM coding_sessions WHERE is_deleted = 0"
+        val sql = "SELECT COUNT(*) as total FROM coding_sessions WHERE is_deleted = 0${ownerCondition()}"
 
         return try {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
+                    ownerUserId?.let { pstmt.setString(1, it) }
                     pstmt.executeQuery().use { rs ->
                         if (rs.next()) rs.getLong("total") else 0L
                     }
@@ -385,11 +420,12 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
     }
 
     fun getFirstRecordDate(): LocalDate? {
-        val sql = "SELECT MIN(start_time) as first_date FROM coding_sessions WHERE is_deleted = 0"
+        val sql = "SELECT MIN(start_time) as first_date FROM coding_sessions WHERE is_deleted = 0${ownerCondition()}"
 
         return try {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
+                    ownerUserId?.let { pstmt.setString(1, it) }
                     pstmt.executeQuery().use { rs ->
                         if (rs.next()) {
                             val timestamp = rs.getString("first_date")

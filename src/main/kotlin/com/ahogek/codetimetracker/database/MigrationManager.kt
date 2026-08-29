@@ -39,7 +39,9 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
                 
                 synced_at TEXT,
                 
-                sync_version INTEGER NOT NULL DEFAULT 0
+                sync_version INTEGER NOT NULL DEFAULT 0,
+                
+                owner_user_id TEXT
             );
         """.trimIndent()
 
@@ -65,12 +67,20 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
             """.trimIndent()
         )
 
+        val userTableSql = """
+            CREATE TABLE IF NOT EXISTS app_user (
+                user_id TEXT NOT NULL PRIMARY KEY,
+                created_at TEXT NOT NULL
+            );
+        """.trimIndent()
+
         val cursorTableSql = """
             CREATE TABLE IF NOT EXISTS sync_cursor (
                 user_id TEXT NOT NULL,
                 device_id TEXT NOT NULL,
                 last_pulled_change_id INTEGER NOT NULL DEFAULT 0,
                 last_push_at TEXT,
+                last_sync_at TEXT,
                 updated_at TEXT NOT NULL,
                 PRIMARY KEY (user_id, device_id)
             );
@@ -81,8 +91,22 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
                 conn.createStatement().use { stmt ->
                     stmt.execute(tableCreationSql)
                     log.info("Database table 'coding_sessions' is ready.")
+                    // Existing databases predate the owner column; add it idempotently.
+                    try {
+                        stmt.execute("ALTER TABLE coding_sessions ADD COLUMN owner_user_id TEXT")
+                    } catch (_: java.sql.SQLException) {
+                        // Column already present.
+                    }
+                    stmt.execute(userTableSql)
+                    log.info("Database table 'app_user' is ready.")
                     stmt.execute(cursorTableSql)
                     log.info("Database table 'sync_cursor' is ready.")
+                    // Existing databases predate the last_sync_at column; add it idempotently.
+                    try {
+                        stmt.execute("ALTER TABLE sync_cursor ADD COLUMN last_sync_at TEXT")
+                    } catch (_: java.sql.SQLException) {
+                        // Column already present.
+                    }
                 }
 
                 indexes.forEach { (indexName, indexSql) ->

@@ -2,7 +2,6 @@ package com.ahogek.codetimetracker.user
 
 import com.ahogek.codetimetracker.database.DatabaseManager
 import com.intellij.ide.util.PropertiesComponent
-import java.util.*
 import java.util.concurrent.locks.ReentrantLock
 
 /**
@@ -48,24 +47,12 @@ object UserManager {
      * It determines the user ID based on the "first-write-wins" principle.
      */
     private fun UserManager.determineUserId(): String {
-        val properties = PropertiesComponent.getInstance()
-
-        // If no local ID, check the shared database to see if another IDE has established one.
-        // This query runs on the database executor thread to not block.
-        val dbUserId = DatabaseManager.getUserIdFromDatabase()
-        if (dbUserId != null) {
-            properties.setValue(USER_ID_KEY, dbUserId)
-            return dbUserId
-        }
-
-        // Check for a locally stored ID first (the most common case)
-        val localUserId = properties.getValue(USER_ID_KEY)
-        if (!localUserId.isNullOrBlank()) return localUserId
-
-        // If we are truly the first, generate a new ID and save it locally
-        val newUserId = UUID.randomUUID().toString()
-        properties.setValue(USER_ID_KEY, newUserId)
-        return newUserId
+        // The shared database owns the installation-wide id (independent of coding
+        // sessions), so every IDE on this machine resolves the same value from the
+        // first run onward. Also cached in the IDE properties as a secondary record.
+        val sharedUserId = DatabaseManager.getOrCreateUserId()
+        PropertiesComponent.getInstance().setValue(USER_ID_KEY, sharedUserId)
+        return sharedUserId
     }
 }
 

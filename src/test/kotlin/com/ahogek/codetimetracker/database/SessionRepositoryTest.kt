@@ -324,4 +324,57 @@ class SessionRepositoryTest {
         }
         assertThat(sessionRepository.getDirtySessions()).isEmpty()
     }
+    @Test
+    fun `markSynced should persist the owner user id`() {
+        val uuid = UUID.randomUUID().toString()
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = uuid,
+                    userId = "test-user",
+                    projectName = "TestProject",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 12, 0),
+                    lastModified = LocalDateTime.now(),
+                ),
+            ),
+        )
+
+        sessionRepository.markSynced(listOf(uuid), ownerUserId = "server-user-1")
+
+        val owner = connectionManager.withConnection { conn ->
+            conn.createStatement().executeQuery(
+                "SELECT owner_user_id FROM coding_sessions WHERE session_uuid = '$uuid'",
+            ).use { rs -> if (rs.next()) rs.getString("owner_user_id") else null }
+        }
+        assertThat(owner).isEqualTo("server-user-1")
+    }
+
+    @Test
+    fun `markAllSynced should clear all dirty sessions`() {
+        val uuid = UUID.randomUUID().toString()
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = uuid,
+                    userId = "test-user",
+                    projectName = "TestProject",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 12, 0),
+                    lastModified = LocalDateTime.now(),
+                ),
+            ),
+        )
+        assertThat(sessionRepository.getDirtySessions()).hasSize(1)
+
+        sessionRepository.markAllSynced()
+
+        assertThat(sessionRepository.getDirtySessions()).isEmpty()
+    }
 }

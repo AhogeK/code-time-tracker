@@ -213,6 +213,19 @@ class SyncCoordinatorTest {
         assertThat(blockingApi.pullCalls).hasSize(2)
     }
 
+    @Test
+    fun `resetForUserSwitch should clear the cursor and mark local sessions synced`() {
+        val dirtyUuid = "dirty-1"
+        val device = UserManager.getUserId()
+        sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
+        cursorRepository.setPullCursor(device, device, 42L)
+
+        coordinator.resetForUserSwitch()
+
+        assertThat(cursorRepository.getPullCursor(device)).isEqualTo(0L)
+        assertThat(sessionRepository.getDirtySessions()).isEmpty()
+    }
+
     private open class FakeApi : SyncApiService {
         val pullCalls = mutableListOf<SyncPullRequest>()
         val pushCalls = mutableListOf<SyncPushRequest>()
@@ -236,6 +249,9 @@ class SyncCoordinatorTest {
             pushCalls.add(request)
             return pushResult
         }
+
+        override fun currentUser(apiKey: String): SyncResult<CurrentUserResponse> =
+            SyncResult.Success(CurrentUserResponse(id = "user-1"))
     }
 
     private class InMemoryVault : SyncKeyVault {

@@ -16,6 +16,16 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
     private val log = Logger.getInstance(StatsRepository::class.java)
     private val dateTimeFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
 
+    /**
+     * Service-side user id that statistics are scoped to (null = all local sessions).
+     * Set by [DatabaseManager.setStatsOwner] when an API key is bound or switched.
+     */
+    @Volatile
+    var ownerUserId: String? = null
+        internal set
+
+    private fun ownerCondition(): String = if (ownerUserId != null) " AND $SQL_OWNER_FILTER" else ""
+
     companion object {
         private const val SQL_SELECT_SESSIONS_IN_RANGE = """
             SELECT start_time, end_time
@@ -23,6 +33,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
             WHERE is_deleted = 0 AND end_time > ? AND start_time < ?
         """
         private const val SQL_IS_NOT_DELETED = "is_deleted = 0"
+        private const val SQL_OWNER_FILTER = "owner_user_id = ?"
 
         private const val SQL_SELECT_MIN_MAX_TIME =
             "SELECT MIN(start_time), MAX(end_time) FROM coding_sessions WHERE is_deleted=0"
@@ -33,6 +44,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
         if (projectName != null) {
             conditions.add("project_name = ?")
         }
+        ownerUserId?.let { conditions.add(SQL_OWNER_FILTER) }
 
         val sql = "SELECT start_time, end_time FROM coding_sessions WHERE ${conditions.joinToString(" AND ")}"
         val intervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
@@ -40,9 +52,11 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
         try {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
+                    var paramIndex = 1
                     if (projectName != null) {
-                        pstmt.setString(1, projectName)
+                        pstmt.setString(paramIndex++, projectName)
                     }
+                    ownerUserId?.let { pstmt.setString(paramIndex, it) }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val start = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
@@ -66,9 +80,9 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
         projectName: String? = null
     ): Duration {
         val sql = if (projectName != null) {
-            "$SQL_SELECT_SESSIONS_IN_RANGE AND project_name = ?"
+            "$SQL_SELECT_SESSIONS_IN_RANGE AND project_name = ?${ownerCondition()}"
         } else {
-            SQL_SELECT_SESSIONS_IN_RANGE
+            "$SQL_SELECT_SESSIONS_IN_RANGE${ownerCondition()}"
         }
 
         val intervals = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
@@ -78,7 +92,9 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
                 conn.prepareStatement(sql).use { pstmt ->
                     pstmt.setString(1, dateTimeFormatter.format(startTime))
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
-                    projectName?.let { pstmt.setString(3, it) }
+                    var paramIndex = 3
+                    projectName?.let { pstmt.setString(paramIndex++, it) }
+                    ownerUserId?.let { pstmt.setString(paramIndex, it) }
 
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
@@ -104,7 +120,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
     }
 
     fun getDailyCodingTimeForHeatmap(startTime: LocalDateTime, endTime: LocalDateTime): List<DailySummary> {
-        val sql = SQL_SELECT_SESSIONS_IN_RANGE.trimIndent()
+        val sql = SQL_SELECT_SESSIONS_IN_RANGE.trimIndent() + ownerCondition()
         val dailyMap = mutableMapOf<LocalDate, Long>()
 
         try {
@@ -112,6 +128,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
                 conn.prepareStatement(sql).use { pstmt ->
                     pstmt.setString(1, dateTimeFormatter.format(startTime))
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    ownerUserId?.let { pstmt.setString(3, it) }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
@@ -157,13 +174,14 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
     }
 
     fun getCodingStreaks(startTime: LocalDateTime, endTime: LocalDateTime): CodingStreaks {
-        val sql = SQL_SELECT_SESSIONS_IN_RANGE
+        val sql = SQL_SELECT_SESSIONS_IN_RANGE + ownerCondition()
         val codingDates = mutableSetOf<LocalDate>()
         try {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     pstmt.setString(1, dateTimeFormatter.format(startTime))
                     pstmt.setString(2, dateTimeFormatter.format(endTime))
+                    ownerUserId?.let { pstmt.setString(3, it) }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
@@ -214,7 +232,8 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
 
         return try {
             connectionManager.withConnection { conn ->
-                conn.prepareStatement(SQL_SELECT_MIN_MAX_TIME).use { pstmt ->
+                conn.prepareStatement(SQL_SELECT_MIN_MAX_TIME + ownerCondition()).use { pstmt ->
+                    ownerUserId?.let { pstmt.setString(1, it) }
                     pstmt.executeQuery().use { rs ->
                         if (rs.next()) {
                             val minTime = rs.getString(1)?.let {
@@ -245,9 +264,10 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
 
         try {
             connectionManager.withConnection { conn ->
-                conn.prepareStatement(SQL_SELECT_SESSIONS_IN_RANGE).use { pstmt ->
+                conn.prepareStatement(SQL_SELECT_SESSIONS_IN_RANGE + ownerCondition()).use { pstmt ->
                     pstmt.setString(1, dateTimeFormatter.format(actualStart))
                     pstmt.setString(2, dateTimeFormatter.format(actualEnd))
+                    ownerUserId?.let { pstmt.setString(3, it) }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             processDailyHourlySession(
@@ -351,6 +371,16 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
         }
     }
 
+    /**
+     * Parameter index of the owner condition after [checkTimeParamsInStatement] has bound
+     * the optional time-range parameters (start, end).
+     */
+    private fun ownerParamIndex(startTime: LocalDateTime?, endTime: LocalDateTime?): Int = when {
+        startTime != null && endTime != null -> 3
+        startTime != null || endTime != null -> 2
+        else -> 1
+    }
+
     private fun checkTimeParams(
         conditions: MutableList<String>, startTime: LocalDateTime?, endTime: LocalDateTime?
     ) {
@@ -385,6 +415,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
     ) {
         val conditions = mutableListOf(SQL_IS_NOT_DELETED)
         checkTimeParams(conditions, startTime, endTime)
+        ownerUserId?.let { conditions.add(SQL_OWNER_FILTER) }
 
         val sql = """
             SELECT start_time, end_time
@@ -396,6 +427,9 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     checkTimeParamsInStatement(pstmt, startTime, endTime)
+                    ownerUserId?.let {
+                        pstmt.setString(ownerParamIndex(startTime, endTime), it)
+                    }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             processSessionForHourly(
@@ -494,6 +528,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
     ): List<LanguageUsage> {
         val conditions = mutableListOf(SQL_IS_NOT_DELETED)
         checkTimeParams(conditions, startTime, endTime)
+        ownerUserId?.let { conditions.add(SQL_OWNER_FILTER) }
 
         val sql = """
             SELECT language, start_time, end_time
@@ -505,6 +540,9 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     checkTimeParamsInStatement(pstmt, startTime, endTime)
+                    ownerUserId?.let {
+                        pstmt.setString(ownerParamIndex(startTime, endTime), it)
+                    }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val language = rs.getString("language")
@@ -527,6 +565,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
     ): List<ProjectUsage> {
         val conditions = mutableListOf(SQL_IS_NOT_DELETED)
         checkTimeParams(conditions, startTime, endTime)
+        ownerUserId?.let { conditions.add(SQL_OWNER_FILTER) }
 
         val sql = """
             SELECT project_name, start_time, end_time
@@ -538,6 +577,9 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     checkTimeParamsInStatement(pstmt, startTime, endTime)
+                    ownerUserId?.let {
+                        pstmt.setString(ownerParamIndex(startTime, endTime), it)
+                    }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             val projectName = rs.getString("project_name")
@@ -575,6 +617,7 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
     ): List<TimeOfDayUsage> {
         val conditions = mutableListOf(SQL_IS_NOT_DELETED)
         checkTimeParams(conditions, startTime, endTime)
+        ownerUserId?.let { conditions.add(SQL_OWNER_FILTER) }
 
         val sql = """
         SELECT start_time, end_time
@@ -587,6 +630,9 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
             connectionManager.withConnection { conn ->
                 conn.prepareStatement(sql).use { pstmt ->
                     checkTimeParamsInStatement(pstmt, startTime, endTime)
+                    ownerUserId?.let {
+                        pstmt.setString(ownerParamIndex(startTime, endTime), it)
+                    }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
                             processTimeOfDaySession(rs, startTime, endTime, distributionMap)

@@ -42,4 +42,11 @@ interface SyncApiService {
      * authenticates with the SYNC-scoped API key.
      */
     fun push(request: SyncPushRequest, apiKey: String): SyncResult<SyncPushResponse>
+
+    /**
+     * Returns the current authenticated user (GET /api/v1/users/me). The returned
+     * [CurrentUserResponse.id] is the account scope used for local data isolation.
+     * [apiKey] authenticates with any valid API key (SYNC scope suffices).
+     */
+    fun currentUser(apiKey: String): SyncResult<CurrentUserResponse>
 }

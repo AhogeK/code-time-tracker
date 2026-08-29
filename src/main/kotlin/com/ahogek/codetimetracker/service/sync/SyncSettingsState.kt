@@ -22,6 +22,7 @@ class SyncSettingsState : PersistentStateComponent<SyncSettingsState.State> {
         var syncEnabled: Boolean = false,
         var apiKeyPrefix: String? = null,
         var syncIntervalMinutes: Int = DEFAULT_SYNC_INTERVAL_MINUTES,
+        var serverUserId: String? = null,
     )
 
     @Volatile
@@ -55,6 +56,13 @@ class SyncSettingsState : PersistentStateComponent<SyncSettingsState.State> {
         get() = state.syncIntervalMinutes
         set(value) {
             state = state.copy(syncIntervalMinutes = value.coerceAtLeast(0))
+        }
+
+    /** Service-side user id of the currently bound API key; null when unbound. */
+    var serverUserId: String?
+        get() = state.serverUserId
+        set(value) {
+            state = state.copy(serverUserId = value)
         }
 
     companion object {
