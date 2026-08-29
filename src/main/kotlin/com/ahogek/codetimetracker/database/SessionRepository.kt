@@ -23,7 +23,8 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
     var ownerUserId: String? = null
         internal set
 
-    private fun ownerCondition(): String = if (ownerUserId != null) " AND owner_user_id = ?" else ""
+    private fun ownerCondition(): String =
+        ownerUserId?.let { " AND (owner_user_id = ? OR owner_user_id IS NULL)" } ?: ""
 
     /**
      * 设置 PreparedStatement 中 session 的核心字段（第 3-8 位参数）

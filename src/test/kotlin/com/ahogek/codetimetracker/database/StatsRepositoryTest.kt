@@ -79,6 +79,33 @@ class StatsRepositoryTest {
     }
 
     @Test
+    fun `getTotalCodingTime should include unowned local sessions for the bound user`() {
+        sessionRepository.upsertSyncedSession(
+            syncedSession("a-1", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 11, 0)),
+            ownerUserId = "user-a",
+        )
+        // A locally created, not-yet-synced session carries no owner (is_synced = 0,
+        // owner_user_id = NULL); it is pushed to the bound account on the next sync,
+        // so it must count in that account's statistics immediately.
+        sessionRepository.importSessions(
+            listOf(syncedSession("local-1", LocalDateTime.of(2026, 1, 3, 9, 0), LocalDateTime.of(2026, 1, 3, 10, 0))),
+        )
+        sessionRepository.upsertSyncedSession(
+            syncedSession("b-1", LocalDateTime.of(2026, 1, 2, 9, 0), LocalDateTime.of(2026, 1, 2, 10, 0)),
+            ownerUserId = "user-b",
+        )
+
+        // Bound to user-a: their synced sessions plus unowned local sessions count;
+        // user-b's sessions are excluded.
+        statsRepository.ownerUserId = "user-a"
+        assertThat(statsRepository.getTotalCodingTime()).isEqualTo(Duration.ofHours(3))
+
+        // Unbound: everything counts.
+        statsRepository.ownerUserId = null
+        assertThat(statsRepository.getTotalCodingTime()).isEqualTo(Duration.ofHours(4))
+    }
+
+    @Test
     fun `getTotalCodingTime should calculate total time correctly`() {
         sessionRepository.importSessions(
             listOf(
