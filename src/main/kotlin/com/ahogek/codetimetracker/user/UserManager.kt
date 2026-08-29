@@ -20,6 +20,15 @@ object UserManager {
     @Volatile
     private var currentUserId: String? = null
 
+    /**
+     * Pins the id for tests so unit tests neither touch the shared database nor the
+     * IDE properties container. Production callers use [getUserId], which lazily
+     * resolves and caches the id; this hook only seeds the same cache.
+     */
+    internal fun setUserIdForTest(id: String) {
+        currentUserId = id
+    }
+
     // A lock to prevent race conditions during the initial lazy-loading
     private val lock = ReentrantLock()
 

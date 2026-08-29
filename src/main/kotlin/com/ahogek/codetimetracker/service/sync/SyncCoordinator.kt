@@ -34,6 +34,12 @@ class SyncCoordinator(
     private val cursorRepository: SyncCursorRepository,
     private val sessionRepository: SessionRepository,
     private val applier: SyncSessionApplier = SyncSessionApplier(sessionRepository),
+    private val deviceMetadataProvider: () -> RegisterDeviceRequest = SyncDeviceMetadata::registrationRequest,
+    private val notifySyncCompleted: () -> Unit = {
+        ApplicationManager.getApplication().messageBus
+            .syncPublisher(SyncStateListener.TOPIC)
+            .syncCompleted()
+    },
 ) {
     /**
      * Platform-container entry point: the service container only supports parameterless
@@ -99,14 +105,12 @@ class SyncCoordinator(
         }
         return try {
             doSyncOnce().also { result ->
-                when (result) {
-                    is SyncResult.Success -> lastSyncError = null
-                    is SyncResult.Failure -> lastSyncError = result.error.toUserMessage()
+                lastSyncError = when (result) {
+                    is SyncResult.Success -> null
+                    is SyncResult.Failure -> result.error.toUserMessage()
                 }
                 // Any completed round refreshes open UIs (settings page) immediately.
-                ApplicationManager.getApplication().messageBus
-                    .syncPublisher(SyncStateListener.TOPIC)
-                    .syncCompleted()
+                notifySyncCompleted()
             }
         } finally {
             syncInProgress.set(false)
@@ -119,7 +123,7 @@ class SyncCoordinator(
         )
         val deviceId = SyncDeviceMetadata.deviceId()
         val userId = UserManager.getUserId()
-        val local = SyncDeviceMetadata.registrationRequest()
+        val local = deviceMetadataProvider()
 
         var cursor = cursorRepository.getPullCursor(deviceId)
 
