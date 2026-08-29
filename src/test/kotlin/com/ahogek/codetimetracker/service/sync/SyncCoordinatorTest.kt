@@ -32,6 +32,9 @@ class SyncCoordinatorTest {
 
     @BeforeEach
     fun setUp(@TempDir tempDir: Path) {
+        // Pin the installation id so sync tests neither read the real shared database
+        // nor require the IDE application container (see UserManager.setUserIdForTest).
+        UserManager.setUserIdForTest("test-device")
         testDbPath = tempDir.resolve("test.db")
         connectionManager = ConnectionManager()
         connectionManager.setConnectionFactory(
@@ -58,6 +61,10 @@ class SyncCoordinatorTest {
             cursorRepository = cursorRepository,
             sessionRepository = sessionRepository,
             applier = SyncSessionApplier(sessionRepository),
+            deviceMetadataProvider = {
+                RegisterDeviceRequest(deviceName = "test", platform = "macOS", ideName = "IntelliJ IDEA")
+            },
+            notifySyncCompleted = {},
         )
     }
 
@@ -169,6 +176,31 @@ class SyncCoordinatorTest {
     }
 
     @Test
+    fun `should retry successfully after a network failure and converge`() {
+        val dirtyUuid = "dirty-1"
+        sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
+        // First round hits a network error during the initial pull.
+        api.pullResponses.add(
+            SyncResult.Failure(SyncError(SyncErrorKind.NETWORK_ERROR)),
+        )
+
+        val failed = coordinator.syncOnce()
+        assertThat(failed).isInstanceOf(SyncResult.Failure::class.java)
+        assertThat(sessionRepository.getDirtySessions().map { it.sessionUuid }).containsExactly(dirtyUuid)
+
+        // Network recovers: the next round pulls empty changes, pushes the still-dirty
+        // session and marks it synced, so no data is lost.
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 3)))
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 3)))
+        val recovered = coordinator.syncOnce()
+
+        assertThat(recovered).isInstanceOf(SyncResult.Success::class.java)
+        assertThat(sessionRepository.getDirtySessions()).isEmpty()
+        assertThat(api.pushCalls).hasSize(1)
+        assertThat(api.pushCalls[0].sessions.map { it.sessionUuid }).contains(dirtyUuid)
+    }
+
+    @Test
     fun `should keep dirty markers when the push fails`() {
         val dirtyUuid = "dirty-1"
         sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
@@ -199,6 +231,10 @@ class SyncCoordinatorTest {
             api = blockingApi,
             cursorRepository = cursorRepository,
             sessionRepository = sessionRepository,
+            deviceMetadataProvider = {
+                RegisterDeviceRequest(deviceName = "test", platform = "macOS", ideName = "IntelliJ IDEA")
+            },
+            notifySyncCompleted = {},
         )
 
         val first = Thread { blockingCoordinator.syncOnce() }.also { it.start() }

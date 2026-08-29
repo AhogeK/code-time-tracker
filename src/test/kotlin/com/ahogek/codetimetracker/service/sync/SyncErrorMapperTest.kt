@@ -72,6 +72,17 @@ class SyncErrorMapperTest {
 
 
     @Test
+    fun `should prompt to re-bind when the api key is revoked`() {
+        val revoked = SyncError(
+            SyncErrorKind.API_KEY_REVOKED,
+            httpStatus = 403,
+            code = "AUTH_012",
+        )
+        assertThat(revoked.toUserMessage()).contains("revoked")
+        assertThat(revoked.toUserMessage()).contains("new API key")
+    }
+
+    @Test
     fun `should prefer the concrete message over the kind-based default`() {
         val withMessage = SyncError(SyncErrorKind.VALIDATION_ERROR, message = "API key must not be empty")
         assertThat(withMessage.toUserMessage()).isEqualTo("API key must not be empty")
