@@ -1,6 +1,6 @@
 # Code Time Tracker
 
-[![Version](https://img.shields.io/badge/version-0.19.2-blue.svg)](https://github.com/AhogeK/code-time-tracker)
+[![Version](https://img.shields.io/badge/version-0.19.3-blue.svg)](https://github.com/AhogeK/code-time-tracker)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-IntelliJ%202026.1%2B-orange.svg)](https://plugins.jetbrains.com/)
 
@@ -55,12 +55,32 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 - **Conflict resolution**: Last-write-wins based on modification timestamp; concurrent changes to the same session leave the local edit untouched and the server resolves it on the next push, so no data is ever lost.
 - **🔒 Privacy First** - All data stored locally in SQLite; cloud sync is opt-in and only communicates with your own self-hosted backend.
 
+## ☁️ Cloud Sync Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| "Cannot reach the server" on bind or sync | Server address wrong, server down, or network unreachable | Verify the server is running and the address in **Settings → Sync** starts with `http://` or `https://` |
+| "The API key is invalid" | Key mistyped or deleted | Re-enter the key and bind again; create a new key in the server admin if it was removed |
+| "The API key has been revoked" | Key disabled in the server admin | Create a new API key and bind it |
+| "The API key lacks the required scope" | Key created without the SYNC scope | Recreate the key with the SYNC scope enabled |
+| Sync skips a round silently | Temporary network issue or rate limit | Sync retries automatically on the next interval; click **Sync Now** to trigger immediately |
+| Statistics only show one account's data after binding | Account-scoped isolation | By design: bound data is isolated per account. Unbind to view the full local dataset |
+| Sessions never appear on the other device | Key not bound on the second device | Bind the same API key on every device you want to keep in sync |
+
+<details>
+  <summary><b>How sync resolves conflicts</b></summary>
+  <br>
+  <p>Concurrent edits to the same session are resolved server-side by last-write-wins
+  (LWW): the session state with the higher version or the later modification time wins,
+  and a delete always beats a live edit. Every device pulls the server-authoritative
+  state after each push, so all devices converge on a single row — no data is lost.</p>
+</details>
+
 ## 🤝 Contributing
 
 Contributions are always welcome!
 
 Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to set up the development environment and submit Pull Requests.
-Requests.
 
 Please also note that this project is released with a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
 
