@@ -79,3 +79,10 @@
 - **统计账号隔离（bug，用户报告）**：原统计查本地全部会话，换绑后 A/B 用户数据混算；后端已存在 `GET /api/v1/users/me`（SYNC key 可调，返回 data.id，需求反馈确认无新端点）；本地 `coding_sessions` 加 owner_user_id 列（R15）+ CurrentUserResponse/SyncApiService.currentUser + SyncSettingsState.serverUserId；push 成功/pull 应用标记 owner；StatsRepository 全部查询 + SessionRepository 统计查询（getRecordCount/getAllActiveSessionTimes/getFirstRecordDate）按 owner 过滤（内部 ownerUserId 字段，DatabaseManager.setStatsOwner 同时设置两 repo）；绑定成功调 me → serverUserId + setStatsOwner，换绑 resetForUserSwitch 清 owner；未绑定全量、绑定后只当前用户数据、导出（getSessions）不过滤
 - **测试**：+5（clear 游标/时间、markAllSynced、resetForUserSwitch、getLastPushAt ×2、stats owner 过滤、markSynced owner 写入）；97/97；配置缓存兼容
 - 版本 0.19.0 → 0.19.1（bug 修复 + UI 改进 PATCH）
+
+[2026-08-29] - Fix account isolation statistics:
+  - Unbind-then-bind account switch now correctly resets pull cursor (was skipped when wasBound=false)
+  - Bind-account statistics include locally uncommitted sessions (owner_user_id IS NULL) so new coding shows up immediately
+  - Fix SQL syntax error (missing leading space → "0AND") that broke record count
+  - Move device registration UserManager.getUserId() off EDT to avoid UI freeze
+  - Fix inline FQN for java.sql.* and java.util.UUID to correct imports
