@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.database
 
 import com.intellij.openapi.diagnostic.Logger
+import java.sql.PreparedStatement
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -22,7 +23,7 @@ class SyncCursorRepository(private val connectionManager: ConnectionManager) {
      * Binds the (user, device, now, now) parameters shared by the timestamp-inserting
      * cursor writes.
      */
-    private fun java.sql.PreparedStatement.bindCursorTimestamps(userId: String, deviceId: String, now: String) {
+    private fun PreparedStatement.bindCursorTimestamps(userId: String, deviceId: String, now: String) {
         setString(1, userId)
         setString(2, deviceId)
         setString(3, now)

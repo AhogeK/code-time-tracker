@@ -1,6 +1,8 @@
 package com.ahogek.codetimetracker.database
 
 import com.ahogek.codetimetracker.model.*
+import java.sql.Connection
+import java.util.UUID
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -55,13 +57,13 @@ object DatabaseManager {
                     return@withConnection legacy
                 }
             }
-            val fresh = java.util.UUID.randomUUID().toString()
+            val fresh = UUID.randomUUID().toString()
             persistUserId(conn, fresh)
             fresh
         }
     }
 
-    private fun persistUserId(conn: java.sql.Connection, userId: String) {
+    private fun persistUserId(conn: Connection, userId: String) {
         conn.prepareStatement(
             "INSERT OR IGNORE INTO app_user(user_id, created_at) VALUES (?, ?)",
         ).use { pstmt ->
