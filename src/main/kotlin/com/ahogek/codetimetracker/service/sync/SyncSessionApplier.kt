@@ -43,6 +43,7 @@ class SyncSessionApplier(private val repository: SessionRepository) {
         userId: String,
         localPlatform: String,
         localIdeName: String,
+        ownerUserId: String? = null,
     ) {
         val applicable = changes.filter { it.sessionUuid != null }
         if (applicable.isEmpty()) return
@@ -58,10 +59,12 @@ class SyncSessionApplier(private val repository: SessionRepository) {
                     if (existingRow == null) {
                         repository.upsertSyncedSession(
                             toNewSession(change, userId, localPlatform, localIdeName, now),
+                            ownerUserId,
                         )
                     } else if (existingRow.isSynced) {
                         repository.upsertSyncedSession(
                             toUpdatedSession(change, existingRow, now),
+                            ownerUserId,
                         )
                     }
                 }

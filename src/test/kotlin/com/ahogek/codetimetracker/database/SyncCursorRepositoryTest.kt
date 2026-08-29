@@ -62,4 +62,41 @@ class SyncCursorRepositoryTest {
 
         assertThat(cursorRepository.getPullCursor("device-1")).isEqualTo(42L)
     }
+
+    @Test
+    fun `should return null push time for a device that never pushed`() {
+        assertThat(cursorRepository.getLastPushAt("device-never-pushed")).isNull()
+    }
+
+    @Test
+    fun `should return the persisted push time`() {
+        cursorRepository.setPushAt("user-1", "device-1")
+
+        assertThat(cursorRepository.getLastPushAt("device-1")).isNotNull()
+    }
+
+    @Test
+    fun `should record and read the last sync time`() {
+        cursorRepository.setLastSyncAt("user-1", "device-1")
+
+        assertThat(cursorRepository.getLastSyncAt("device-1")).isNotNull()
+    }
+
+    @Test
+    fun `should fall back to the push time when last sync time is absent`() {
+        cursorRepository.setPushAt("user-1", "device-1")
+
+        assertThat(cursorRepository.getLastSyncAt("device-1")).isNotNull()
+    }
+
+    @Test
+    fun `should clear the cursor and push time`() {
+        cursorRepository.setPullCursor("user-1", "device-1", 42L)
+        cursorRepository.setPushAt("user-1", "device-1")
+
+        cursorRepository.clear("device-1")
+
+        assertThat(cursorRepository.getPullCursor("device-1")).isEqualTo(0L)
+        assertThat(cursorRepository.getLastPushAt("device-1")).isNull()
+    }
 }

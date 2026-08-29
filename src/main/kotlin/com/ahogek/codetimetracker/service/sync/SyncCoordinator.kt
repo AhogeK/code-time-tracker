@@ -54,15 +54,33 @@ class SyncCoordinator(
     /** Guards against concurrent sync rounds from overlapping triggers (timer, events, manual). */
     private val syncInProgress = AtomicBoolean(false)
 
-    /** Last successful sync completion time, exposed to the settings UI. */
-    @Volatile
-    var lastSyncAt: LocalDateTime? = null
-        private set
+    /**
+     * Last successful sync completion time, read from the persisted push timestamp
+     * (survives IDE restarts); exposed to the settings UI.
+     */
+    fun lastSyncAt(): LocalDateTime? = cursorRepository.getLastSyncAt(SyncDeviceMetadata.deviceId())
 
     /** Last sync failure message, exposed to the settings UI (cleared on success). */
     @Volatile
     var lastSyncError: String? = null
         private set
+
+    /**
+     * Resets the sync context when the bound API key switches to a different user: the
+     * local pull cursor is cleared so the new user's changes are pulled from 0, and
+     * existing dirty sessions are marked synced so the previous user's data is kept
+     * locally but never pushed to the newly bound account. New sessions created after
+     * the switch sync normally to the new user.
+     */
+    fun resetForUserSwitch() {
+        val deviceId = SyncDeviceMetadata.deviceId()
+        cursorRepository.clear(deviceId)
+        sessionRepository.markAllSynced()
+        lastSyncError = null
+        // Drop the previous account scope; the newly bound key resolves its own id next.
+        settings.serverUserId = null
+        DatabaseManager.setStatsOwner(null)
+    }
 
     /**
      * Runs a single sync round: pull and apply remote changes, push local dirty sessions,
@@ -82,12 +100,13 @@ class SyncCoordinator(
         return try {
             doSyncOnce().also { result ->
                 when (result) {
-                    is SyncResult.Success -> {
-                        lastSyncAt = LocalDateTime.now()
-                        lastSyncError = null
-                    }
+                    is SyncResult.Success -> lastSyncError = null
                     is SyncResult.Failure -> lastSyncError = result.error.toUserMessage()
                 }
+                // Any completed round refreshes open UIs (settings page) immediately.
+                ApplicationManager.getApplication().messageBus
+                    .syncPublisher(SyncStateListener.TOPIC)
+                    .syncCompleted()
             }
         } finally {
             syncInProgress.set(false)
@@ -112,6 +131,7 @@ class SyncCoordinator(
                     userId,
                     local.platform.orEmpty(),
                     local.ideName.orEmpty(),
+                    settings.serverUserId,
                 )
                 cursorRepository.setPullCursor(userId, deviceId, pull.data.nextCursor)
                 cursor = pull.data.nextCursor
@@ -127,7 +147,7 @@ class SyncCoordinator(
             when (val push = api.push(request, apiKey)) {
                 is SyncResult.Failure -> return push
                 is SyncResult.Success -> {
-                    sessionRepository.markSynced(dirty.map { it.sessionUuid })
+                    sessionRepository.markSynced(dirty.map { it.sessionUuid }, settings.serverUserId)
                     cursorRepository.setPushAt(userId, deviceId)
                 }
             }
@@ -141,11 +161,14 @@ class SyncCoordinator(
                     userId,
                     local.platform.orEmpty(),
                     local.ideName.orEmpty(),
+                    settings.serverUserId,
                 )
                 cursorRepository.setPullCursor(userId, deviceId, pull.data.nextCursor)
             }
         }
 
+        // Every completed round (pull or push) advances the persisted last-sync time.
+        cursorRepository.setLastSyncAt(userId, deviceId)
         log.info("Sync round completed for device $deviceId")
         return SyncResult.Success(Unit)
     }

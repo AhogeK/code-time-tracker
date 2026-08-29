@@ -44,6 +44,40 @@ class StatsRepositoryTest {
         assertThat(totalTime).isEqualTo(Duration.ZERO)
     }
 
+    private fun syncedSession(
+        sessionUuid: String,
+        start: LocalDateTime,
+        end: LocalDateTime,
+    ) = CodingSession(
+        sessionUuid = sessionUuid,
+        userId = "local-user",
+        projectName = "TestProject",
+        language = "Kotlin",
+        platform = "macOS",
+        ideName = "IntelliJ IDEA",
+        startTime = start,
+        endTime = end,
+        lastModified = end,
+    )
+
+    @Test
+    fun `getTotalCodingTime should scope to the owner when set`() {
+        sessionRepository.upsertSyncedSession(
+            syncedSession("a-1", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 11, 0)),
+            ownerUserId = "user-a",
+        )
+        sessionRepository.upsertSyncedSession(
+            syncedSession("b-1", LocalDateTime.of(2026, 1, 2, 9, 0), LocalDateTime.of(2026, 1, 2, 10, 0)),
+            ownerUserId = "user-b",
+        )
+
+        statsRepository.ownerUserId = "user-a"
+        assertThat(statsRepository.getTotalCodingTime()).isEqualTo(Duration.ofHours(2))
+
+        statsRepository.ownerUserId = null
+        assertThat(statsRepository.getTotalCodingTime()).isEqualTo(Duration.ofHours(3))
+    }
+
     @Test
     fun `getTotalCodingTime should calculate total time correctly`() {
         sessionRepository.importSessions(

@@ -111,6 +111,16 @@ data class RegisterDeviceRequest(
     val appVersion: String? = null,
 )
 
+/**
+ * GET /api/v1/users/me response payload: the current authenticated user. The plugin
+ * uses [id] as the account-scope owner for local session isolation (statistics only
+ * show the currently bound user's data); the remaining fields are ignored.
+ */
+data class CurrentUserResponse(
+    val id: String? = null,
+    val email: String? = null,
+)
+
 /** ctt-server unified response envelope: {success, message, data, timestamp}. */
 data class RestApiEnvelope(
     val success: Boolean = false,
