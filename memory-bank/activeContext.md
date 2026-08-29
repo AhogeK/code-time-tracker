@@ -69,3 +69,13 @@
 - 测试 90/90（UI 无单测，手动验收）；配置缓存兼容
 - 版本 0.18.0 → 0.19.0（新功能 MINOR）
 - **D 阶段状态**：D1 触发（批次 1）✅ / D2 状态展示（批次 2）✅ / D3 后台执行（批次 1）✅ / D4 配置持久化（批次 1 间隔字段 + 批次 2 UI）✅
+
+## [2026-08-29] - 设置页布局 + 持久化 lastSync + 设备 id 一致性 + 换绑隔离（版本 0.19.1）
+
+- **设置页布局重排（用户反馈驱动）**：Test connection 移到服务器地址旁（它测编辑中的地址）；Bind/Unbind 配对同行（API key 生命周期）；Sync now 移入同步区（间隔输入右侧，一行紧凑）；serverUrlField 40→24 列、syncIntervalField 绑定 maximumSize=preferredSize（防 FormBuilder/BoxLayout 拉伸到全宽，4 列）
+- **lastSyncAt 持久化（bug）**：原为 SyncCoordinator 内存字段（重启即清空 → 设置页显示 Never synced，即使 C 阶段同步过）；改从 `sync_cursor.last_push_at` 读（SyncCursorRepository.getLastPushAt，跨重启保留）；syncNow 成功反馈不再写中间操作状态行（改由同步状态行 Last sync 推进 + 失败走右上角通知）
+- **设备 id 跨 IDE 一致性（bug，用户报告）**：原 UserManager.getUserId() 依赖 coding_sessions 有数据才跨 IDE 共享（DB 空时各 IDE 生成不同 id → 同一台电脑双 IDE 变 2 设备）；新增 `app_user` 表（MigrationManager R15）+ DatabaseManager.getOrCreateUserId（app_user → coding_sessions 旧数据迁移 → 生成写入），UserManager 改用共享 DB（与会话表无关，首次绑定也一致）
+- **换绑用户隔离（bug，用户报告）**：换绑 A→B key 时原会把 A 的脏会话推给 B（泄露）+ 用 A 的旧游标跳过 B 的前 N 条 change（丢数据）；新增 SyncCoordinator.resetForUserSwitch（清本机 sync_cursor + markAllSynced 旧会话标记不推新用户），绑定流程检测换绑（wasBound）触发；新会话正常同步到新用户
+- **统计账号隔离（bug，用户报告）**：原统计查本地全部会话，换绑后 A/B 用户数据混算；后端已存在 `GET /api/v1/users/me`（SYNC key 可调，返回 data.id，需求反馈确认无新端点）；本地 `coding_sessions` 加 owner_user_id 列（R15）+ CurrentUserResponse/SyncApiService.currentUser + SyncSettingsState.serverUserId；push 成功/pull 应用标记 owner；StatsRepository 全部查询 + SessionRepository 统计查询（getRecordCount/getAllActiveSessionTimes/getFirstRecordDate）按 owner 过滤（内部 ownerUserId 字段，DatabaseManager.setStatsOwner 同时设置两 repo）；绑定成功调 me → serverUserId + setStatsOwner，换绑 resetForUserSwitch 清 owner；未绑定全量、绑定后只当前用户数据、导出（getSessions）不过滤
+- **测试**：+5（clear 游标/时间、markAllSynced、resetForUserSwitch、getLastPushAt ×2、stats owner 过滤、markSynced owner 写入）；97/97；配置缓存兼容
+- 版本 0.19.0 → 0.19.1（bug 修复 + UI 改进 PATCH）
