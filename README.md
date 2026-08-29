@@ -1,6 +1,6 @@
 # Code Time Tracker
 
-[![Version](https://img.shields.io/badge/version-0.19.1-blue.svg)](https://github.com/AhogeK/code-time-tracker)
+[![Version](https://img.shields.io/badge/version-0.19.2-blue.svg)](https://github.com/AhogeK/code-time-tracker)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-IntelliJ%202026.1%2B-orange.svg)](https://plugins.jetbrains.com/)
 
@@ -9,7 +9,7 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 ## 📋 Requirements
 
 - **JetBrains IDEs 2026.1** or later (Build 261+)
-  *(Compatible with IntelliJ IDEA, PyCharm, WebStorm, GoLand, Android Studio, etc.)*
+  * Compatible with IntelliJ IDEA, PyCharm, WebStorm, GoLand, Android Studio, etc.
 - **Java 25** runtime (Bundled with IDE 2026.1+)
 - **ctt-server** (optional) - Self-hosted sync backend for cloud sync; not required for local-only tracking
 
@@ -26,11 +26,9 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
   <summary><b>Dashboard & Statistics</b></summary>
   <br>
   <p>If the chart is not in the right-side toolbar, you can find it under the menu bar: View → Appearance.</p>
-  <img src="assets/Screenshot%202025-12-14%20at%2016.35.32.png" alt="Dashboard & Statistics menu" width="600">
   <p>Clicking it will open the statistics chart content for the coding time.</p>
-  <img src="assets/Screenshot%202025-12-14%20at%2018.00.32.png" alt="Dashboard & Statistics" width="600">
+  <img src="assets/Screenshot%202025-12-14%20at%2016.35.32.png" alt="Dashboard & Statistics menu" width="600">
   <img src="assets/Screenshot%202025-12-14%20at%2016.43.54.png" alt="Dashboard & Statistics" width="600">
-  <img src="assets/Screenshot%202025-12-14%20at%2016.44.09.png" alt="Dashboard & Statistics" width="600">
 </details>
 
 <details>
@@ -38,8 +36,6 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
   <br>
   <p>The project includes import and export functions to facilitate data synchronization between different devices. It will help you skip duplicate data.</p>
   <img src="assets/Screenshot%202025-12-14%20at%2018.29.29.png" alt="Import/Export Data" width="400">
-  <img src="assets/Screenshot%202025-12-14%20at%2018.29.38.png" alt="Import/Export Data" width="400">
-  <img src="assets/Screenshot%202025-12-14%20at%2018.30.29.png" alt="Import/Export Data" width="400">
   <img src="assets/Screenshot%202025-12-14%20at%2018.30.45.png" alt="Import/Export Data" width="400">
 </details>
 
@@ -50,18 +46,23 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 - **🗂️ Multi-Project Support** - Track multiple projects independently
 - **📈 Visual Insights** - Heatmaps, language distribution, hourly patterns
 - **💾 Data Management** - Export/import sessions in JSON format
-- **☁️ Cloud Sync** - Optional multi-device session sync via your own [ctt-server](https://github.com/AhogeK/ctt-server): bind an API key in Settings and the plugin keeps sessions in sync (pull/push with per-device cursor)
-- **🔒 Privacy First** - All data stored locally in SQLite; cloud sync is opt-in and only runs when you bind a key to your own ctt-server
+- **☁️ Cloud Sync** - Optional multi-device session sync via your own self-hosted [ctt-server](https://github.com/AhogeK/ctt-server):
+  1.  Run your own ctt-server instance (follow setup instructions in the server repository)
+  2.  Create a sync API key in your server admin interface
+  3.  Paste the API key into the plugin **Settings → Sync → API Key**
+  4.  Click **Bind** — the plugin automatically registers your device with the server and keeps sessions synchronized automatically
+  5.  Sync runs periodically after IDE startup (interval configurable in Settings); click **Sync Now** to trigger a manual sync
+- **Conflict resolution**: Last-write-wins based on modification timestamp; concurrent changes to the same session leave the local edit untouched and the server resolves it on the next push, so no data is ever lost.
+- **🔒 Privacy First** - All data stored locally in SQLite; cloud sync is opt-in and only communicates with your own self-hosted backend.
 
 ## 🤝 Contributing
 
 Contributions are always welcome!
 
-Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to set up the development environment and submit Pull
+Please read our [Contributing Guide](CONTRIBUTING.md) to learn how to set up the development environment and submit Pull Requests.
 Requests.
 
-Please also note that this project is released with a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this
-project you agree to abide by its terms.
+Please also note that this project is released with a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
 
 ## 📄 License
 
@@ -79,14 +80,10 @@ Licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 [![Ko-fi](https://img.shields.io/badge/Ko--fi-FF5E5B?style=plastic&logo=ko-fi&logoColor=white)](https://ko-fi.com/ahogek)
 &nbsp;&nbsp;
-[![Afdian](https://img.shields.io/badge/爱发电-946ce6?style=plastic&logo=github-sponsors&logoColor=white)](https://afdian.com/a/AhogeK)
+[![Afdian](https://img.shields.io/badge/爱发电-946ce6?style=plastic&logo=github-sponsors&logoColor=white)](https://afdian.net/a/AhogeK)
 &nbsp;&nbsp;
 [![Solana](https://img.shields.io/badge/Solana-14F195?style=plastic&logo=solana&logoColor=white)](https://solscan.io/account/55XnqvGKwH6LamJB7tSwUbrmJikEU2zwP3k1FjsdyEys)
 
-<sub>Your support helps maintain and improve this project 🙏</sub>
-
-</div>
-
 <p align="center">
-Made with ❤️ for developers who value their time
+Made with ❤️ for developers who value your time
 </p>
