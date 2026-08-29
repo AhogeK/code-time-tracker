@@ -241,11 +241,13 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             // bound user's id and statistics only cover that account.
             val userResult = apiService.currentUser(apiKey)
             val newUserId = (userResult as? SyncResult.Success)?.data?.id
-            // A re-bind only resets the sync context when the account actually changed:
-            // re-binding the same user's key must keep the cursor and the owner scope,
-            // otherwise every bind would re-pull everything and briefly drop the stats
-            // owner (the transient wrong-statistics window).
-            if (wasBound && newUserId != null && newUserId != settings.serverUserId) {
+            // Reset the sync context only when the account actually changes (previous
+            // binding was a different user). Covers both direct re-bind and
+            // unbind-then-bind. A first bind (no previous account) must NOT reset, so
+            // locally accumulated sessions are pushed normally.
+            val previousUserId = settings.serverUserId
+            val isAccountSwitch = newUserId != null && newUserId != previousUserId
+            if (isAccountSwitch && (wasBound || previousUserId != null)) {
                 coordinator.resetForUserSwitch()
             }
             if (newUserId != null) {
@@ -303,7 +305,8 @@ class SyncSettingsConfigurable : SearchableConfigurable {
         )
         if (choice == Messages.YES) {
             keyManager.unbind()
-            settings.serverUserId = null
+            // Statistics return to the full local view; keep serverUserId so the next
+            // bind can tell an account switch from a same-user re-bind.
             DatabaseManager.setStatsOwner(null)
             refreshBindingState()
             refreshSyncStatus()
@@ -421,8 +424,9 @@ class SyncSettingsConfigurable : SearchableConfigurable {
 
     private fun checkDeviceRegistration() {
         val apiKey = keyManager.getApiKey() ?: return
-        val deviceId = UserManager.getUserId()
         ApplicationManager.getApplication().executeOnPooledThread {
+            // getUserId hits the shared DB (read or generate); keep it off the EDT.
+            val deviceId = UserManager.getUserId()
             val result = apiService.listDevices(apiKey)
             ApplicationManager.getApplication().invokeLater({
                 when (result) {

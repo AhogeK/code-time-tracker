@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.database
 
 import com.intellij.openapi.diagnostic.Logger
+import java.sql.SQLException
 
 class MigrationManager(private val connectionManager: ConnectionManager) {
 
@@ -94,7 +95,7 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
                     // Existing databases predate the owner column; add it idempotently.
                     try {
                         stmt.execute("ALTER TABLE coding_sessions ADD COLUMN owner_user_id TEXT")
-                    } catch (_: java.sql.SQLException) {
+                    } catch (_: SQLException) {
                         // Column already present.
                     }
                     stmt.execute(userTableSql)
@@ -104,7 +105,7 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
                     // Existing databases predate the last_sync_at column; add it idempotently.
                     try {
                         stmt.execute("ALTER TABLE sync_cursor ADD COLUMN last_sync_at TEXT")
-                    } catch (_: java.sql.SQLException) {
+                    } catch (_: SQLException) {
                         // Column already present.
                     }
                 }
