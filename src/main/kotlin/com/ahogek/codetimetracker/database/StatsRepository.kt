@@ -121,7 +121,11 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
 
     fun getDailyCodingTimeForHeatmap(startTime: LocalDateTime, endTime: LocalDateTime): List<DailySummary> {
         val sql = SQL_SELECT_SESSIONS_IN_RANGE.trimIndent() + ownerCondition()
-        val dailyMap = mutableMapOf<LocalDate, Long>()
+        // Intervals clipped to each calendar day. Overlapping sessions on the same
+        // day must be merged (union) exactly like the summary totals
+        // (TimeRangeUtils.calculateMergedDuration), otherwise parallel windows double
+        // count and the heatmap total diverges from the summary total.
+        val dailyIntervals = mutableMapOf<LocalDate, MutableList<Pair<LocalDateTime, LocalDateTime>>>()
 
         try {
             connectionManager.withConnection { conn ->
@@ -136,8 +140,8 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
                             val effectiveStart = maxOf(sessionStart, startTime)
                             val effectiveEnd = minOf(sessionEnd, endTime)
                             if (effectiveStart.isBefore(effectiveEnd)) {
-                                splitSessionByDay(effectiveStart, effectiveEnd).forEach { (date, duration) ->
-                                    dailyMap[date] = dailyMap.getOrDefault(date, 0L) + duration.toSeconds()
+                                splitSessionByDay(effectiveStart, effectiveEnd).forEach { (date, interval) ->
+                                    dailyIntervals.getOrPut(date) { mutableListOf() }.add(interval)
                                 }
                             }
                         }
@@ -147,25 +151,24 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
         } catch (e: Exception) {
             log.error("Failed to compute daily coding time for heatmap.", e)
         }
-        return dailyMap.map { (date, totalSeconds) ->
-            DailySummary(date, Duration.ofSeconds(totalSeconds))
+        return dailyIntervals.map { (date, intervals) ->
+            DailySummary(date, TimeRangeUtils.calculateMergedDuration(intervals))
         }.sortedBy { it.date }
     }
 
     private fun splitSessionByDay(
         start: LocalDateTime,
         end: LocalDateTime
-    ): List<Pair<LocalDate, Duration>> {
-        val result = mutableListOf<Pair<LocalDate, Duration>>()
+    ): List<Pair<LocalDate, Pair<LocalDateTime, LocalDateTime>>> {
+        val result = mutableListOf<Pair<LocalDate, Pair<LocalDateTime, LocalDateTime>>>()
         var current = start
 
         while (current.isBefore(end)) {
             val currentDate = current.toLocalDate()
             val nextDayStart = current.plusDays(1).withHour(0).withMinute(0).withSecond(0).withNano(0)
             val segmentEnd = if (nextDayStart.isAfter(end)) end else nextDayStart
-            val duration = Duration.between(current, segmentEnd)
-            if (!duration.isZero) {
-                result.add(Pair(currentDate, duration))
+            if (current.isBefore(segmentEnd)) {
+                result.add(Pair(currentDate, Pair(current, segmentEnd)))
             }
             current = segmentEnd
         }
