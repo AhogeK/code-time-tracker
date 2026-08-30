@@ -128,3 +128,9 @@
   - Server push confirmed: per-session CRUD, no batch insert (no saveAll); uk_coding_sessions_user_session_uuid unique + LWW KEEP_EXISTING = idempotent dedup already present
   - Full dev reset procedure (script): DELETE sync_cursor + UPDATE sessions SET is_synced=0, owner=NULL, synced_at=NULL + clear IDE SyncSettings config (serverUserId/key) after stopping sandbox IDE
   - Tests 109/109
+
+[2026-08-30] - Heatmap overlap merge fix (0.19.7):
+  - getDailyCodingTimeForHeatmap now merges day-clipped intervals with TimeRangeUtils.calculateMergedDuration (union), matching summary totals; previously summed raw durations (overlap double-count)
+  - splitSessionByDay returns (date, interval) pairs; daily intervals merged then summed
+  - Tests: overlapping same-day sessions -> merged union; midnight-spanning session split per day
+  - Tests 111/111
