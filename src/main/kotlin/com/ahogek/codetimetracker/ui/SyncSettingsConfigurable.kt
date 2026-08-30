@@ -241,13 +241,16 @@ class SyncSettingsConfigurable : SearchableConfigurable {
             // bound user's id and statistics only cover that account.
             val userResult = apiService.currentUser(apiKey)
             val newUserId = (userResult as? SyncResult.Success)?.data?.id
-            // Reset the sync context only when the account actually changes (previous
-            // binding was a different user). Covers both direct re-bind and
-            // unbind-then-bind. A first bind (no previous account) must NOT reset, so
-            // locally accumulated sessions are pushed normally.
+            // Reset the sync context only when the account actually changes: the
+            // previous binding was a different user (serverUserId holds it). A stale
+            // key in the credential vault (wasBound) is not an account switch by
+            // itself - after a dev-state reset serverUserId is null and a fresh bind
+            // must push all local sessions from the beginning. A bind for an account
+            // different from the one recorded in serverUserId resets so the previous
+            // user's sessions are never pushed to the new account.
             val previousUserId = settings.serverUserId
             val isAccountSwitch = newUserId != null && newUserId != previousUserId
-            if (isAccountSwitch && (wasBound || previousUserId != null)) {
+            if (isAccountSwitch && previousUserId != null) {
                 coordinator.resetForUserSwitch()
             }
             if (newUserId != null) {

@@ -40,6 +40,7 @@ class SyncCoordinator(
             .syncPublisher(SyncStateListener.TOPIC)
             .syncCompleted()
     },
+    private val pushBatchSize: Int = 500,
 ) {
     /**
      * Platform-container entry point: the service container only supports parameterless
@@ -59,6 +60,7 @@ class SyncCoordinator(
 
     /** Guards against concurrent sync rounds from overlapping triggers (timer, events, manual). */
     private val syncInProgress = AtomicBoolean(false)
+
 
     /**
      * Last successful sync completion time, read from the persisted push timestamp
@@ -170,22 +172,30 @@ class SyncCoordinator(
 
         val dirty = sessionRepository.getDirtySessions()
         if (dirty.isNotEmpty()) {
-            val request = SyncPushRequest(
-                deviceId = deviceId,
-                sessions = dirty.map { SyncSessionMapper.toSyncDto(it) },
-            )
-            var push = api.push(request, apiKey)
-            if (isDeviceRevoked(push)) {
-                reRegisterDevice(apiKey)
-                push = api.push(request, apiKey)
-            }
-            when (push) {
-                is SyncResult.Failure -> return push
-                is SyncResult.Success -> {
-                    sessionRepository.markSynced(dirty.map { it.sessionUuid }, settings.serverUserId)
-                    cursorRepository.setPushAt(userId, deviceId)
+            // Push in bounded batches: the server applies each request in one
+            // transaction with per-session inserts, and the request timeout is 30s.
+            // A large local history must not be sent as a single oversized request.
+            var failedPushError: SyncError? = null
+            dirty.chunked(pushBatchSize).forEach { batch ->
+                val request = SyncPushRequest(
+                    deviceId = deviceId,
+                    sessions = batch.map { SyncSessionMapper.toSyncDto(it) },
+                )
+                var push = api.push(request, apiKey)
+                if (isDeviceRevoked(push)) {
+                    reRegisterDevice(apiKey)
+                    push = api.push(request, apiKey)
+                }
+                when (push) {
+                    is SyncResult.Failure -> {
+                        if (failedPushError == null) failedPushError = push.error
+                    }
+                    is SyncResult.Success -> {
+                        sessionRepository.markSynced(batch.map { it.sessionUuid }, settings.serverUserId)
+                    }
                 }
             }
+            failedPushError?.let { return SyncResult.Failure(it) }
         }
 
         when (val pull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)) {

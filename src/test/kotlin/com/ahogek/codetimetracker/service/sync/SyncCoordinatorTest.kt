@@ -54,7 +54,11 @@ class SyncCoordinatorTest {
             bindWithManualKey("cttak_test-key")
         }
         api = FakeApi()
-        coordinator = SyncCoordinator(
+        coordinator = buildCoordinator()
+    }
+
+    private fun buildCoordinator(pushBatchSize: Int = 500): SyncCoordinator =
+        SyncCoordinator(
             settings = settings,
             keyManager = keyManager,
             api = api,
@@ -65,8 +69,8 @@ class SyncCoordinatorTest {
                 RegisterDeviceRequest(deviceName = "test", platform = "macOS", ideName = "IntelliJ IDEA")
             },
             notifySyncCompleted = {},
+            pushBatchSize = pushBatchSize,
         )
-    }
 
     @AfterEach
     fun tearDown() {
@@ -222,6 +226,42 @@ class SyncCoordinatorTest {
     }
 
     @Test
+    fun `should split a large dirty set into bounded push batches`() {
+        val coordinator = buildCoordinator(pushBatchSize = 3)
+        (1..7).forEach { sessionRepository.importSessions(listOf(localSession("b-$it"))) }
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 1)))
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 1)))
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        // 7 sessions with batch size 3 => 3 pushes (3 + 3 + 1).
+        assertThat(api.pushCalls).hasSize(3)
+        assertThat(api.pushCalls[0].sessions).hasSize(3)
+        assertThat(api.pushCalls[1].sessions).hasSize(3)
+        assertThat(api.pushCalls[2].sessions).hasSize(1)
+        // Every session was marked synced after its batch succeeded.
+        assertThat(sessionRepository.getDirtySessions()).isEmpty()
+    }
+
+    @Test
+    fun `should keep un-pushed batches dirty when a later batch fails`() {
+        val coordinator = buildCoordinator(pushBatchSize = 3)
+        (1..6).forEach { sessionRepository.importSessions(listOf(localSession("f-$it"))) }
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 1)))
+        // First batch succeeds, second batch fails.
+        api.pushResponses.add(SyncResult.Success(SyncPushResponse(nextCursor = 3)))
+        api.pushResponses.add(SyncResult.Failure(SyncError(SyncErrorKind.SERVER_ERROR)))
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Failure::class.java)
+        assertThat(api.pushCalls).hasSize(2)
+        // First batch (f-1..f-3) marked synced; second batch (f-4..f-6) stays dirty.
+        assertThat(sessionRepository.getDirtySessions().map { it.sessionUuid }).containsExactly("f-4", "f-5", "f-6")
+    }
+
+    @Test
     fun `should keep dirty markers when the push fails`() {
         val dirtyUuid = "dirty-1"
         sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
@@ -288,6 +328,7 @@ class SyncCoordinatorTest {
         val pushCalls = mutableListOf<SyncPushRequest>()
         var registerCalls = 0
         val pullResponses = ArrayDeque<SyncResult<SyncPullResponse>>()
+        val pushResponses = ArrayDeque<SyncResult<SyncPushResponse>>()
         var pushResult: SyncResult<SyncPushResponse> = SyncResult.Success(SyncPushResponse())
 
         override fun pingServer(): SyncResult<Unit> = SyncResult.Success(Unit)
@@ -307,7 +348,7 @@ class SyncCoordinatorTest {
 
         override fun push(request: SyncPushRequest, apiKey: String): SyncResult<SyncPushResponse> {
             pushCalls.add(request)
-            return pushResult
+            return pushResponses.removeFirstOrNull() ?: pushResult
         }
 
         override fun currentUser(apiKey: String): SyncResult<CurrentUserResponse> =
