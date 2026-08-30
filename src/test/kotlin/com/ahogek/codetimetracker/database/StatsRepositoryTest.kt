@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.nio.file.Path
 import java.time.Duration
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.util.*
 
@@ -342,6 +343,75 @@ class StatsRepositoryTest {
 
         val eveningUsage = distribution.first { it.timeOfDay == "Evening" }
         assertThat(eveningUsage.totalDuration.toHours()).isEqualTo(2)
+    }
+
+    @Test
+    fun `getDailyCodingTimeForHeatmap should merge overlapping sessions within a day`() {
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "Project1",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 12, 0),
+                    lastModified = LocalDateTime.now()
+                ),
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "Project2",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 11, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 13, 0),
+                    lastModified = LocalDateTime.now()
+                )
+            )
+        )
+
+        val heatmapData = statsRepository.getDailyCodingTimeForHeatmap(
+            LocalDateTime.of(2026, 1, 1, 0, 0),
+            LocalDateTime.of(2026, 1, 2, 0, 0)
+        )
+
+        assertThat(heatmapData).hasSize(1)
+        // Raw sum would be 4h; merged union of 10:00-13:00 is 3h.
+        assertThat(heatmapData[0].totalDuration).isEqualTo(Duration.ofHours(3))
+    }
+
+    @Test
+    fun `getDailyCodingTimeForHeatmap should merge a session spanning midnight per day`() {
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "Project1",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 23, 0),
+                    endTime = LocalDateTime.of(2026, 1, 2, 1, 0),
+                    lastModified = LocalDateTime.now()
+                )
+            )
+        )
+
+        val heatmapData = statsRepository.getDailyCodingTimeForHeatmap(
+            LocalDateTime.of(2026, 1, 1, 0, 0),
+            LocalDateTime.of(2026, 1, 3, 0, 0)
+        )
+
+        assertThat(heatmapData).hasSize(2)
+        assertThat(heatmapData[0].date).isEqualTo(LocalDate.of(2026, 1, 1))
+        assertThat(heatmapData[0].totalDuration).isEqualTo(Duration.ofHours(1))
+        assertThat(heatmapData[1].date).isEqualTo(LocalDate.of(2026, 1, 2))
+        assertThat(heatmapData[1].totalDuration).isEqualTo(Duration.ofHours(1))
     }
 
     @Test
