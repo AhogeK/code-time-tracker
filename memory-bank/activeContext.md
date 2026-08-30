@@ -121,3 +121,10 @@
   - Plugin: DeviceResponse.revokedAt + 3-state device status (registered/revoked/not registered)
   - Plugin: sync self-heal - on DEVICE_NOT_FOUND re-register device and retry once (no key re-bind needed)
   - Tests 107/107
+
+[2026-08-30] - Batched push + reset condition fix (0.19.6):
+  - SyncCoordinator: push dirty sessions in bounded batches (500 default, injectable); each batch marks synced on success, failed batch keeps dirty for retry
+  - registerDeviceOnBind: reset only when serverUserId holds a different previous account (drop wasBound trigger) - dev-state reset then fresh bind pushes all local sessions
+  - Server push confirmed: per-session CRUD, no batch insert (no saveAll); uk_coding_sessions_user_session_uuid unique + LWW KEEP_EXISTING = idempotent dedup already present
+  - Full dev reset procedure (script): DELETE sync_cursor + UPDATE sessions SET is_synced=0, owner=NULL, synced_at=NULL + clear IDE SyncSettings config (serverUserId/key) after stopping sandbox IDE
+  - Tests 109/109
