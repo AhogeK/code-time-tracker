@@ -235,18 +235,16 @@ function renderYearlyActivityHeatmap(data, streaks, theme) {
     },
     visualMap: {
       top: 40,
-      min: 0,
-      max: 21600,
       type: 'piecewise',
       orient: 'horizontal',
       left: 'center',
       pieces: [
-        {min: 1, max: 300, label: '< 5 min', color: '#00441b'},
-        {min: 300, max: 900, label: '5–15 min', color: '#006d32'},
-        {min: 900, max: 3600, label: '15 min–1 h', color: '#238b45'},
-        {min: 3600, max: 10800, label: '1–3 h', color: '#41ab5d'},
-        {min: 10800, max: 21600, label: '3–6 h', color: '#74c476'},
-        {min: 21600, label: '> 6 h', color: '#bae4b3'}
+        {gte: 1, lt: 900, label: '< 15 min', color: '#00441b'},
+        {gte: 900, lt: 3600, label: '15–60 min', color: '#006d32'},
+        {gte: 3600, lt: 7200, label: '1–2 h', color: '#238b45'},
+        {gte: 7200, lt: 18000, label: '2–5 h', color: '#41ab5d'},
+        {gte: 18000, lt: 28800, label: '5–8 h', color: '#74c476'},
+        {gte: 28800, label: '> 8 h', color: '#bae4b3'}
       ],
       textStyle: {
         color: theme.secondary
