@@ -1,4 +1,15 @@
 # Active Context
+## [2026-09-02] - ctt-server v0.62.0 pull 分页对接 + 批量 upsert（版本 0.20.0）
+
+- **契约核对（读 ../ctt-server 源码）**：SyncPullResponse 加 hasMore；服务端 doPull 取 batchSize+1 探测，响应时即持久化 watermark（queryCursor=max(服务端持久,客户端)）→ 重发旧游标安全；非空页 nextCursor=max(页尾,发送游标) 严格递增 → 循环必终止
+- **对建议书的 3 处修正**：① 同页 upsert/delete 交错不能 naive 收集批量（先改后删会被批量 upsert 覆盖回活行）→ 连续段批处理：DELETE 前 flushUpserts；② 加卡死护栏：hasMore=true 且 nextCursor<=cursor → Failure（防 AtomicBoolean 永卡 no-op）；③ 批量写抛出需配 try/catch 转 Failure（否则穿透 syncOnce 不更新 lastSyncError）
+- **诚实偏差**：失败续拉只续客户端游标之后；服务端 watermark 已越过失败页，收敛靠 LWW 自愈（v0.49 起就有的缺口，非分页引入；彻底解决=服务端确认制，未做）
+- **实现**：SyncDtos.SyncPullResponse+hasMore=false 默认（旧服务端单页兼容）；SyncCoordinator.pullAndApplyPages（两处 pull 复用：首轮带 revoke 重试/reconcile 不带；每页 apply→setPullCursor→下一页）；SessionRepository.upsertSyncedSessions（批量单事务，仿 importSessions 惯例，失败抛出；删单条版 upsertSyncedSession，测试调用方一并迁移）；SyncSessionApplier 连续段缓冲
+- **顺带修真 bug**：upsert ON CONFLICT 加 is_deleted=0（服务器 upsert 权威活状态应 lifting 本地墓碑；旧行为墓碑吞活状态=行消失）；importSessions 不带 is_synced 列→种子行默认脏（is_synced=0），测试种子改 upsertSyncedSessions
+- **测试**：+6（协调器 4：多页推进/失败停成功页/缺 hasMore 单页/护栏；applier 2：批量保序/flush-before-delete）；117/117
+- 版本 0.19.8 → 0.20.0（MINOR：同步协议新能力）；服务端无需改动
+- **审查修正（用户发现）**：reconcile 分支 `cursor = pulled.data` 死赋值（后续无读取）→ 改 `SyncResult.Success -> Unit`；编译 warning 消除，117/117 保持
+
 ## [2026-09-02] - Yearly Coding Activity 时间层级重设（版本 0.19.8）
 
 - **需求**：heatmap 图例层级从 `<5min/5-15min/15min-1h/1-3h/3-6h/>6h` 改为 `<15m/15-60m/1-2h/2-5h/5-8h/>8h`

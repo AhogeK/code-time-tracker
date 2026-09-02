@@ -9,6 +9,12 @@
 - **阻塞问题**: 无（ctt-server v0.49.0 已落地 sessionUuid 契约）
 
 ## 最近完成
+- **ctt-server v0.62.0 pull 分页对接 + 批量 upsert**（2026-09-02，版本 0.20.0）
+  - SyncPullResponse.hasMore + SyncCoordinator.pullAndApplyPages 分页循环（护栏+异常转 Failure）
+  - SessionRepository.upsertSyncedSessions 批量单事务（替代逐条 upsert）；applier 连续段批处理
+  - 顺带修 bug：upsert 冲突时 lifting 软删墓碑（is_deleted=0）
+  - 测试 +6 = 117/117；服务端无需改动
+
 - **Yearly Coding Activity 时间层级重设**（2026-09-02，版本 0.19.8）
   - heatmap visualMap.pieces 改为 <15m/15-60m/1-2h/2-5h/5-8h/>8h（gte/lt 半开区间）
   - 修复 echarts min/max 双闭区间边界 bug（恰 300s 误落 `< 5 min` 层）
