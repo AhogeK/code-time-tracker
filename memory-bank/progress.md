@@ -9,6 +9,11 @@
 - **阻塞问题**: 无（ctt-server v0.49.0 已落地 sessionUuid 契约）
 
 ## 最近完成
+- **Yearly Coding Activity 时间层级重设**（2026-09-02，版本 0.19.8）
+  - heatmap visualMap.pieces 改为 <15m/15-60m/1-2h/2-5h/5-8h/>8h（gte/lt 半开区间）
+  - 修复 echarts min/max 双闭区间边界 bug（恰 300s 误落 `< 5 min` 层）
+  - 仅 main.js 展示层；测试 111/111
+
 
 - **云同步 C 阶段：同步核心**（2026-08-29，版本 0.17.0）
   - C3 游标持久化：sync_cursor 表 + SyncCursorRepository（单调不后退）

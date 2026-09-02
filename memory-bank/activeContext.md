@@ -1,4 +1,14 @@
 # Active Context
+## [2026-09-02] - Yearly Coding Activity 时间层级重设（版本 0.19.8）
+
+- **需求**：heatmap 图例层级从 `<5min/5-15min/15min-1h/1-3h/3-6h/>6h` 改为 `<15m/15-60m/1-2h/2-5h/5-8h/>8h`
+- **实现**：仅 `main.js` renderYearlyActivityHeatmap visualMap.pieces；发现并修复现存边界 bug——解包捆绑 echarts 6.0.0 验证旧式 min/max 键为双闭区间且首命中（恰 300s 误落 `< 5 min`），改用 gte/lt 半开区间 `[min, max)` 键，整边界值（900s/3600s/28800s 等）严格落入上层
+- **顺带**：删除残留 `min: 0, max: 21600`（pieces 显式给出时被忽略）
+- 配色沿用 YlGn 6 色；Kotlin 零改动；测试 111/111；node --check 语法通过
+- 版本 0.19.7 → 0.19.8（UI 调整 PATCH）；待用户 runIde 手动验收边界落层
+- **边界验证（无需人工撞数据）**：echarts 6.0.0 SSR SVG 渲染逐值探测（1/899/900/3599/3600/7199/7200/17999/18000/28799/28800/86400s）12/12 命中预期层级；旧配置探测证实 300s 曾误落 `< 5 min`（双闭区间 bug 坐实）
+
+
 ## [2026-08-29] - AGENTS.md R26 升级 v3：网络检索多工具可选（用户决策）
 
 - 背景: 用户解除"禁用内置 WebSearch"限制——WebSearch 与浏览器类技能（doko/opencli/browser-use）均可使用、按场景配合
