@@ -323,6 +323,114 @@ class SyncCoordinatorTest {
         assertThat(sessionRepository.getDirtySessions()).isEmpty()
     }
 
+    @Test
+    fun `should drain multiple pull pages while the server reports hasMore`() {
+        val firstUuid = "page-1-uuid"
+        sessionRepository.importSessions(listOf(localSession(firstUuid)))
+        // Initial pull: two pages. The reconcile pull: one empty page.
+        api.pullResponses.add(
+            SyncResult.Success(
+                SyncPullResponse(
+                    changes = listOf(pageChange(1, firstUuid, clientVersion = 2)),
+                    nextCursor = 1,
+                    hasMore = true,
+                ),
+            ),
+        )
+        api.pullResponses.add(
+            SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 4, hasMore = false)),
+        )
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 4)))
+        api.pushResult = SyncResult.Success(SyncPushResponse(nextCursor = 4))
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        // Three pulls drained the sequence; each request resumed from the previous
+        // page's cursor.
+        assertThat(api.pullCalls).hasSize(3)
+        assertThat(api.pullCalls[1].lastPulledChangeId).isEqualTo(1L)
+        assertThat(api.pullCalls[2].lastPulledChangeId).isEqualTo(4L)
+        assertThat(cursorRepository.getPullCursor(UserManager.getUserId())).isEqualTo(4L)
+    }
+
+    @Test
+    fun `should keep the cursor at the last applied page when a later page fails`() {
+        val firstUuid = "page-1-uuid"
+        sessionRepository.upsertSyncedSessions(listOf(localSession(firstUuid)))
+        api.pullResponses.add(
+            SyncResult.Success(
+                SyncPullResponse(
+                    changes = listOf(pageChange(1, firstUuid, clientVersion = 2)),
+                    nextCursor = 1,
+                    hasMore = true,
+                ),
+            ),
+        )
+        api.pullResponses.add(SyncResult.Failure(SyncError(SyncErrorKind.NETWORK_ERROR)))
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Failure::class.java)
+        // The first page was applied and its cursor persisted; the failed page did
+        // not rewind or advance it.
+        assertThat(cursorRepository.getPullCursor(UserManager.getUserId())).isEqualTo(1L)
+        // The first page's upsert landed (the row was overwritten by the change).
+        val applied = sessionRepository.findBySessionUuids(listOf(firstUuid))[firstUuid]
+        assertThat(applied).isNotNull()
+        assertThat(applied!!.syncVersion).isEqualTo(2)
+        assertThat(api.pullCalls).hasSize(2)
+    }
+
+    @Test
+    fun `should treat a missing hasMore field as a final page`() {
+        val dirtyUuid = "dirty-1"
+        sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
+        // Gson maps an absent hasMore (older server) to false: single final page.
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 2)))
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 2)))
+        api.pushResult = SyncResult.Success(SyncPushResponse(nextCursor = 2))
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        assertThat(api.pullCalls).hasSize(2)
+        assertThat(cursorRepository.getPullCursor(UserManager.getUserId())).isEqualTo(2L)
+    }
+
+    @Test
+    fun `should fail the round when the server reports more pages without advancing the cursor`() {
+        val dirtyUuid = "dirty-1"
+        sessionRepository.importSessions(listOf(localSession(dirtyUuid)))
+        // A misbehaving server: hasMore = true with a non-advancing cursor.
+        api.pullResponses.add(
+            SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 0, hasMore = true)),
+        )
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Failure::class.java)
+        assertThat((result as SyncResult.Failure).error.message).contains("without advancing the cursor")
+        // One pull, no pages applied, no push attempted.
+        assertThat(api.pullCalls).hasSize(1)
+        assertThat(api.pushCalls).isEmpty()
+    }
+
+    private fun pageChange(changeId: Long, sessionUuid: String, clientVersion: Int) = SyncChangeDto(
+        changeId = changeId,
+        sessionId = UUID.randomUUID().toString(),
+        sessionUuid = sessionUuid,
+        op = ChangeOp.UPSERT,
+        serverVersion = 1,
+        happenedAt = "2026-08-25T10:00:00Z",
+        projectName = "ctt-server",
+        language = "Java",
+        startTime = "2026-08-25T09:00:00Z",
+        endTime = "2026-08-25T10:00:00Z",
+        clientModifiedAt = "2026-08-25T10:00:00Z",
+        clientVersion = clientVersion,
+    )
+
     private open class FakeApi : SyncApiService {
         val pullCalls = mutableListOf<SyncPullRequest>()
         val pushCalls = mutableListOf<SyncPushRequest>()

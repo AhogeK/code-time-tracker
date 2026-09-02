@@ -232,11 +232,17 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
     }
 
     /**
-     * Inserts a session state received from the server (pull), or updates the existing
-     * row in place. The row is marked synced. `ON CONFLICT` guards against a concurrent
-     * local write between the lookup and this insert.
+     * Inserts session states received from the server (pull), or updates the existing
+     * rows in place, in a single transaction. Each row is marked synced. `ON CONFLICT`
+     * guards against a concurrent local write between the lookup and this insert.
+     *
+     * One transaction (not one per row) removes the per-row fsync cost when applying a
+     * full pull page (up to the server's page size, default 1000). Failures propagate:
+     * the caller persists the pull cursor only after this returns, so a thrown failure
+     * leaves the cursor and the local rows consistent (nothing half-applied).
      */
-    fun upsertSyncedSession(session: CodingSession, ownerUserId: String? = null) {
+    fun upsertSyncedSessions(sessions: List<CodingSession>, ownerUserId: String? = null) {
+        if (sessions.isEmpty()) return
         val sql = """
             INSERT INTO coding_sessions(
                 session_uuid, user_id, project_name, language, platform, ide_name,
@@ -251,23 +257,30 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
                 is_synced = 1,
                 synced_at = excluded.synced_at,
                 sync_version = excluded.sync_version,
-                owner_user_id = excluded.owner_user_id
+                owner_user_id = excluded.owner_user_id,
+                is_deleted = 0
         """.trimIndent()
         try {
             connectionManager.withConnection { conn ->
+                conn.autoCommit = false
                 conn.prepareStatement(sql).use { pstmt ->
-                    pstmt.setString(1, session.sessionUuid)
-                    pstmt.setString(2, session.userId)
-                    pstmt.setSessionCoreParams(3, session)
-                    pstmt.setString(9, dateTimeFormatter.format(session.lastModified))
-                    pstmt.setString(10, dateTimeFormatter.format(session.syncedAt ?: LocalDateTime.now()))
-                    pstmt.setInt(11, session.syncVersion)
-                    pstmt.setString(12, ownerUserId)
-                    pstmt.executeUpdate()
+                    for (session in sessions) {
+                        pstmt.setString(1, session.sessionUuid)
+                        pstmt.setString(2, session.userId)
+                        pstmt.setSessionCoreParams(3, session)
+                        pstmt.setString(9, dateTimeFormatter.format(session.lastModified))
+                        pstmt.setString(10, dateTimeFormatter.format(session.syncedAt ?: LocalDateTime.now()))
+                        pstmt.setInt(11, session.syncVersion)
+                        pstmt.setString(12, ownerUserId)
+                        pstmt.addBatch()
+                    }
+                    pstmt.executeBatch()
+                    conn.commit()
                 }
             }
         } catch (e: Exception) {
-            log.error("Failed to upsert synced session ${session.sessionUuid}", e)
+            log.error("Failed to upsert ${sessions.size} synced sessions", e)
+            throw e
         }
     }
 

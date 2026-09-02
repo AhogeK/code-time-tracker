@@ -24,8 +24,9 @@ import java.time.ZoneId
  *       not yet populated; the client cannot match them to local rows).
  * </ul>
  *
- * Soft-deleted local rows are never revived: [SessionRepository.findBySessionUuids] only
- * returns active rows, and an upsert against a soft-deleted row keeps `is_deleted = 1`.
+ * A server upsert lifts a local soft-delete tombstone (`is_deleted = 0` on conflict):
+ * the change snapshot is the server-authoritative live state, whether it arrives
+ * before a same-page delete+re-upsert sequence or in a later page.
  *
  * @author AhogeK ahogek@gmail.com
  * @since 2026-08-29
@@ -51,31 +52,40 @@ class SyncSessionApplier(private val repository: SessionRepository) {
         val existing = repository.findBySessionUuids(applicable.map { it.sessionUuid!! })
         val now = LocalDateTime.now()
 
+        // Upserts are buffered into consecutive runs and written with one batched
+        // statement; a DELETE flushes the buffer first so operations land in the
+        // change-log order (an upsert following a delete of the same session must not
+        // be overwritten by the buffered row). Batch failures propagate: the caller
+        // persists the pull cursor only after a successful apply.
+        val pendingUpserts = mutableListOf<CodingSession>()
+        fun flushUpserts() {
+            if (pendingUpserts.isNotEmpty()) {
+                repository.upsertSyncedSessions(pendingUpserts.toList(), ownerUserId)
+                pendingUpserts.clear()
+            }
+        }
+
         for (change in applicable) {
             val sessionUuid = change.sessionUuid!!
             val existingRow = existing[sessionUuid]
             when (change.op) {
                 ChangeOp.UPSERT -> {
                     if (existingRow == null) {
-                        repository.upsertSyncedSession(
-                            toNewSession(change, userId, localPlatform, localIdeName, now),
-                            ownerUserId,
-                        )
+                        pendingUpserts += toNewSession(change, userId, localPlatform, localIdeName, now)
                     } else if (existingRow.isSynced) {
-                        repository.upsertSyncedSession(
-                            toUpdatedSession(change, existingRow, now),
-                            ownerUserId,
-                        )
+                        pendingUpserts += toUpdatedSession(change, existingRow, now)
                     }
                 }
                 ChangeOp.DELETE -> {
                     if (existingRow != null && existingRow.isSynced) {
+                        flushUpserts()
                         repository.markDeleted(sessionUuid)
                     }
                 }
                 null -> Unit
             }
         }
+        flushUpserts()
     }
 
     private fun toNewSession(

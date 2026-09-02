@@ -109,7 +109,7 @@ class SyncSessionApplierTest {
     @Test
     fun `should overwrite a clean local row with the change snapshot`() {
         val uuid = "uuid-clean"
-        sessionRepository.upsertSyncedSession(localSession(uuid))
+        sessionRepository.upsertSyncedSessions(listOf(localSession(uuid)))
 
         applier.apply(listOf(change(uuid, ChangeOp.UPSERT, clientVersion = 3)), userId, "macOS", "IntelliJ IDEA")
 
@@ -136,7 +136,7 @@ class SyncSessionApplierTest {
     @Test
     fun `should soft-delete a clean local row on a delete change`() {
         val uuid = "uuid-del"
-        sessionRepository.upsertSyncedSession(localSession(uuid))
+        sessionRepository.upsertSyncedSessions(listOf(localSession(uuid)))
 
         applier.apply(listOf(change(uuid, ChangeOp.DELETE)), userId, "macOS", "IntelliJ IDEA")
 
@@ -160,7 +160,7 @@ class SyncSessionApplierTest {
     fun `should keep existing timestamps when a change carries unparsable times`() {
         val uuid = "uuid-bad-time"
         val original = localSession(uuid)
-        sessionRepository.upsertSyncedSession(original)
+        sessionRepository.upsertSyncedSessions(listOf(original))
         val badChange = SyncChangeDto(
             changeId = 1,
             sessionId = UUID.randomUUID().toString(),
@@ -190,6 +190,43 @@ class SyncSessionApplierTest {
         applier.apply(listOf(change(null, ChangeOp.UPSERT)), userId, "macOS", "IntelliJ IDEA")
 
         assertThat(sessionRepository.getSessions()).isEmpty()
+    }
+
+    @Test
+    fun `should apply a page of upserts in one batch preserving change-log order`() {
+        val upsertA = change("uuid-batch-a", ChangeOp.UPSERT, clientVersion = 2)
+        val upsertB = change("uuid-batch-b", ChangeOp.UPSERT, clientVersion = 2)
+        sessionRepository.upsertSyncedSessions(
+            listOf(localSession("uuid-batch-a"), localSession("uuid-batch-b")),
+        )
+
+        applier.apply(listOf(upsertA, upsertB), userId, "macOS", "IntelliJ IDEA", ownerUserId = "owner-1")
+
+        val rows = sessionRepository.findBySessionUuids(listOf("uuid-batch-a", "uuid-batch-b"))
+        assertThat(rows).hasSize(2)
+        assertThat(rows.values.map { it.syncVersion }).containsExactly(2, 2)
+        // Both rows stay active (batch upsert must not soft-delete or drop rows).
+        assertThat(sessionRepository.getSessions().map { it.sessionUuid })
+            .containsExactlyInAnyOrder("uuid-batch-a", "uuid-batch-b")
+    }
+
+    @Test
+    fun `should flush buffered upserts before a delete of the same session`() {
+        // Change-log order: upsert A, delete A, upsert A again. The final state must
+        // be the re-upserted row, not a resurrected pre-delete snapshot.
+        val first = change("uuid-seq", ChangeOp.UPSERT, clientVersion = 2)
+        val delete = change("uuid-seq", ChangeOp.DELETE)
+        val reUpsert = change("uuid-seq", ChangeOp.UPSERT, clientVersion = 3)
+        sessionRepository.upsertSyncedSessions(listOf(localSession("uuid-seq")))
+
+        applier.apply(listOf(first, delete, reUpsert), userId, "macOS", "IntelliJ IDEA")
+
+        // The re-upsert landed after the soft delete: the row is active again.
+        val active = sessionRepository.getSessions().map { it.sessionUuid }
+        assertThat(active).containsExactly("uuid-seq")
+        val row = sessionRepository.findBySessionUuids(listOf("uuid-seq"))["uuid-seq"]
+        assertThat(row).isNotNull()
+        assertThat(row!!.syncVersion).isEqualTo(3)
     }
 
     @Test

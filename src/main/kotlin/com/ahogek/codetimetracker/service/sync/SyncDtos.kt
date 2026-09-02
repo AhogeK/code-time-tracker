@@ -24,10 +24,15 @@ data class SyncPullRequest(
     val lastPulledChangeId: Long = 0L,
 )
 
-/** POST /api/v1/sync/pull response body: changes to apply plus the next cursor. */
+/** POST /api/v1/sync/pull response body: one page of changes plus the next cursor. */
 data class SyncPullResponse(
     val changes: List<SyncChangeDto> = emptyList(),
     val nextCursor: Long = 0L,
+    /**
+     * True when the server has more changes after this page (ctt-server 0.62.0+).
+     * Defaults to false so responses from older servers parse as a single final page.
+     */
+    val hasMore: Boolean = false,
 )
 
 /** POST /api/v1/sync/push request body: device-originated session states, atomic batch. */
