@@ -15,13 +15,14 @@ import java.util.concurrent.atomic.AtomicBoolean
  * sessions, then pull again so the local store converges on the server-authoritative
  * state (including this device's own changes and any concurrent writes).
  *
- * <p>Failure handling (idempotency): the pull cursor is only persisted after a successful
- * pull, and dirty sessions keep their `is_synced = 0` marker until a push succeeds, so a
- * pull or push failure leaves both sides untouched and the next round retries safely.
- * 429 back-off is handled inside [SyncHttpClient]. Once a push succeeds the pushed
- * sessions are marked synced (the server has accepted the batch atomically); if the
- * follow-up reconcile pull then fails, the next round pulls the remaining changes and
- * converges.
+ * <p>Failure handling (idempotency): the pull cursor is persisted after each applied
+ * page (a pull sequence drains server-reported pages until `hasMore` is false), and
+ * dirty sessions keep their `is_synced = 0` marker until a push succeeds, so a pull
+ * or push failure leaves the cursor at the last successful page and the next round
+ * retries safely from there. 429 back-off is handled inside [SyncHttpClient]. Once a
+ * push succeeds the pushed sessions are marked synced (the server has accepted the
+ * batch atomically); if the follow-up reconcile pull then fails, the next round pulls
+ * the remaining changes and converges.
  *
  * @author AhogeK ahogek@gmail.com
  * @since 2026-08-29
@@ -154,20 +155,9 @@ class SyncCoordinator(
             reRegisterDevice(apiKey)
             firstPull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
         }
-        val pull = firstPull
-        when (pull) {
+        when (val pull = pullAndApplyPages(firstPull, userId, deviceId, apiKey, local, cursor)) {
             is SyncResult.Failure -> return pull
-            is SyncResult.Success -> {
-                applier.apply(
-                    pull.data.changes,
-                    userId,
-                    local.platform.orEmpty(),
-                    local.ideName.orEmpty(),
-                    settings.serverUserId,
-                )
-                cursorRepository.setPullCursor(userId, deviceId, pull.data.nextCursor)
-                cursor = pull.data.nextCursor
-            }
+            is SyncResult.Success -> cursor = pull.data
         }
 
         val dirty = sessionRepository.getDirtySessions()
@@ -198,23 +188,74 @@ class SyncCoordinator(
             failedPushError?.let { return SyncResult.Failure(it) }
         }
 
-        when (val pull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)) {
-            is SyncResult.Failure -> return pull
-            is SyncResult.Success -> {
-                applier.apply(
-                    pull.data.changes,
-                    userId,
-                    local.platform.orEmpty(),
-                    local.ideName.orEmpty(),
-                    settings.serverUserId,
-                )
-                cursorRepository.setPullCursor(userId, deviceId, pull.data.nextCursor)
-            }
+        // Reconcile pull: converge on the server-authoritative state after pushing.
+        val reconcile = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
+        when (val pulled = pullAndApplyPages(reconcile, userId, deviceId, apiKey, local, cursor)) {
+            is SyncResult.Failure -> return pulled
+            is SyncResult.Success -> Unit
         }
 
         // Every completed round (pull or push) advances the persisted last-sync time.
         cursorRepository.setLastSyncAt(userId, deviceId)
         log.info("Sync round completed for device $deviceId")
         return SyncResult.Success(Unit)
+    }
+
+    /**
+     * Drains one pull sequence: applies each page locally, persists the cursor after
+     * every applied page, and continues while the server reports more pages
+     * (ctt-server 0.62.0+ paged the change log; older servers answer a single
+     * `hasMore = false` page). Returns the final cursor on success.
+     *
+     * A page that fails to apply or persist aborts the sequence with a failure and
+     * leaves the persisted cursor at the last successful page, so the next round
+     * resumes from there. A guard against a non-advancing cursor prevents a
+     * misbehaving server from pinning the sync loop forever.
+     */
+    private fun pullAndApplyPages(
+        firstPage: SyncResult<SyncPullResponse>,
+        userId: String,
+        deviceId: String,
+        apiKey: String,
+        local: RegisterDeviceRequest,
+        initialCursor: Long,
+    ): SyncResult<Long> {
+        var page = firstPage
+        var cursor = initialCursor
+        while (true) {
+            when (page) {
+                is SyncResult.Failure -> return page
+                is SyncResult.Success -> {
+                    val data = page.data
+                    if (data.hasMore && data.nextCursor <= cursor) {
+                        return SyncResult.Failure(
+                            SyncError(
+                                SyncErrorKind.SERVER_ERROR,
+                                message = "Server reported more changes without advancing the cursor " +
+                                    "(cursor=$cursor, next=${data.nextCursor}); skipping this round.",
+                            ),
+                        )
+                    }
+                    try {
+                        applier.apply(
+                            data.changes,
+                            userId,
+                            local.platform.orEmpty(),
+                            local.ideName.orEmpty(),
+                            settings.serverUserId,
+                        )
+                        cursorRepository.setPullCursor(userId, deviceId, data.nextCursor)
+                    } catch (e: Exception) {
+                        log.warn("Failed to apply a pull page for device $deviceId", e)
+                        return SyncResult.Failure(
+                            SyncError(SyncErrorKind.SERVER_ERROR, message = "Failed to apply pulled changes: ${e.message}"),
+                        )
+                    }
+                    cursor = data.nextCursor
+                    if (!data.hasMore) return SyncResult.Success(cursor)
+                    page = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
+                }
+            }
+        }
     }
 }

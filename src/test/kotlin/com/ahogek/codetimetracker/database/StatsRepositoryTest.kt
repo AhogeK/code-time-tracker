@@ -63,12 +63,12 @@ class StatsRepositoryTest {
 
     @Test
     fun `getTotalCodingTime should scope to the owner when set`() {
-        sessionRepository.upsertSyncedSession(
-            syncedSession("a-1", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 11, 0)),
+        sessionRepository.upsertSyncedSessions(
+            listOf(syncedSession("a-1", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 11, 0))),
             ownerUserId = "user-a",
         )
-        sessionRepository.upsertSyncedSession(
-            syncedSession("b-1", LocalDateTime.of(2026, 1, 2, 9, 0), LocalDateTime.of(2026, 1, 2, 10, 0)),
+        sessionRepository.upsertSyncedSessions(
+            listOf(syncedSession("b-1", LocalDateTime.of(2026, 1, 2, 9, 0), LocalDateTime.of(2026, 1, 2, 10, 0))),
             ownerUserId = "user-b",
         )
 
@@ -81,8 +81,8 @@ class StatsRepositoryTest {
 
     @Test
     fun `getTotalCodingTime should include unowned local sessions for the bound user`() {
-        sessionRepository.upsertSyncedSession(
-            syncedSession("a-1", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 11, 0)),
+        sessionRepository.upsertSyncedSessions(
+            listOf(syncedSession("a-1", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 11, 0))),
             ownerUserId = "user-a",
         )
         // A locally created, not-yet-synced session carries no owner (is_synced = 0,
@@ -91,8 +91,8 @@ class StatsRepositoryTest {
         sessionRepository.importSessions(
             listOf(syncedSession("local-1", LocalDateTime.of(2026, 1, 3, 9, 0), LocalDateTime.of(2026, 1, 3, 10, 0))),
         )
-        sessionRepository.upsertSyncedSession(
-            syncedSession("b-1", LocalDateTime.of(2026, 1, 2, 9, 0), LocalDateTime.of(2026, 1, 2, 10, 0)),
+        sessionRepository.upsertSyncedSessions(
+            listOf(syncedSession("b-1", LocalDateTime.of(2026, 1, 2, 9, 0), LocalDateTime.of(2026, 1, 2, 10, 0))),
             ownerUserId = "user-b",
         )
 
