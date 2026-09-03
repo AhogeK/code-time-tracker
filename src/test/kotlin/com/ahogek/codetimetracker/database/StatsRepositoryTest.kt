@@ -452,6 +452,89 @@ class StatsRepositoryTest {
     }
 
     @Test
+    fun `getDailyHourDistribution should not double count overlapping sessions in the same hour`() {
+        // Two parallel IDE windows: 10:00-11:00 and 10:30-10:45. The union of the
+        // 10:00-11:00 hour is exactly one hour, not 1h15m (sum of both windows).
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "Project1",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 11, 0),
+                    lastModified = LocalDateTime.now()
+                ),
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "Project2",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 30),
+                    endTime = LocalDateTime.of(2026, 1, 1, 10, 45),
+                    lastModified = LocalDateTime.now()
+                )
+            )
+        )
+
+        val distribution = statsRepository.getDailyHourDistribution(
+            LocalDateTime.of(2026, 1, 1, 0, 0),
+            LocalDateTime.of(2026, 1, 2, 0, 0)
+        )
+
+        // Thursday (2026-01-01) hour 10 = 3600s (merged union), not 3900s.
+        val thursdayHour10 = distribution.first { it.dayOfWeek == 4 && it.hourOfDay == 10 }
+        assertThat(thursdayHour10.totalDuration.toSeconds()).isEqualTo(3600)
+    }
+
+    @Test
+    fun `getDailyHourDistribution should merge overlapping sessions across adjacent hours`() {
+        // Session A 10:00-11:30 and session B 11:00-12:00 overlap at 11:00-11:30.
+        // Union: 10:00-12:00 => hour 10 = 3600s, hour 11 = 3600s (not 3600+1800).
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "Project1",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 11, 30),
+                    lastModified = LocalDateTime.now()
+                ),
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "Project2",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 11, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 12, 0),
+                    lastModified = LocalDateTime.now()
+                )
+            )
+        )
+
+        val distribution = statsRepository.getDailyHourDistribution(
+            LocalDateTime.of(2026, 1, 1, 0, 0),
+            LocalDateTime.of(2026, 1, 2, 0, 0)
+        )
+
+        val hour10 = distribution.first { it.dayOfWeek == 4 && it.hourOfDay == 10 }
+        val hour11 = distribution.first { it.dayOfWeek == 4 && it.hourOfDay == 11 }
+        assertThat(hour10.totalDuration.toSeconds()).isEqualTo(3600)
+        assertThat(hour11.totalDuration.toSeconds()).isEqualTo(3600)
+    }
+
+    @Test
     fun `getOverallHourlyDistributionWithTotalDays should return hourly data`() {
         sessionRepository.importSessions(
             listOf(

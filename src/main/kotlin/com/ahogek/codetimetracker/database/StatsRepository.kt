@@ -272,14 +272,28 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
                     pstmt.setString(2, dateTimeFormatter.format(actualEnd))
                     ownerUserId?.let { pstmt.setString(3, it) }
                     pstmt.executeQuery().use { rs ->
+                        // Overlapping sessions on the same day must be merged (union)
+                        // before slicing by hour, exactly like the heatmap and summary
+                        // totals (TimeRangeUtils.mergeIntervals), otherwise parallel
+                        // windows are double-counted in the same hour.
+                        val dailyIntervals = mutableMapOf<LocalDate, MutableList<Pair<LocalDateTime, LocalDateTime>>>()
                         while (rs.next()) {
-                            processDailyHourlySession(
-                                rs.getString("start_time"),
-                                rs.getString("end_time"),
-                                actualStart,
-                                actualEnd,
-                                distributionMap
-                            )
+                            val sessionStart = LocalDateTime.parse(rs.getString("start_time"), dateTimeFormatter)
+                            val sessionEnd = LocalDateTime.parse(rs.getString("end_time"), dateTimeFormatter)
+                            calculateEffectiveRange(sessionStart, sessionEnd, actualStart, actualEnd)
+                                ?.let { (effectiveStart, effectiveEnd) ->
+                                    splitSessionByDay(effectiveStart, effectiveEnd).forEach { (date, interval) ->
+                                        dailyIntervals.getOrPut(date) { mutableListOf() }.add(interval)
+                                    }
+                                }
+                        }
+                        dailyIntervals.forEach { (_, intervals) ->
+                            TimeRangeUtils.mergeIntervals(intervals).forEach { (start, end) ->
+                                splitSessionByDayAndHour(start, end).forEach { (weekday, hour, duration) ->
+                                    val key = Pair(weekday, hour)
+                                    distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
+                                }
+                            }
                         }
                     }
                 }
@@ -289,24 +303,6 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
         }
 
         return distributionMap
-    }
-
-    private fun processDailyHourlySession(
-        startTimeStr: String,
-        endTimeStr: String,
-        rangeStart: LocalDateTime,
-        rangeEnd: LocalDateTime,
-        distributionMap: MutableMap<Pair<Int, Int>, Long>
-    ) {
-        val sessionStart = LocalDateTime.parse(startTimeStr, dateTimeFormatter)
-        val sessionEnd = LocalDateTime.parse(endTimeStr, dateTimeFormatter)
-
-        calculateEffectiveRange(sessionStart, sessionEnd, rangeStart, rangeEnd)?.let { (effectiveStart, effectiveEnd) ->
-            splitSessionByDayAndHour(effectiveStart, effectiveEnd).forEach { (weekday, hour, duration) ->
-                val key = Pair(weekday, hour)
-                distributionMap[key] = distributionMap.getOrDefault(key, 0L) + duration.toSeconds()
-            }
-        }
     }
 
     private fun calculateWeekdayCount(
