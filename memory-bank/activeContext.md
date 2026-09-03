@@ -10,6 +10,14 @@
 - 版本 0.19.8 → 0.20.0（MINOR：同步协议新能力）；服务端无需改动
 - **审查修正（用户发现）**：reconcile 分支 `cursor = pulled.data` 死赋值（后续无读取）→ 改 `SyncResult.Success -> Unit`；编译 warning 消除，117/117 保持
 
+## [2026-09-02] - Weekly Hour 重叠会话双计修复（版本 0.20.1）
+
+- **Bug（用户报告）**：getDailyHourDistribution（DailyHourDataProvider 数据源）逐 session 按小时切片累加，无跨 session 合并 → 并行窗口同小时双计（10:00-11:00 + 10:30-10:45 的 hour 10 计 3900s，应为 3600s）
+- **根因**：fetchDailyHourlyData → processDailyHourlySession 无合并；对比 getDailyCodingTimeForHeatmap 有注释明确要求合并（TimeRangeUtils.calculateMergedDuration），daily-hour 漏做
+- **修复**：TimeRangeUtils 抽 `mergeIntervals()`（返回合并后并集区间列表），`calculateMergedDuration` 复用（语义不变）；fetchDailyHourlyData 改为按天收集区间 → mergeIntervals → 再按小时切片；processDailyHourlySession 删除（逻辑并入）
+- **验证**：红-绿确认（stash 源码后新测试失败）→ 修复后 119/119（+2：同小时重叠不双计 3600s / 跨相邻小时重叠合并）
+- 版本 0.20.0 → 0.20.1（bug 修复 PATCH）
+
 ## [2026-09-02] - Yearly Coding Activity 时间层级重设（版本 0.19.8）
 
 - **需求**：heatmap 图例层级从 `<5min/5-15min/15min-1h/1-3h/3-6h/>6h` 改为 `<15m/15-60m/1-2h/2-5h/5-8h/>8h`

@@ -9,6 +9,9 @@
 - **阻塞问题**: 无（ctt-server v0.49.0 已落地 sessionUuid 契约）
 
 ## 最近完成
+- **Weekly Hour 重叠会话双计修复**（2026-09-02，版本 0.20.1）
+  - TimeRangeUtils 抽 mergeIntervals（返回并集区间列表），calculateMergedDuration 复用
+  - fetchDailyHourlyData 按天合并后再切片；红-绿验证 +2 测试；119/119
 - **ctt-server v0.62.0 pull 分页对接 + 批量 upsert**（2026-09-02，版本 0.20.0）
   - SyncPullResponse.hasMore + SyncCoordinator.pullAndApplyPages 分页循环（护栏+异常转 Failure）
   - SessionRepository.upsertSyncedSessions 批量单事务（替代逐条 upsert）；applier 连续段批处理
