@@ -131,18 +131,20 @@ object TimeRangeUtils {
     }
 
     /**
-     * Calculates the total duration of a list of time intervals, merging overlapping intervals.
-     * This ensures that concurrent coding sessions (e.g., in multiple IDE windows) are not double-counted.
+     * Merges overlapping time intervals into a minimal set of disjoint intervals (union).
+     * Concurrent coding sessions (e.g. in multiple IDE windows) must not be double
+     * counted, so every caller that slices intervals further (heatmap by day, weekly
+     * hour heatmap by hour) merges before slicing.
      *
-     * @param intervals List of start and end time pairs.
-     * @return The total merged duration.
+     * @param intervals List of start and end time pairs (order-insensitive).
+     * @return The merged disjoint intervals, sorted by start time.
      */
-    fun calculateMergedDuration(intervals: List<Pair<LocalDateTime, LocalDateTime>>): Duration {
-        if (intervals.isEmpty()) return Duration.ZERO
+    fun mergeIntervals(intervals: List<Pair<LocalDateTime, LocalDateTime>>): List<Pair<LocalDateTime, LocalDateTime>> {
+        if (intervals.isEmpty()) return emptyList()
 
         // Sort by start time to process sequentially
         val sorted = intervals.sortedBy { it.first }
-        var totalDuration = Duration.ZERO
+        val merged = mutableListOf<Pair<LocalDateTime, LocalDateTime>>()
 
         // Initialize with the first interval
         var currentStart = sorted[0].first
@@ -159,16 +161,28 @@ object TimeRangeUtils {
                     currentEnd = nextEnd
                 }
             } else {
-                // No overlap: add the current merged interval to total and start a new one
-                totalDuration = totalDuration.plus(Duration.between(currentStart, currentEnd))
+                // No overlap: commit the current merged interval and start a new one
+                merged.add(Pair(currentStart, currentEnd))
                 currentStart = nextStart
                 currentEnd = nextEnd
             }
         }
 
         // Add the final interval
-        totalDuration = totalDuration.plus(Duration.between(currentStart, currentEnd))
+        merged.add(Pair(currentStart, currentEnd))
 
-        return totalDuration
+        return merged
     }
+
+    /**
+     * Calculates the total duration of a list of time intervals, merging overlapping intervals.
+     * This ensures that concurrent coding sessions (e.g., in multiple IDE windows) are not double-counted.
+     *
+     * @param intervals List of start and end time pairs.
+     * @return The total merged duration.
+     */
+    fun calculateMergedDuration(intervals: List<Pair<LocalDateTime, LocalDateTime>>): Duration =
+        mergeIntervals(intervals).fold(Duration.ZERO) { acc, interval ->
+            acc.plus(Duration.between(interval.first, interval.second))
+        }
 }
