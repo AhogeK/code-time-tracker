@@ -1,4 +1,18 @@
 # Active Context
+## [2026-09-03] - AGENTS.md 优化：吸收参考项目规则 + 领域知识库落地（无版本变更）
+
+- **背景**：学习 ../ctt-server（R1-R26）与 ../ctt-web（R1-R25）的 AGENTS.md 及所参考的"复杂系统 AI 知识库"文章，按本项目实际规模（60 文件/6932 行，为其 1/6）裁剪吸收
+- **R6 补强**：新增「授权作用域闭合」——前瞻动词（继续/接着做/然后实施 X）不携带提交授权 + 闭合点表；新增「机械判定法」——回合消息字面搜索 `提交/commit/推送/push`，未命中一律禁止提交（防自我说服）
+- **R16 补强**：归档文件只写不改 + 完整性校验（行数差 = 头行数）+ 行数超限无超期条目的处理顺序；**progress.md 职责边界**（版本里程碑账本 vs activeContext 逐条变更，先例：progress 长期停在 C 阶段误导）
+- **R1 精确化**：时间线层全读 + 领域层按需（渐进式披露）
+- **新增 R29 领域知识库**：领域优先（非文档类型）、五件套（meta/principles/scenarios/practices/references）、渐进式披露、回源（不同事实不同来源）、维护（增量/校准、高风险语义人工确认）、核对基线、按需建档
+- **新增 R30 AI 产物位置**：`.omp/` 显式化（既有实践：需求报告/交付报告/验收指南已在用）+ `docs/` 边界 + `memory-bank/docs/` 为历史快照
+- **领域落地**：`memory-bank/domains/` 建立——README（操作规程）+ `sync-protocol`（五件套：LWW/游标/分页/批量 upsert/墓碑/自愈）+ `stats-aggregation`（五件套：并集口径/owner 隔离/切片/图表层级）
+- **漂移修复**：R3 与 systemPatterns 的"同步尚未实现"（实为 0.20.1 已交付）→ 更新；progress 重写为版本里程碑账本（0.9.0→0.20.1）；implementation-plan 更新（A-E 全完成）；SYNC-CORE-DESIGN.md（v0.49.0 时代）归档至 archive/2026-09-03-sync-core-design.md
+- **核对基线**：sync-protocol 声明 2026-09-03 · 插件 v0.20.1 · 服务端 ../ctt-server v0.73.0 工作区
+- 非代码变更，不升版本号；等待用户审查
+
+
 ## [2026-09-02] - ctt-server v0.62.0 pull 分页对接 + 批量 upsert（版本 0.20.0）
 
 - **契约核对（读 ../ctt-server 源码）**：SyncPullResponse 加 hasMore；服务端 doPull 取 batchSize+1 探测，响应时即持久化 watermark（queryCursor=max(服务端持久,客户端)）→ 重发旧游标安全；非空页 nextCursor=max(页尾,发送游标) 严格递增 → 循环必终止

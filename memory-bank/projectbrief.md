@@ -14,17 +14,19 @@ JetBrains 平台插件：自动追踪编码时间并提供可视化统计分析�
 
 ## 范围
 
-- 当前版本：v0.8.10（`gradle/libs.versions.toml` → `pluginVersion`）
+- 当前版本：0.20.1（`gradle/libs.versions.toml` → `pluginVersion`）
 - 目标平台：JetBrains IDE 2026.1+（Build 261+）
-- 云同步：**未实现**（`CodingSession` 已预留 `isSynced`/`syncVersion` 字段，关联 ctt-server/ctt-web）
+- 云同步：**已实现**（A–E 阶段，0.17.0 起；0.20.0 起支持服务端分页 + 批量 upsert）——可选功能，对接自托管 [ctt-server](https://github.com/AhogeK/ctt-server)；协议与契约见 `memory-bank/domains/sync-protocol/`
 
 ## 用户故事
 
 - 作为开发者，我希望 IDE 自动记录编码时间，无需手动操作
 - 作为开发者，我希望在状态栏和统计窗口看到今日/本周/本月/本年编码时长
-- 作为开发者，我希望数据只存在本地，不被上传
+- 作为开发者，我希望数据只存在本地，不被上传（云同步为显式可选）
 
 ## 里程碑
 
 - [x] v0.8.10：状态栏与统计页时间显示一致性修复（2026-03-17）
-- [ ] 云同步（未排期，需先实现 ctt-server 契约）
+- [x] 云同步 A–E 全阶段（0.9.0 → 0.20.1）：详见 `progress.md` 版本里程碑表
+- [x] ctt-server 契约跟进（0.20.0：分页对接 + 批量 upsert）
+- [ ] 下一阶段：待用户指示（无进行中计划）
