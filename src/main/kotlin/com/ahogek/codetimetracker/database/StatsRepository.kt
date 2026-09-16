@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.database
 
 import com.ahogek.codetimetracker.model.*
+import com.ahogek.codetimetracker.util.LanguageVocabulary
 import com.ahogek.codetimetracker.util.TimeRangeUtils
 import com.intellij.openapi.diagnostic.Logger
 import java.sql.PreparedStatement
@@ -544,7 +545,10 @@ class StatsRepository(private val connectionManager: ConnectionManager) {
                     }
                     pstmt.executeQuery().use { rs ->
                         while (rs.next()) {
-                            val language = rs.getString("language")
+                            // Display-only normalization: stored and pushed values stay raw, but the
+                            // aggregation bucket is the canonical name so IDE spelling variants
+                            // (Kotlin / kotlin) merge exactly as they do on the server.
+                            val language = LanguageVocabulary.normalize(rs.getString("language"))
                             sessionOp(rs, startTime, endTime, map, language)
                         }
                     }

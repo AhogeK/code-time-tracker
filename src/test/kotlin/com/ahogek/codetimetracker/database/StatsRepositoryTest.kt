@@ -49,11 +49,12 @@ class StatsRepositoryTest {
         sessionUuid: String,
         start: LocalDateTime,
         end: LocalDateTime,
+        language: String = "Kotlin",
     ) = CodingSession(
         sessionUuid = sessionUuid,
         userId = "local-user",
         projectName = "TestProject",
-        language = "Kotlin",
+        language = language,
         platform = "macOS",
         ideName = "IntelliJ IDEA",
         startTime = start,
@@ -532,6 +533,38 @@ class StatsRepositoryTest {
         val hour11 = distribution.first { it.dayOfWeek == 4 && it.hourOfDay == 11 }
         assertThat(hour10.totalDuration.toSeconds()).isEqualTo(3600)
         assertThat(hour11.totalDuration.toSeconds()).isEqualTo(3600)
+    }
+
+    @Test
+    fun `getLanguageDistribution should merge spelling variants into one canonical bucket`() {
+        // Two IDEs reported the same language differently; without normalization this
+        // splits into Kotlin/kotlin just like the server used to before its vocabulary.
+        sessionRepository.upsertSyncedSessions(
+            listOf(
+                syncedSession("lang-1", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 10, 0), language = "Kotlin"),
+                syncedSession("lang-2", LocalDateTime.of(2026, 1, 1, 10, 0), LocalDateTime.of(2026, 1, 1, 11, 0), language = "kotlin"),
+            ),
+        )
+
+        val distribution = statsRepository.getLanguageDistribution()
+
+        assertThat(distribution).hasSize(1)
+        assertThat(distribution[0].language).isEqualTo("Kotlin")
+        assertThat(distribution[0].totalDuration.toSeconds()).isEqualTo(7200)
+    }
+
+    @Test
+    fun `getLanguageDistribution should keep unrecognized values verbatim`() {
+        sessionRepository.upsertSyncedSessions(
+            listOf(
+                syncedSession("lang-3", LocalDateTime.of(2026, 1, 1, 9, 0), LocalDateTime.of(2026, 1, 1, 10, 0), language = "MyUnknownLang"),
+            ),
+        )
+
+        val distribution = statsRepository.getLanguageDistribution()
+
+        assertThat(distribution).hasSize(1)
+        assertThat(distribution[0].language).isEqualTo("MyUnknownLang")
     }
 
     @Test
