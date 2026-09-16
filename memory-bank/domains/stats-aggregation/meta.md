@@ -4,7 +4,7 @@
 
 本地会话数据的统计口径与聚合：从 `coding_sessions` 到各图表的数值语义（时长如何合并、时间如何切片、账号如何隔离），以及这些口径在 UI 层的表达（图表层级、tooltip）。
 
-**In scope**：时长并集语义、日/小时切片、owner 隔离与未归属会话、时间范围边界、8 个数据 provider 的数值口径、图表层级（heatmap 配色梯度）。
+**In scope**：时长并集语义、日/小时切片、owner 隔离与未归属会话、时间范围边界、语言名归一化（展示层）、8 个数据 provider 的数值口径、图表层级（heatmap 配色梯度）。
 
 **Out of scope**：会话如何产生（追踪引擎）、同步如何写入（`sync-protocol`）、webview 的渲染框架/主题。
 
@@ -12,9 +12,11 @@
 
 - `src/main/kotlin/com/ahogek/codetimetracker/database/StatsRepository.kt` — 全部统计查询
 - `src/main/kotlin/com/ahogek/codetimetracker/util/TimeRangeUtils.kt` — `mergeIntervals` / `calculateMergedDuration` / 时间范围工具
+- `src/main/kotlin/com/ahogek/codetimetracker/util/LanguageVocabulary.kt` — 语言名归一化（词表见 references）
+- `src/main/resources/language/vocabulary.json` — 词表副本（来源 ctt-server，服务端权威）
 - `src/main/kotlin/com/ahogek/codetimetracker/statistics/*DataProvider.kt` — 8 个图表数据源
 - `src/main/resources/webview/main.js` — 图表层级（`visualMap.pieces` 等）
-- `src/test/kotlin/.../database/StatsRepositoryTest.kt`、`.../statistics/SummaryDataProviderTest.kt`
+- `src/test/kotlin/.../database/StatsRepositoryTest.kt`、`.../util/LanguageVocabularyTest.kt`、`.../statistics/SummaryDataProviderTest.kt`
 
 ## Where to start
 
@@ -38,8 +40,8 @@
 
 | | |
 |---|---|
-| 核对 | 2026-09-03 · v0.20.1（与 `src/` 代码同批写入） |
-| 覆盖 | StatsRepository 全部统计方法 + TimeRangeUtils + 8 个 provider + heatmap 图层；测试 119/119 |
+| 核对 | 2026-09-17 · v0.20.2（语言归一化接入本领域时同步核对） |
+| 覆盖 | StatsRepository 全部统计方法 + TimeRangeUtils + LanguageVocabulary + 8 个 provider + heatmap 图层；测试 129/129 |
 | 已知漂移 | 逐条未复核——改动任一 `get*` 前先读其 SQL 与合并调用 |
 
 未核验部分当作线索，不当作事实。

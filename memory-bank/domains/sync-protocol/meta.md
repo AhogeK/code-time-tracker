@@ -42,9 +42,9 @@
 
 | | |
 |---|---|
-| 插件侧核对 | 2026-09-03 · v0.20.1（本领域文件与 `src/` 代码同批写入） |
-| 服务端契约核对 | 2026-09-03 · `../ctt-server` 工作区 v0.73.0 源码（`SyncPullService` / `SyncPullResponse` / `SyncProperties` / `SyncPullPagingIntegrationTest`）；分页特性自 v0.62.0 引入 |
-| 覆盖 | 插件实现 + 服务端 pull/push 契约；插件测试 119/119（含 sync 套件） |
+| 插件侧核对 | 2026-09-16 · v0.20.2（本领域文件与 `src/` 代码同批写入） |
+| 服务端契约核对 | 2026-09-16 · `../ctt-server` 工作区 v0.73.0 源码（`SyncPullService` / `SyncPullResponse` / `SyncProperties` / `SyncPullPagingIntegrationTest`）；分页特性自 v0.62.0 引入。Push 入参校验（v0.74.4）经服务端告知 + 本地数据独立核查确认（references「Push 入参校验」） |
+| 覆盖 | 插件实现 + 服务端 pull/push 契约；插件测试 128/128（含 sync 套件） |
 | 已知漂移 | 未逐条复核——依赖具体端点或字段前先回源 `../ctt-server` 与 `src/` |
 
 未核验部分当作线索，不当作事实。

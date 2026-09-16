@@ -36,3 +36,12 @@
 ## 6. weekday 平均的分母是"窗口内该 weekday 出现次数"
 
 weekly-hour 图：累加值 ÷ `calculateWeekdayCount`（窗口内该周几的日历天数），不是 ÷ 活跃天数。窗口边界日不足整天仍计一次——这是**有意**的口径，改动需用户确认。
+
+## 7. 语言名先归一化再聚合（展示层）
+
+语言分布的聚合 key 是**规范名**（`LanguageVocabulary.normalize`），与服务端同一份词表（GitHub Linguist 规范名）：
+
+- 判定顺序：blank → 空名；strip+case-fold 后命中 nonLanguages → `"Other"`；命中索引（canonical + aliases，canonical 优先）→ 规范名；未命中 → **保留原样值**（不 fold，便于后续补表）
+- 仅改聚合展示：**库内存储与上传值永远保持原样**（规范名是读时派生值，服务端同样如此）
+- 词表副本：`src/main/resources/language/vocabulary.json`（来自 ctt-server 仓库同名文件，服务端是权威；服务端 `version` 变化时刷新副本并跑词表测试）
+

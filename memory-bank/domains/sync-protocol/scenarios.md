@@ -51,6 +51,18 @@
  └─ setLastSyncAt → Success（UI 刷新经 messageBus）
 ```
 
+## Push 返回 400 VALIDATION_ERROR（确定性失败）
+
+症状：设置页持续显示 validation 错误；某个 push 批永不收敛，但**其他批正常**（push 循环不中断）。
+
+判断与处置：
+
+- 确定性错误——重试必复现，**不要**当瞬时错误处理（不要加循环重试/退避）
+- 排查本地数据：`SELECT COUNT(*) FROM coding_sessions WHERE is_synced=0 AND (language IS NULL OR TRIM(language)='' OR LENGTH(language)>50 OR project_name IS NULL OR TRIM(project_name)='' OR LENGTH(project_name)>255)`
+- 当前架构行为（改动前先读 `SyncCoordinator.doSyncOnce`）：批失败记录首个错误、**继续后续批**；存在失败批时本轮 `return Failure`（跳过 reconcile pull 与 `lastSyncAt` 更新）；失败批保留 dirty → 每轮同步重试一次（间隔 5 分钟起，非紧循环）
+- **不要**用"跳过违规会话"来修——那是主动丢数据；先定位违规行的来源（生产路径见 `TimeTrackerService` 的 `project.name` / `fileType.name`）
+- 边界值现状（2026-09 核查）：真实数据零违规，宽度上界（255/50）距实际取值（max 19）余量充足
+
 ## 换绑 / 解绑账号
 
 - 换绑（serverUserId 变化）：`resetForUserSwitch()` —— 清游标、旧会话 markAllSynced、清 serverUserId/statsOwner

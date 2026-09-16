@@ -1,4 +1,20 @@
 # Active Context
+## [2026-09-17] - ctt-server v0.74.4 push 入参校验通知（无需改动，独立核查通过）
+
+- **通知**：`SyncPushRequest.sessions` 此前缺 `@Valid`（集合元素约束从未生效）；v0.74.4 生效并补长度上界（projectName ≤255 / language ≤50，时间戳非空，clientVersion ≥0），违规由静默通过变为 **400 原子拒批**
+- **独立核查（不采信"无需改动"结论）**：取值来源核对（project.name / fileType.name / UUID / 计数器）+ 本机 3557 条真实数据只读核查（**零违规**，max 19 字符）+ 400 映射确认为 `VALIDATION_ERROR` → 确认无需改动
+- **确定性 400 分析**：批失败不中断其他批、保留 dirty、每轮重试一次（非紧循环）；防御**不做**（无触发源；"跳过违规会话"= 主动丢数据）
+- 领域更新：sync-protocol（references 补校验表与合规证据；scenarios 补 400 处置；meta 基线 → v0.74.4）
+
+## [2026-09-17] - 语言分布归一化（对齐服务端 v0.74.x，版本 0.20.2）
+
+- **需求**：服务端已按 GitHub Linguist 规范名归一化语言统计；插件本地仍按原样分组（双 IDE 时 Kotlin/kotlin 分裂）。只改展示，上传值与库内存储不动
+- **实现**：词表 verbatim 复制（sha256 一致，v1/92+75+76）；新增 `LanguageVocabulary`（镜像服务端判定链：blank→""/nonLanguages→Other/命中→规范名/未命中→原样不 fold）；`getLanguageDistribution` 聚合 key 接入（唯一改动点）
+- **测试**：+9（单测 7 含悬空别名 CI 校验 + 集成 2）；红-绿验证；128/128
+- **服务端核实回执**：独立复算通过；采纳建议①（悬空别名 CI 校验）；建议③ recordUnmapped 前提修正已记录（读路径、无送达通道暂不做）；词表公告规则由服务端固化
+- 领域同步：stats-aggregation（principles #7 / meta / references）；版本 0.20.1 → 0.20.2（PATCH）
+- **评审修复（双轴 review + 审计）**：日期前缀修正（09-03 → 09-17，与系统时钟对齐）；`key()` 精确镜像 Java `strip()`（`Character.isWhitespace` 而非 Kotlin `trim()`——NBSP 类字符两侧折叠行为不同，红-绿用例锁定）；blank 检查同步镜像 `isBlank()`；补 `@author/@since` 与 `VocabularyFile` 字段 KDoc（原 KDoc 错位于加载行为）；em dash 清除；stats-aggregation/meta 基线刷新；测试 129/129
+
 ## [2026-09-03] - AGENTS.md 优化：吸收参考项目规则 + 领域知识库落地（无版本变更）
 
 - **背景**：学习 ../ctt-server（R1-R26）与 ../ctt-web（R1-R25）的 AGENTS.md 及所参考的"复杂系统 AI 知识库"文章，按本项目实际规模（60 文件/6932 行，为其 1/6）裁剪吸收

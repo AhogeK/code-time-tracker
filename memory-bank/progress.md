@@ -14,6 +14,7 @@
 
 | 版本 | 交付 |
 |---|---|
+| 0.20.2 | 语言分布归一化（内置 ctt-server 词表；Kotlin/kotlin 合并，与网页版一致） |
 | 0.20.1 | Weekly Hour 重叠双计修复（`TimeRangeUtils.mergeIntervals` 抽取，统计口径统一为并集） |
 | 0.20.0 | ctt-server v0.62.0 pull 分页对接（hasMore 循环 + 卡死护栏）+ 批量 upsert（单事务）+ 软删墓碑 lifting |
 | 0.19.8 | Yearly heatmap 时间层级重设（gte/lt 半开区间，修边界落层 bug） |

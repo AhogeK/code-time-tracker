@@ -31,6 +31,28 @@
 |---|---|---|
 | `ctt.sync.pull-batch-size` | 1000 | 单次 pull 最大 change 数（1–10000） |
 
+## Push 入参校验（v0.74.4 起真正生效）
+
+此前 `SyncPushRequest.sessions` 缺 `@Valid`，集合元素上的约束从未生效（空 projectName/language 被静默存成空串）。v0.74.4 修复并补了长度上界：
+
+| 字段 | 约束 |
+|---|---|
+| `sessionUuid` | 非空 |
+| `projectName` | 非空，≤255 |
+| `language` | 非空，≤50 |
+| `startTime` / `endTime` / `clientModifiedAt` | 非空 |
+| `clientVersion` | ≥ 0 |
+
+- 违规 = **400**（原子批：一个不合规则整批被拒）；此前是"静默通过"
+- 400 无匹配 error code → `SyncErrorMapper` 落 `VALIDATION_ERROR`（映射表无 400 专属码；429/5xx 按状态码先行）
+- **确定性失败**：重试必复现——不是瞬时错误，不适用"重试即解决"的直觉
+
+插件侧合规证据（2026-09 独立核查）：
+- 取值来源：`projectName = project.name`、`language = file.fileType.name`（`TimeTrackerService.kt`）、`sessionUuid` 本地 UUID、时间戳非空类型、`clientVersion` 计数器
+- 真实数据只读核查（3557 条本地会话）：空/超长/负值**零违规**（max language 19 字符 / max projectName 19 字符；45 条待推脏会话 0 违规）
+
+已知的潜在契约依赖（当前不可达）：`SyncSessionApplier` 用 `projectName.orEmpty()` 处理服务端快照的 null——apply 的行 `is_synced=1` 不进 push 路径，除非该行本地被改脏（当前无此路径）。
+
 ## 插件侧常量
 
 | 常量 | 值 | 位置 |
