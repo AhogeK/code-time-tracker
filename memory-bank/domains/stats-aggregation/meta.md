@@ -40,8 +40,8 @@
 
 | | |
 |---|---|
-| 核对 | 2026-09-17 · v0.20.2（语言归一化接入本领域时同步核对） |
-| 覆盖 | StatsRepository 全部统计方法 + TimeRangeUtils + LanguageVocabulary + 8 个 provider + heatmap 图层；测试 129/129 |
+| 核对 | 2026-09-17 · v0.20.3（词表副本 v1→v2 同步时核对） |
+| 覆盖 | StatsRepository 全部统计方法 + TimeRangeUtils + LanguageVocabulary + 8 个 provider + heatmap 图层；测试 130/130 |
 | 已知漂移 | 逐条未复核——改动任一 `get*` 前先读其 SQL 与合并调用 |
 
 未核验部分当作线索，不当作事实。

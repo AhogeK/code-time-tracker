@@ -55,12 +55,12 @@
 
 | 项 | 事实 |
 |---|---|
-| 词表资源 | `src/main/resources/language/vocabulary.json`（verbatim 副本，来自 ctt-server `src/main/resources/language/vocabulary.json`，version 1：92 canonical / 75 aliases / 76 nonLanguages） |
+| 词表资源 | `src/main/resources/language/vocabulary.json`（verbatim 副本，来自 ctt-server 同名文件）。**v2**（2026-09-17）：size 39845 bytes，sha256 `be7de60211d7604b68a70bcb399b8252f5d4a51576a88100f995fb9a43a8ea04`，842 canonical / 489 aliases / 76 nonLanguages。v1（92/75/76）是从"单机可枚举的 fileType"反推的，缺 750 种真实语言（Elixir/Zig/Astro/Svelte…）；v2 以标准本身（GitHub Linguist 全集 + 7 个本地扩展）为源，canonical +750 / aliases +414 且**零移除** |
 | 服务端实现（语义权威） | `../ctt-server` `language/LanguageVocabulary.java`：`key() = strip + Locale.ROOT lowercase`；索引以 canonical 优先 `putIfAbsent`，alias 指向未知名在服务端**快速失败**、插件侧 warn 忽略 |
 | 判定链 | blank→`""`；nonLanguages→`"Other"`；索引命中→规范名；未命中→原样（不 fold） |
-| 容错 | 资源加载失败 → 空词表 + error 日志（退化为不归一化，统计不崩）；词表完整性由 `LanguageVocabularyTest` 在 CI 兜底（`version > 0` + **悬空别名校验**：遍历 aliases 断言目标存在于 canonical，镜像服务端的构造期校验） |
+| 容错 | 资源加载失败 → 空词表 + error 日志（退化为不归一化，统计不崩）；词表完整性由 `LanguageVocabularyTest` 在 CI 兜底（`version == 2` 版本守卫 + **悬空别名校验**：遍历 aliases 断言目标存在于 canonical，镜像服务端的构造期校验） |
 | 未识别值记录 | 插件侧**不做**本地记录（未镜像服务端 `recordUnmapped`）。前提修正（服务端 2026-09 核实）：服务端归一化在**读路径**，未识别值仅在用户请求过服务端统计时才被记录；插件侧本地记录目前只有日志可见性、无送达通道，端到端价值低。触发条件：若建立"未识别值收集/上报"流程，本地记录是前置件 |
-| 更新流程 | 服务端词表 `version` 变化 → 复制新文件 → `sha256sum` 核对一致 → 跑 `LanguageVocabularyTest` + `StatsRepositoryTest`；服务端已固化公告规则（ctt-server 领域知识库 "Language vocabulary contract"：任何 vocabulary.json 改动都 bump version 并公告旧→新版本与新增内容） |
+| 更新流程 | 服务端词表 `version` 变化 → 复制新文件 → `shasum -a 256` 与公告值核对（不靠肉眼比 JSON）→ 跑 `LanguageVocabularyTest` + `StatsRepositoryTest`。**v1→v2 已按此流程执行**（2026-09-17：哈希/大小/条目数三项与公告一致；独立复核 +750 零移除、后端点名 15 种语言 v1 全缺 v2 全有）。服务端已固化公告规则（ctt-server 领域知识库 "Language vocabulary contract"：任何 vocabulary.json 改动都 bump version 并公告旧→新版本与新增内容）。测试守卫：`version == 2` 断言 + v1 缺失语言的可解析断言（捕获复制错版本） |
 | 核实记录 | 2026-09 服务端独立复算通过：sha256 一致、条目数一致、插件测试断言复算一致、判定链逐条等价 |
 
 ## 关键文件与提交

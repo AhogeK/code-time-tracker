@@ -1,10 +1,15 @@
 # Active Context
+## [2026-09-17] - 语言词表 v1 → v2 同步（版本 0.20.3）
+
+- 词表改以标准本身（GitHub Linguist 全集 + 7 本地扩展）为源：canonical 92→842（+750）、aliases 75→489（+414），均**零移除**；v1 从单机可枚举 fileType 反推，缺 Elixir/Zig/Astro 等 750 种真实语言（被误读为"服务端不认识"）
+- 三步执行（复制 → `shasum -a 256` 与公告一致 `be7de602…`/39845 bytes → 测试）+ 独立复核（git 取 v1 对比零移除、后端点名 15 语言 v1 全缺 v2 全有、v2 数据完整性干净）；守卫升级 `version == 2` + 缺失语言可解析断言
+- 上传值不变（后端 VS Code 侧提醒不涉 JetBrains：本就发 `fileType.name` 原值）；领域 references/meta 同步；测试 130/130
+
 ## [2026-09-17] - ctt-server v0.74.4 push 入参校验通知（无需改动，独立核查通过）
 
-- **通知**：`SyncPushRequest.sessions` 此前缺 `@Valid`（集合元素约束从未生效）；v0.74.4 生效并补长度上界（projectName ≤255 / language ≤50，时间戳非空，clientVersion ≥0），违规由静默通过变为 **400 原子拒批**
-- **独立核查（不采信"无需改动"结论）**：取值来源核对（project.name / fileType.name / UUID / 计数器）+ 本机 3557 条真实数据只读核查（**零违规**，max 19 字符）+ 400 映射确认为 `VALIDATION_ERROR` → 确认无需改动
-- **确定性 400 分析**：批失败不中断其他批、保留 dirty、每轮重试一次（非紧循环）；防御**不做**（无触发源；"跳过违规会话"= 主动丢数据）
-- 领域更新：sync-protocol（references 补校验表与合规证据；scenarios 补 400 处置；meta 基线 → v0.74.4）
+- v0.74.4 起 `SyncPushRequest` 集合元素约束真正生效（projectName ≤255 / language ≤50、时间戳非空、clientVersion ≥0），违规 = **400 原子拒批**
+- 独立核查：取值来源 + 本机 3557 条真实数据只读核查（**零违规**，max 19 字符）+ 400 映射确认为 `VALIDATION_ERROR` → 无需改动；确定性 400 分析（批失败不中断其他批、保留 dirty、每轮一次非紧循环；防御不做——跳过违规会话即丢数据）
+- 领域更新：sync-protocol（references 校验表与合规证据 / scenarios 400 处置 / meta 基线）
 
 ## [2026-09-17] - 语言分布归一化（对齐服务端 v0.74.x，版本 0.20.2）
 
