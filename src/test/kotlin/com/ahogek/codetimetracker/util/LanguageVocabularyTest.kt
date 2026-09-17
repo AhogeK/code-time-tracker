@@ -49,8 +49,21 @@ class LanguageVocabularyTest {
     @Test
     fun `should load the shipped vocabulary resource`() {
         // Guards the bundled copy: if the resource is missing or unparsable the object
-        // degrades to pass-through and the version stays 0.
-        assertThat(LanguageVocabulary.version).isGreaterThan(0)
+        // degrades to pass-through and the version stays 0. Pinning the expected version
+        // also catches a copy of the wrong revision - refresh both sides together.
+        assertThat(LanguageVocabulary.version).isEqualTo(2)
+    }
+
+    @Test
+    fun `should resolve languages that vocabulary v1 was missing`() {
+        // v1 was reverse-engineered from the file types one machine could enumerate, so 750
+        // real languages (Elixir, Zig, Astro, ...) were absent and resolved as unknown -
+        // reading like "the server does not know it" when the vocabulary never had it. v2
+        // takes the standard itself (GitHub Linguist) as the source, so these must resolve.
+        assertThat(LanguageVocabulary.normalize("astro")).isEqualTo("Astro")
+        assertThat(LanguageVocabulary.normalize("Elixir")).isEqualTo("Elixir")
+        assertThat(LanguageVocabulary.normalize("ZIG")).isEqualTo("Zig")
+        assertThat(LanguageVocabulary.normalize("Svelte")).isEqualTo("Svelte")
     }
 
     @Test
