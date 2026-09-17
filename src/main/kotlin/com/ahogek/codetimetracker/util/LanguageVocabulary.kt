@@ -9,7 +9,7 @@ import com.intellij.openapi.diagnostic.Logger
  * reported under different spellings (`Kotlin` vs `kotlin`, `JAVA` vs `java`).
  *
  * <p>The vocabulary is data, not code: `language/vocabulary.json`, copied verbatim from
- * the ctt-server repository (`src/main/resources/language/vocabulary.json`, version 1,
+ * the ctt-server repository (`src/main/resources/language/vocabulary.json`, version 2,
  * GitHub Linguist names). The server owns the file - when its vocabulary version changes,
  * refresh this copy and re-run the vocabulary tests, which assert the shipped resource
  * loads and resolves aliases.
