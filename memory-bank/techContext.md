@@ -44,3 +44,5 @@ codetimetracker/
 ## 依赖变更记录
 
 - sqlite-jdbc：3.53.2.1 → 3.53.4.0（0.19.4，构建卫生批次）
+- Kotlin 2.4.10 → 2.4.20、IPGP 2.18.1 → 2.19.0、ben-manes 0.61.0 → 0.64.0、Gradle wrapper 9.7.1 → 9.8.0（0.20.4，例行依赖升级；每层 clean build 验证）
+- JDK：Temurin 25.0.4 LTS（SDKMAN 25.x 线当前最高，无需更新）

@@ -14,6 +14,7 @@
 
 | 版本 | 交付 |
 |---|---|
+| 0.20.4 | 例行依赖升级（Kotlin 2.4.20 / IPGP 2.19.0 / ben-manes 0.64.0 / Gradle 9.8.0） |
 | 0.20.3 | 语言词表 v1 → v2 同步（842 canonical / 489 aliases；v1 缺失的 750 种语言现可合桶） |
 | 0.20.2 | 语言分布归一化（内置 ctt-server 词表；Kotlin/kotlin 合并，与网页版一致） |
 | 0.20.1 | Weekly Hour 重叠双计修复（`TimeRangeUtils.mergeIntervals` 抽取，统计口径统一为并集） |

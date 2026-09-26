@@ -1,24 +1,22 @@
 # Active Context
-## [2026-09-17] - 语言词表 v1 → v2 同步（版本 0.20.3）
+## [2026-09-17] - 例行依赖升级（版本 0.20.4）
 
-- 词表改以标准本身（GitHub Linguist 全集 + 7 本地扩展）为源：canonical 92→842（+750）、aliases 75→489（+414），均**零移除**；v1 从单机可枚举 fileType 反推，缺 Elixir/Zig/Astro 等 750 种真实语言（被误读为"服务端不认识"）
-- 三步执行（复制 → `shasum -a 256` 与公告一致 `be7de602…`/39845 bytes → 测试）+ 独立复核（git 取 v1 对比零移除、后端点名 15 语言 v1 全缺 v2 全有、v2 数据完整性干净）；守卫升级 `version == 2` + 缺失语言可解析断言
-- 上传值不变（后端 VS Code 侧提醒不涉 JetBrains：本就发 `fileType.name` 原值）；领域 references/meta 同步；测试 130/130
+- **升级+验证**（每层 `clean build` 均 130/130）：Kotlin 2.4.10→2.4.20、IPGP 2.18.1→2.19.0、ben-manes 0.61.0→0.64.0（插件层）；Gradle wrapper 9.7.1→9.8.0
+- **未升级**：`java-compiler-ant-tasks`/`test-framework` 261→263（目标平台版本，R8 红线，定位 2026.1+）；`hot-reload-agent`（IPGP 管理的 compose 组件，项目未声明）。**已最新**：junit/assertj/sqlite-jdbc/gson/LGoodDatePicker/JDK 25.0.4；复检收敛仅剩上述两项
+- 插曲：IPGP id 曾误写 `org.gradle…`（正确 `org.jetbrains…`），构建失败即修正；依赖升级由编译+测试闭环验证；版本 0.20.3 → 0.20.4（PATCH）
+
+## [2026-09-17] - 语言归一化（0.20.2）与词表 v2 同步（0.20.3）
+
+- **0.20.2**：插件按 language 原样分组与服务端不一致（双 IDE 时 Kotlin/kotlin 分裂）→ 新增 `LanguageVocabulary` 镜像服务端判定链（blank→"" / nonLanguages→Other / 命中→规范名 / 未命中→原样），`getLanguageDistribution` 聚合 key 接入（唯一改动点）；上传值与库内存储不动
+- **0.20.3**：服务端词表改以标准本身（GitHub Linguist + 7 本地扩展）为源，canonical 92→842 / aliases 75→489（均零移除）——v1 从单机 fileType 反推、缺 Elixir/Zig/Astro 等 750 种语言；三步执行（复制 → `shasum -a 256` 与公告一致 → 测试）+ 独立复核（git 取 v1 对比零移除、点名 15 语言全补、v2 数据完整性干净）；守卫 `version == 2` + 缺失语言断言
+- **服务端协作**：复算通过；采纳悬空别名 CI 校验建议；recordUnmapped 前提修正记录（读路径、暂不做）；词表公告规则已由其固化；v0.74.4 push 校验经真实数据核查零违规（详见下条）
+- **评审修复**：日期前缀、`key()` 精确镜像 Java `strip()`（NBSP 红-绿用例）、`@author/@since`、em dash 清除；领域 stats-aggregation 同步（principles #7 / meta / references）；测试 130/130
 
 ## [2026-09-17] - ctt-server v0.74.4 push 入参校验通知（无需改动，独立核查通过）
 
 - v0.74.4 起 `SyncPushRequest` 集合元素约束真正生效（projectName ≤255 / language ≤50、时间戳非空、clientVersion ≥0），违规 = **400 原子拒批**
 - 独立核查：取值来源 + 本机 3557 条真实数据只读核查（**零违规**，max 19 字符）+ 400 映射确认为 `VALIDATION_ERROR` → 无需改动；确定性 400 分析（批失败不中断其他批、保留 dirty、每轮一次非紧循环；防御不做——跳过违规会话即丢数据）
 - 领域更新：sync-protocol（references 校验表与合规证据 / scenarios 400 处置 / meta 基线）
-
-## [2026-09-17] - 语言分布归一化（对齐服务端 v0.74.x，版本 0.20.2）
-
-- **需求**：服务端已按 GitHub Linguist 规范名归一化语言统计；插件本地仍按原样分组（双 IDE 时 Kotlin/kotlin 分裂）。只改展示，上传值与库内存储不动
-- **实现**：词表 verbatim 复制（sha256 一致，v1/92+75+76）；新增 `LanguageVocabulary`（镜像服务端判定链：blank→""/nonLanguages→Other/命中→规范名/未命中→原样不 fold）；`getLanguageDistribution` 聚合 key 接入（唯一改动点）
-- **测试**：+9（单测 7 含悬空别名 CI 校验 + 集成 2）；红-绿验证；128/128
-- **服务端核实回执**：独立复算通过；采纳建议①（悬空别名 CI 校验）；建议③ recordUnmapped 前提修正已记录（读路径、无送达通道暂不做）；词表公告规则由服务端固化
-- 领域同步：stats-aggregation（principles #7 / meta / references）；版本 0.20.1 → 0.20.2（PATCH）
-- **评审修复（双轴 review + 审计）**：日期前缀修正（09-03 → 09-17，与系统时钟对齐）；`key()` 精确镜像 Java `strip()`（`Character.isWhitespace` 而非 Kotlin `trim()`——NBSP 类字符两侧折叠行为不同，红-绿用例锁定）；blank 检查同步镜像 `isBlank()`；补 `@author/@since` 与 `VocabularyFile` 字段 KDoc（原 KDoc 错位于加载行为）；em dash 清除；stats-aggregation/meta 基线刷新；测试 129/129
 
 ## [2026-09-03] - AGENTS.md 优化：吸收参考项目规则 + 领域知识库落地（无版本变更）
 
