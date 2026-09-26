@@ -24,6 +24,6 @@ lgooddatepicker = { module = "com.github.lgooddatepicker:LGoodDatePicker", versi
 [plugins]
 
 java = { id = "java" }
-jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.4.10" }
-jetbrains-intellij-platform = { id = "org.jetbrains.intellij.platform", version = "2.18.1" }
-ben-manes = { id = "io.github.ben-manes.versions", version = "0.61.0" }
+jetbrains-kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.4.20" }
+jetbrains-intellij-platform = { id = "org.jetbrains.intellij.platform", version = "2.19.0" }
+ben-manes = { id = "io.github.ben-manes.versions", version = "0.64.0" }
