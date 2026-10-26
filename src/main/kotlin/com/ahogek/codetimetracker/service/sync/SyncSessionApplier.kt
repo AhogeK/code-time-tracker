@@ -34,10 +34,11 @@ import java.time.ZoneId
 class SyncSessionApplier(private val repository: SessionRepository) {
 
     /**
-     * Applies [changes] for [userId]. [localPlatform] and [localIdeName] are used only
-     * when a change creates a brand-new local row: the server contract carries no
-     * platform/IDE fields (device identity lives on the registered device), so the
-     * values seen by this device are recorded instead.
+     * Applies [changes] for [userId]. A change may carry the originating IDE
+     * ([SyncChangeDto.ideName]/[SyncChangeDto.ideVersion]); when it does, the local row
+     * records it, so a session keeps the IDE that produced it rather than the IDE that
+     * happened to pull it. [localPlatform] and [localIdeName] stay the fallback for
+     * changes that carry no IDE facts (older servers).
      */
     fun apply(
         changes: List<SyncChangeDto>,
@@ -100,7 +101,8 @@ class SyncSessionApplier(private val repository: SessionRepository) {
         projectName = change.projectName.orEmpty(),
         language = change.language.orEmpty(),
         platform = localPlatform,
-        ideName = localIdeName,
+        ideName = change.ideName ?: localIdeName,
+        ideVersion = change.ideVersion,
         startTime = change.startTime.toLocalDateTimeOr(now),
         endTime = change.endTime.toLocalDateTimeOr(now),
         lastModified = change.clientModifiedAt.toLocalDateTimeOr(now),
@@ -119,7 +121,8 @@ class SyncSessionApplier(private val repository: SessionRepository) {
         projectName = change.projectName.orEmpty(),
         language = change.language.orEmpty(),
         platform = existing.platform,
-        ideName = existing.ideName,
+        ideName = change.ideName ?: existing.ideName,
+        ideVersion = change.ideVersion ?: existing.ideVersion,
         startTime = change.startTime.toLocalDateTimeOr(existing.startTime),
         endTime = change.endTime.toLocalDateTimeOr(existing.endTime),
         lastModified = change.clientModifiedAt.toLocalDateTimeOr(existing.lastModified),
