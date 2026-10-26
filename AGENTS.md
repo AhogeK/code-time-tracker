@@ -184,7 +184,7 @@
 ### R15: 数据库规范（强制）
 
 - SQLite schema 变更**必须**通过 `MigrationManager` 增加迁移脚本，禁止直接修改建表语句破坏已有用户数据
-- **加列迁移必须幂等**：`try { ALTER TABLE … ADD COLUMN … } catch (_: SQLException) {}`（先例：owner_user_id、last_sync_at、ide_version）；建表 SQL 同时含新列（新库直接就位）
+- **加列迁移必须幂等且失败可见**：先用 `PRAGMA table_info` 判断列是否存在，缺失才执行 `ALTER`；被拒绝时复查（另一 IDE 进程可能已加列），复查仍缺失则抛出——禁止把"加列失败"当成"列已存在"静默吞掉；建表 SQL 同时含新列（新库直接就位）
 - 数据模型变更（`CodingSession`/`Stats` 等）需同步统计逻辑与 UI 展示
 - `CodingSession` 云同步预留字段（`isSynced`、`syncVersion`）语义不可滥用
 

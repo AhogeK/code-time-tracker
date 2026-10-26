@@ -14,6 +14,7 @@
 
 | 版本 | 交付 |
 |---|---|
+| 0.21.2 | 迁移加固：加列前先检查、并发被拒后复查、仍缺失则抛出（只读库测试证明失败可见）；版本 0.21.2 |
 | 0.21.1 | 会话级 IDE 元数据 pull 侧补齐（`SyncChangeDto` 可选 IDE + applier 缺失回退本地；服务端未上线时行为不变） |
 | 0.21.0 | 会话级 IDE 元数据（`CodingSession.ideVersion` + SQLite 幂等迁移 + 逐会话 push `ideName/ideVersion`；服务端待实施） |
 | 0.20.4 | 例行依赖升级（Kotlin 2.4.20 / IPGP 2.19.0 / ben-manes 0.64.0 / Gradle 9.8.0） |

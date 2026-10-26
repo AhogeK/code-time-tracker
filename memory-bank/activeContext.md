@@ -6,20 +6,19 @@
 - **pull（0.21.1）**：`SyncChangeDto` 增可选 `ideName/ideVersion`；applier 新建行优先采用服务端值、缺失回退本地——服务端未上线时行为不变
 - **服务端**：尚未实施（DTO/表无 IDE 字段）但 Jackson 忽略未知字段 → 插件可先行；上线后双向自动生效
 - **测试**：+8（push 6 + pull 2），红-绿通过，138/138；坑：Kotlin 签名变更后 `clean test` 仍可能命中陈旧 class（`NoSuchMethodError`）→ `rm -rf build` 全量重建
-- 版本 0.20.4 → 0.21.0（MINOR）→ 0.21.1（PATCH，补完 pull 侧）；R21 增"签名变更后陈旧编译"通用预防；`.idea/*` 删除属外部改动，已恢复不入提交
+- **迁移加固（0.21.2）**：加列改为"先查列 → 缺失才 ALTER → 被拒后复查（并发 IDE 场景）→ 仍缺失必抛出"；只读库测试证明加列失败不再被静默吞掉；测试 139/139
+- 版本 0.20.4 → 0.21.0（MINOR）→ 0.21.1（PATCH，补完 pull 侧）→ 0.21.2（PATCH，迁移加固）；R21 增"签名变更后陈旧编译"预防；`.idea/*` 删除属外部改动，已恢复不入提交
 
 ## [2026-09-17] - 例行依赖升级（版本 0.20.4）
 
-- **升级+验证**（每层 `clean build` 均 130/130）：Kotlin 2.4.10→2.4.20、IPGP 2.18.1→2.19.0、ben-manes 0.61.0→0.64.0（插件层）；Gradle wrapper 9.7.1→9.8.0
-- **未升级**：`java-compiler-ant-tasks`/`test-framework` 261→263（目标平台版本，R8 红线，定位 2026.1+）；`hot-reload-agent`（IPGP 管理的 compose 组件，项目未声明）。**已最新**：junit/assertj/sqlite-jdbc/gson/LGoodDatePicker/JDK 25.0.4；复检收敛仅剩上述两项
-- 插曲：IPGP id 曾误写 `org.gradle…`（正确 `org.jetbrains…`），构建失败即修正；依赖升级由编译+测试闭环验证；版本 0.20.3 → 0.20.4（PATCH）
+- **升级+验证**（每层 `clean build` 130/130）：Kotlin 2.4.10→2.4.20、IPGP 2.18.1→2.19.0、ben-manes 0.61.0→0.64.0、Gradle wrapper 9.7.1→9.8.0
+- **未升级**：`java-compiler-ant-tasks`/`test-framework` 261→263（目标平台，R8 红线）、`hot-reload-agent`（IPGP 管理组件）；其余（junit/assertj/sqlite-jdbc/gson/LGoodDatePicker/JDK 25.0.4）已最新。插曲：IPGP id 误写 `org.gradle…`，构建失败即修正；版本 0.20.3 → 0.20.4（PATCH）
 
 ## [2026-09-17] - 语言归一化（0.20.2）与词表 v2 同步（0.20.3）
 
 - **0.20.2**：插件按 language 原样分组与服务端不一致（双 IDE 时 Kotlin/kotlin 分裂）→ 新增 `LanguageVocabulary` 镜像服务端判定链（blank→"" / nonLanguages→Other / 命中→规范名 / 未命中→原样），`getLanguageDistribution` 聚合 key 接入（唯一改动点）；上传值与库内存储不动
 - **0.20.3**：服务端词表改以标准本身（GitHub Linguist + 7 本地扩展）为源，canonical 92→842 / aliases 75→489（均零移除）——v1 从单机 fileType 反推、缺 Elixir/Zig/Astro 等 750 种语言；三步执行（复制 → `shasum -a 256` 与公告一致 → 测试）+ 独立复核（git 取 v1 对比零移除、点名 15 语言全补、v2 数据完整性干净）；守卫 `version == 2` + 缺失语言断言
-- **服务端协作**：复算通过；采纳悬空别名 CI 校验建议；recordUnmapped 前提修正记录（读路径、暂不做）；词表公告规则已由其固化；v0.74.4 push 校验经真实数据核查零违规（详见下条）
-- **评审修复**：日期前缀、`key()` 精确镜像 Java `strip()`（NBSP 红-绿用例）、`@author/@since`、em dash 清除；领域 stats-aggregation 同步（principles #7 / meta / references）；测试 130/130
+- **服务端协作 + 评审修复**：复算通过、采纳悬空别名 CI 校验、recordUnmapped 前提（读路径）记录、词表公告固化；评审修日期前缀 / `key()` 精确镜像 Java `strip()`（NBSP 红-绿用例）/ `@author` 补全 / em dash 清除；领域 stats-aggregation 同步；测试 130/130
 
 ## [2026-09-17] - ctt-server v0.74.4 push 入参校验通知（无需改动，独立核查通过）
 
