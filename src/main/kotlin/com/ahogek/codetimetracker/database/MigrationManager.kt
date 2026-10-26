@@ -28,6 +28,8 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
                 
                 ide_name TEXT NOT NULL,
                 
+                ide_version TEXT,
+                
                 start_time TEXT NOT NULL,
                 
                 end_time TEXT NOT NULL,
@@ -95,6 +97,12 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
                     // Existing databases predate the owner column; add it idempotently.
                     try {
                         stmt.execute("ALTER TABLE coding_sessions ADD COLUMN owner_user_id TEXT")
+                    } catch (_: SQLException) {
+                        // Column already present.
+                    }
+                    // Existing databases predate the IDE version column; add it idempotently.
+                    try {
+                        stmt.execute("ALTER TABLE coding_sessions ADD COLUMN ide_version TEXT")
                     } catch (_: SQLException) {
                         // Column already present.
                     }

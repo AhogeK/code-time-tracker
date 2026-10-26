@@ -45,4 +45,33 @@ class SyncSessionMapperTest {
         // The plugin has no soft-delete contract (published DB), so deleted is always false.
         assertThat(SyncSessionMapper.toSyncDto(sample).deleted).isFalse()
     }
+
+    @Test
+    fun `should send each session's own IDE rather than the device's current one`() {
+        val intellij = sample.copy(
+            sessionUuid = "intellij-session",
+            ideName = "IntelliJ IDEA",
+            ideVersion = "261.22158.277",
+        )
+        val pyCharm = sample.copy(
+            sessionUuid = "pycharm-session",
+            ideName = "PyCharm",
+            ideVersion = "2026.1.3",
+        )
+
+        val first = SyncSessionMapper.toSyncDto(intellij)
+        val second = SyncSessionMapper.toSyncDto(pyCharm)
+
+        assertThat(first.ideName).isEqualTo("IntelliJ IDEA")
+        assertThat(first.ideVersion).isEqualTo("261.22158.277")
+        assertThat(second.ideName).isEqualTo("PyCharm")
+        assertThat(second.ideVersion).isEqualTo("2026.1.3")
+    }
+
+    @Test
+    fun `should send a null IDE version for legacy sessions`() {
+        // Rows recorded before the column existed carry no version; the payload stays
+        // valid because the server field is optional.
+        assertThat(SyncSessionMapper.toSyncDto(sample).ideVersion).isNull()
+    }
 }

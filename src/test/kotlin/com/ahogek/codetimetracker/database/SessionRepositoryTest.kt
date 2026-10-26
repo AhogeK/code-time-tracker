@@ -377,4 +377,47 @@ class SessionRepositoryTest {
 
         assertThat(sessionRepository.getDirtySessions()).isEmpty()
     }
+
+    @Test
+    fun `should persist and read back the per-session IDE metadata`() {
+        val session = CodingSession(
+            sessionUuid = UUID.randomUUID().toString(),
+            userId = "test-user",
+            projectName = "TestProject",
+            language = "Kotlin",
+            platform = "macOS",
+            ideName = "PyCharm",
+            ideVersion = "2026.1.3",
+            startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+            endTime = LocalDateTime.of(2026, 1, 1, 12, 0),
+            lastModified = LocalDateTime.now(),
+        )
+
+        sessionRepository.importSessions(listOf(session))
+
+        val stored = sessionRepository.getSessions().single()
+        assertThat(stored.ideName).isEqualTo("PyCharm")
+        assertThat(stored.ideVersion).isEqualTo("2026.1.3")
+    }
+
+    @Test
+    fun `should read a null IDE version for rows recorded before the column existed`() {
+        sessionRepository.importSessions(
+            listOf(
+                CodingSession(
+                    sessionUuid = UUID.randomUUID().toString(),
+                    userId = "test-user",
+                    projectName = "TestProject",
+                    language = "Kotlin",
+                    platform = "macOS",
+                    ideName = "IntelliJ IDEA",
+                    startTime = LocalDateTime.of(2026, 1, 1, 10, 0),
+                    endTime = LocalDateTime.of(2026, 1, 1, 12, 0),
+                    lastModified = LocalDateTime.now(),
+                ),
+            ),
+        )
+
+        assertThat(sessionRepository.getSessions().single().ideVersion).isNull()
+    }
 }

@@ -49,7 +49,9 @@ data class SyncPushResponse(
 /**
  * A coding session state submitted by the client, matching the server SyncSessionDto
  * record field-for-field (sessionUuid/projectName/language/startTime/endTime/
- * clientModifiedAt/clientVersion/deleted). Timestamps are ISO-8601 instants.
+ * clientModifiedAt/clientVersion/deleted/ideName/ideVersion). Timestamps are ISO-8601
+ * instants. The IDE fields are per-session facts recorded when the session started -
+ * they must never be taken from the IDE that happens to be running the sync.
  */
 data class SyncSessionDto(
     val sessionUuid: String? = null,
@@ -60,6 +62,8 @@ data class SyncSessionDto(
     val clientModifiedAt: String? = null,
     val clientVersion: Int = 0,
     val deleted: Boolean = false,
+    val ideName: String? = null,
+    val ideVersion: String? = null,
 )
 
 /** Operation applied to a synced session. */

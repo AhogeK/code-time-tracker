@@ -47,6 +47,9 @@ class TimeTrackerService : Disposable {
     private val ideName: String by lazy {
         ApplicationInfo.getInstance().versionName ?: "IntelliJ IDEA"
     }
+    private val ideVersion: String? by lazy {
+        ApplicationInfo.getInstance().fullVersion
+    }
     private val isUserActive = AtomicBoolean(false)
     private val periodManager = PeriodManager()
     private val uiDisplayTime = ConcurrentHashMap<TimePeriod, AtomicLong>()
@@ -128,6 +131,7 @@ class TimeTrackerService : Disposable {
                 language = currentLanguage,
                 platform = platform,
                 ideName = ideName,
+                ideVersion = ideVersion,
                 startTime = now,
                 endTime = now,
                 lastModified = now
