@@ -1,5 +1,9 @@
 # Active Context
-## [2026-09-17] - 会话级 IDE 元数据（0.21.0 发送 / 0.21.1 pull 侧补齐）
+## [2026-10-26] - .omp 产物归档：按类型 + 日期分目录（无代码变更）
+
+- 根目录 14 个文件 → `delivery|requirements|qa/<YYYY-MM-DD>/`（日期取 mtime），移动前后逐文件核对字节数与 SHA-256 全一致；新增 `.omp/README.md`（布局/命名唯一权威 + 旧→新迁移表）；AGENTS R30 与 activeContext 的 `.omp/` 引用同步；`memory-bank/archive/` 旧路径保持不变（R16 只写不改）；顺带按提交日校正三条记忆日期（0.21.x=10-26、0.20.4=09-26、规则吸收=09-15）
+
+## [2026-10-26] - 会话级 IDE 元数据（0.21.0 发送 / 0.21.1 pull 侧补齐）
 
 - **需求（ctt-web）**：IDE 从"设备注册展示字段"改为每条会话自带：`CodingSession.ideVersion` + SQLite `ide_version`（幂等迁移）+ `SyncSessionMapper` 逐会话发送 `ideName/ideVersion`；deviceId 与注册路径不变
 - **push（0.21.0）**：模型、MigrationManager、SessionRepository（8 处 SQL/映射）、TimeTrackerService、DataExportImportService（报告未覆盖：导出/导入需携带，否则丢字段）、SyncSessionDto、Mapper；`ide_name/ide_version` 属会话身份字段（`ON CONFLICT` 不更新）
@@ -9,7 +13,7 @@
 - **迁移加固（0.21.2）**：加列改为"先查列 → 缺失才 ALTER → 被拒后复查（并发 IDE 场景）→ 仍缺失必抛出"；只读库测试证明加列失败不再被静默吞掉；测试 139/139
 - 版本 0.20.4 → 0.21.0（MINOR）→ 0.21.1（PATCH，补完 pull 侧）→ 0.21.2（PATCH，迁移加固）；R21 增"签名变更后陈旧编译"预防；`.idea/*` 删除属外部改动，已恢复不入提交
 
-## [2026-09-17] - 例行依赖升级（版本 0.20.4）
+## [2026-09-26] - 例行依赖升级（版本 0.20.4）
 
 - **升级+验证**（每层 `clean build` 130/130）：Kotlin 2.4.10→2.4.20、IPGP 2.18.1→2.19.0、ben-manes 0.61.0→0.64.0、Gradle wrapper 9.7.1→9.8.0
 - **未升级**：`java-compiler-ant-tasks`/`test-framework` 261→263（目标平台，R8 红线）、`hot-reload-agent`（IPGP 管理组件）；其余（junit/assertj/sqlite-jdbc/gson/LGoodDatePicker/JDK 25.0.4）已最新。插曲：IPGP id 误写 `org.gradle…`，构建失败即修正；版本 0.20.3 → 0.20.4（PATCH）
@@ -17,21 +21,17 @@
 ## [2026-09-17] - 语言归一化（0.20.2）与词表 v2 同步（0.20.3）
 
 - **0.20.2**：插件按 language 原样分组与服务端不一致（双 IDE 时 Kotlin/kotlin 分裂）→ 新增 `LanguageVocabulary` 镜像服务端判定链（blank→"" / nonLanguages→Other / 命中→规范名 / 未命中→原样），`getLanguageDistribution` 聚合 key 接入（唯一改动点）；上传值与库内存储不动
-- **0.20.3**：服务端词表改以标准本身（GitHub Linguist + 7 本地扩展）为源，canonical 92→842 / aliases 75→489（均零移除）——v1 从单机 fileType 反推、缺 Elixir/Zig/Astro 等 750 种语言；三步执行（复制 → `shasum -a 256` 与公告一致 → 测试）+ 独立复核（git 取 v1 对比零移除、点名 15 语言全补、v2 数据完整性干净）；守卫 `version == 2` + 缺失语言断言
-- **服务端协作 + 评审修复**：复算通过、采纳悬空别名 CI 校验、recordUnmapped 前提（读路径）记录、词表公告固化；评审修日期前缀 / `key()` 精确镜像 Java `strip()`（NBSP 红-绿用例）/ `@author` 补全 / em dash 清除；领域 stats-aggregation 同步；测试 130/130
+- **0.20.3**：词表改以标准本身（GitHub Linguist + 7 本地扩展）为源，canonical 92→842 / aliases 75→489（零移除；v1 从单机 fileType 反推，缺 Elixir/Zig/Astro 等 750 种语言）；三步执行（复制 → `shasum -a 256` 与公告一致 → 测试）+ 独立复核；守卫 `version == 2` + 缺失语言断言；服务端协作采纳悬空别名 CI 校验、recordUnmapped 前提记录；评审修 `key()` 精确镜像 `strip()`（NBSP 红-绿）/ 日期前缀 / `@author`；领域同步；130/130
 
 ## [2026-09-17] - ctt-server v0.74.4 push 入参校验通知（无需改动，独立核查通过）
 
 - v0.74.4 起 `SyncPushRequest` 集合元素约束真正生效（projectName ≤255 / language ≤50、时间戳非空、clientVersion ≥0），违规 = **400 原子拒批**
-- 独立核查：取值来源 + 本机 3557 条真实数据只读核查（**零违规**，max 19 字符）+ 400 映射确认为 `VALIDATION_ERROR` → 无需改动；确定性 400 分析（批失败不中断其他批、保留 dirty、每轮一次非紧循环；防御不做——跳过违规会话即丢数据）
-- 领域更新：sync-protocol（references 校验表与合规证据 / scenarios 400 处置 / meta 基线）
+- 独立核查（取值来源 + 本机 3557 条只读，**零违规**，max 19 字符）+ 400 映射确认为 `VALIDATION_ERROR` → 无需改动；批失败不中断其他批、保留 dirty、每轮一次非紧循环（不做跳过违规会话的"防御"——那是丢数据）；领域 sync-protocol 同步校验表/400 处置/基线
 
-## [2026-09-03] - AGENTS.md 优化：参考项目规则吸收 + 领域知识库落地（无版本变更）
+## [2026-09-15] - AGENTS.md 优化：参考项目规则吸收 + 领域知识库落地（无版本变更）
 
 - 学习 ctt-server/ctt-web 规则与 AI 知识库文章，按本项目规模裁剪：R6 授权作用域闭合+机械判定法、R16 归档完整性+progress 账本边界、R1 渐进式披露、新增 R29（领域五件套）与 R30（AI 产物位置）
-- 领域落地 `memory-bank/domains/`（README + sync-protocol + stats-aggregation）；漂移修复：R3/systemPatterns 的"同步未实现"、progress 重写为账本、implementation-plan 更新、SYNC-CORE-DESIGN 归档
-- 细节见 AGENTS.md R1/R6/R16/R29/R30 与 `domains/`；非代码变更不升版本
-
+- 领域落地 `memory-bank/domains/`（README + sync-protocol + stats-aggregation）；漂移修复：R3/systemPatterns 的"同步未实现"、progress 重写为账本、implementation-plan 更新、SYNC-CORE-DESIGN 归档；非代码变更不升版本
 
 ## [2026-09-02] - ctt-server v0.62.0 pull 分页对接 + 批量 upsert（版本 0.20.0）
 
@@ -95,7 +95,7 @@
 
 ## [2026-08-29] - C 阶段第一批：同步核心（Pull/Push 客户端 + 游标 + 编排，版本 0.17.0）
 
-- **契约缺口（硬阻塞，需求报告）**：ctt-server `SyncChangeDto` 缺 `sessionUuid`（只有服务端主键 `sessionId`），插件无法按本地 `session_uuid` 唯一键匹配/新建会话 → `.omp/ctt-server-syncchange-sessionuuid-requirement.md`（已交用户，待 ctt-server 落地）；插件侧 SyncChangeDto 已按需求契约加 sessionUuid 字段（默认 null，未落地时 applier 跳过）
+- **契约缺口（硬阻塞，需求报告）**：ctt-server `SyncChangeDto` 缺 `sessionUuid`（只有服务端主键 `sessionId`），插件无法按本地 `session_uuid` 唯一键匹配/新建会话 → `.omp/requirements/2026-08-29/ctt-server-syncchange-sessionuuid-requirement.md`（已交用户，待 ctt-server 落地）；插件侧 SyncChangeDto 已按需求契约加 sessionUuid 字段（默认 null，未落地时 applier 跳过）
 - **C3 游标持久化**：`sync_cursor` 表迁移（MigrationManager，R15 新表 IF NOT EXISTS）+ `SyncCursorRepository`（getPullCursor 首次 0 / setPullCursor 单调不后退 / setPushAt）
 - **C2/C1 传输**：`SyncApiService.pull`（POST /api/v1/sync/pull）+ `push`（POST /api/v1/sync/push）+ SyncApiServiceImpl 实现
 - **C1/C4 应用**：`SyncSessionApplier`（UPSERT 新建/覆盖 clean/跳过 dirty；DELETE 软删 clean/保留 dirty；sessionUuid null 跳过）；`SessionRepository` 加 findBySessionUuids（活跃行）/upsertSyncedSession（ON CONFLICT 不复活已删行）/markSynced/markDeleted；DatabaseManager 暴露 getSessionRepository/getSyncCursorRepository

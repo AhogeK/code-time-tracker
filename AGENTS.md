@@ -362,12 +362,16 @@ AI 身份：**code-time-tracker 插件开发者**。
 | 产物 | 位置 |
 |---|---|
 | 实施计划 | `.omp/plans/<feature>-plan.md`（不带日期，日期写文件内 `Date:` 字段）——**本项目已定义计划位置，覆盖全局约定的 `docs/plans/` 回退** |
-| 关联项目需求报告 | `.omp/<topic>-requirement.md` |
-| 交付报告 / 验收指南 | `.omp/delivery-report-<topic>.md`、`.omp/manual-qa-<topic>.md` |
+| 关联项目需求报告 | `.omp/requirements/<YYYY-MM-DD>/<topic>.md` |
+| 交付报告 | `.omp/delivery/<YYYY-MM-DD>/<topic>.md` |
+| 人工验收指南 | `.omp/qa/<YYYY-MM-DD>/<topic>.md` |
 | Agent 记忆 | `memory-bank/`（受 R1/R2/R16/R29 治理，**需要提交**） |
 | 设计文档（历史快照） | `memory-bank/docs/`（只增不改；当前有效结论沉淀进 R29 领域层） |
 
+`.omp/README.md` 是该目录布局与命名的唯一权威：**根目录只放 README.md**，每个分类下必须有 `<YYYY-MM-DD>/` 时间文件夹（日期取文件 mtime），计划分类除外（计划会持续修改，日期写在文件内）。
+
 红线：禁止把 AI 工作产物写进 README / 源码目录 / `docs/`（面向用户区）。
+禁止在 `.omp/` 根目录堆放分类文件；`.omp/` 不进 git，移动或整理前先核对文件数与摘要，并在 README 登记迁移表。
 
 ## 执行流程
 
