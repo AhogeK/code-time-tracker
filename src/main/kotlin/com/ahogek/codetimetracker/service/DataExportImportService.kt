@@ -48,6 +48,7 @@ object DataExportImportService {
         val language: String,
         val platform: String,
         val ideName: String,
+        val ideVersion: String? = null,
         val startTime: String,
         val endTime: String,
         val lastModified: String
@@ -75,6 +76,7 @@ object DataExportImportService {
                     language = session.language,
                     platform = session.platform,
                     ideName = session.ideName,
+                    ideVersion = session.ideVersion,
                     startTime = session.startTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                     endTime = session.endTime.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                     lastModified = session.lastModified.format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
@@ -144,6 +146,7 @@ object DataExportImportService {
                     language = session.language,
                     platform = session.platform,
                     ideName = session.ideName,
+                    ideVersion = session.ideVersion,
                     startTime = LocalDateTime.parse(session.startTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                     endTime = LocalDateTime.parse(session.endTime, DateTimeFormatter.ISO_LOCAL_DATE_TIME),
                     lastModified = LocalDateTime.parse(session.lastModified, DateTimeFormatter.ISO_LOCAL_DATE_TIME)

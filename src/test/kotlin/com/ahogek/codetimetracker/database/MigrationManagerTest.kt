@@ -133,4 +133,67 @@ class MigrationManagerTest {
 
         assertThat(tableExists).isTrue()
     }
+
+    @Test
+    fun `migrate should add the ide_version column idempotently`() {
+        migrationManager.migrate()
+        migrationManager.migrate() // second run must not throw
+
+        val columns = connectionManager.withConnection { conn ->
+            conn.prepareStatement("PRAGMA table_info(coding_sessions)").use { pstmt ->
+                pstmt.executeQuery().use { rs ->
+                    buildList { while (rs.next()) add(rs.getString("name")) }
+                }
+            }
+        }
+
+        assertThat(columns).contains("ide_name", "ide_version")
+    }
+
+    @Test
+    fun `migrate should upgrade a legacy table and leave old rows without an IDE version`() {
+        // Simulate a database created before the ide_version column existed.
+        connectionManager.withConnection { conn ->
+            conn.createStatement().use { stmt ->
+                stmt.execute(
+                    """
+                    CREATE TABLE coding_sessions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        session_uuid TEXT NOT NULL UNIQUE,
+                        user_id TEXT NOT NULL,
+                        project_name TEXT NOT NULL,
+                        language TEXT NOT NULL,
+                        platform TEXT NOT NULL,
+                        ide_name TEXT NOT NULL,
+                        start_time TEXT NOT NULL,
+                        end_time TEXT NOT NULL,
+                        last_modified TEXT NOT NULL,
+                        is_deleted INTEGER NOT NULL DEFAULT 0,
+                        is_synced INTEGER NOT NULL DEFAULT 0,
+                        synced_at TEXT,
+                        sync_version INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent(),
+                )
+                stmt.execute(
+                    """
+                    INSERT INTO coding_sessions(
+                        session_uuid, user_id, project_name, language, platform, ide_name,
+                        start_time, end_time, last_modified
+                    ) VALUES (
+                        'legacy-1', 'test-user', 'TestProject', 'Kotlin', 'macOS', 'IntelliJ IDEA',
+                        '2026-01-01T10:00:00', '2026-01-01T11:00:00', '2026-01-01T11:00:00'
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
+        migrationManager.migrate()
+
+        val stored = SessionRepository(connectionManager).getSessions().single()
+        assertThat(stored.ideName).isEqualTo("IntelliJ IDEA")
+        assertThat(stored.ideVersion).isNull()
+    }
+
 }

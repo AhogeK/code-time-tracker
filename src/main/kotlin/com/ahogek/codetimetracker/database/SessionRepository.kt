@@ -27,15 +27,17 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         ownerUserId?.let { " AND (owner_user_id = ? OR owner_user_id IS NULL)" } ?: ""
 
     /**
-     * 设置 PreparedStatement 中 session 的核心字段（第 3-8 位参数）
+     * Binds the seven shared session columns starting at [startIndex]:
+     * project_name, language, platform, ide_name, ide_version, start_time, end_time.
      */
     private fun java.sql.PreparedStatement.setSessionCoreParams(startIndex: Int, session: CodingSession) {
         setString(startIndex, session.projectName)
         setString(startIndex + 1, session.language)
         setString(startIndex + 2, session.platform)
         setString(startIndex + 3, session.ideName)
-        setString(startIndex + 4, dateTimeFormatter.format(session.startTime))
-        setString(startIndex + 5, dateTimeFormatter.format(session.endTime))
+        setString(startIndex + 4, session.ideVersion)
+        setString(startIndex + 5, dateTimeFormatter.format(session.startTime))
+        setString(startIndex + 6, dateTimeFormatter.format(session.endTime))
     }
 
     fun saveSessions(sessions: List<CodingSession>, onComplete: () -> Unit) {
@@ -49,9 +51,9 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         connectionManager.databaseExecutor.execute {
             val sql = """
                 INSERT INTO coding_sessions(
-                    session_uuid, user_id, project_name, language, platform, ide_name,
+                    session_uuid, user_id, project_name, language, platform, ide_name, ide_version,
                     start_time, end_time, last_modified, is_synced, synced_at, sync_version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
             try {
                 connectionManager.withConnection { conn ->
@@ -64,10 +66,10 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
                         pstmt.setString(1, UUID.randomUUID().toString())
                         pstmt.setString(2, userId)
                         pstmt.setSessionCoreParams(3, session)
-                        pstmt.setString(9, currentTimestamp)
-                        pstmt.setInt(10, if (session.isSynced) 1 else 0)
-                        pstmt.setString(11, session.syncedAt?.let { dateTimeFormatter.format(it) })
-                        pstmt.setInt(12, session.syncVersion)
+                        pstmt.setString(10, currentTimestamp)
+                        pstmt.setInt(11, if (session.isSynced) 1 else 0)
+                        pstmt.setString(12, session.syncedAt?.let { dateTimeFormatter.format(it) })
+                        pstmt.setInt(13, session.syncVersion)
                         pstmt.addBatch()
                     }
 
@@ -90,9 +92,9 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
 
         val sql = """
         INSERT OR IGNORE INTO coding_sessions(
-            session_uuid, user_id, project_name, language, platform, ide_name,
+            session_uuid, user_id, project_name, language, platform, ide_name, ide_version,
             start_time, end_time, last_modified, is_deleted
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
     """
 
         var importedCount = 0
@@ -105,7 +107,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
                         pstmt.setString(1, session.sessionUuid)
                         pstmt.setString(2, session.userId)
                         pstmt.setSessionCoreParams(3, session)
-                        pstmt.setString(9, dateTimeFormatter.format(session.lastModified))
+                        pstmt.setString(10, dateTimeFormatter.format(session.lastModified))
 
                         val result = pstmt.executeUpdate()
                         if (result > 0) {
@@ -134,7 +136,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
 
         val sql = """
             SELECT
-                session_uuid, user_id, project_name, language, platform, ide_name, 
+                session_uuid, user_id, project_name, language, platform, ide_name, ide_version,
                 start_time, end_time, last_modified, is_synced, synced_at, sync_version
             FROM coding_sessions
             WHERE ${conditions.joinToString(" AND ")}
@@ -173,7 +175,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
     fun getDirtySessions(): List<CodingSession> {
         val sql = """
             SELECT
-                session_uuid, user_id, project_name, language, platform, ide_name,
+                session_uuid, user_id, project_name, language, platform, ide_name, ide_version,
                 start_time, end_time, last_modified, is_synced, synced_at, sync_version
             FROM coding_sessions
             WHERE is_deleted = 0 AND is_synced = 0
@@ -208,7 +210,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         val placeholders = sessionUuids.joinToString(",") { "?" }
         val sql = """
             SELECT
-                session_uuid, user_id, project_name, language, platform, ide_name,
+                session_uuid, user_id, project_name, language, platform, ide_name, ide_version,
                 start_time, end_time, last_modified, is_synced, synced_at, sync_version
             FROM coding_sessions
             WHERE session_uuid IN ($placeholders) AND is_deleted = 0
@@ -245,9 +247,9 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         if (sessions.isEmpty()) return
         val sql = """
             INSERT INTO coding_sessions(
-                session_uuid, user_id, project_name, language, platform, ide_name,
+                session_uuid, user_id, project_name, language, platform, ide_name, ide_version,
                 start_time, end_time, last_modified, is_synced, synced_at, sync_version, owner_user_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
             ON CONFLICT(session_uuid) DO UPDATE SET
                 project_name = excluded.project_name,
                 language = excluded.language,
@@ -268,10 +270,10 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
                         pstmt.setString(1, session.sessionUuid)
                         pstmt.setString(2, session.userId)
                         pstmt.setSessionCoreParams(3, session)
-                        pstmt.setString(9, dateTimeFormatter.format(session.lastModified))
-                        pstmt.setString(10, dateTimeFormatter.format(session.syncedAt ?: LocalDateTime.now()))
-                        pstmt.setInt(11, session.syncVersion)
-                        pstmt.setString(12, ownerUserId)
+                        pstmt.setString(10, dateTimeFormatter.format(session.lastModified))
+                        pstmt.setString(11, dateTimeFormatter.format(session.syncedAt ?: LocalDateTime.now()))
+                        pstmt.setInt(12, session.syncVersion)
+                        pstmt.setString(13, ownerUserId)
                         pstmt.addBatch()
                     }
                     pstmt.executeBatch()
@@ -349,6 +351,7 @@ class SessionRepository(private val connectionManager: ConnectionManager) {
         language = getString("language"),
         platform = getString("platform"),
         ideName = getString("ide_name"),
+        ideVersion = getString("ide_version"),
         startTime = LocalDateTime.parse(getString("start_time"), dateTimeFormatter),
         endTime = LocalDateTime.parse(getString("end_time"), dateTimeFormatter),
         lastModified = LocalDateTime.parse(getString("last_modified"), dateTimeFormatter),

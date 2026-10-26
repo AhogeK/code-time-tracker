@@ -16,6 +16,8 @@ import java.time.LocalDateTime
  * @property language Programming language used
  * @property platform Operating system (macOS, Windows, Linux)
  * @property ideName IDE product name (IntelliJ IDEA, PyCharm, etc.)
+ * @property ideVersion IDE build version that produced this session; null for rows
+ *           recorded before the column existed or applied from an older server
  * @property startTime Session start timestamp
  * @property endTime Session end timestamp
  * @property lastModified Last modification timestamp for conflict resolution
@@ -30,6 +32,7 @@ data class CodingSession(
     val language: String,
     val platform: String,
     val ideName: String,
+    val ideVersion: String? = null,
     val startTime: LocalDateTime,
     val endTime: LocalDateTime,
     val lastModified: LocalDateTime,
