@@ -1,6 +1,7 @@
 package com.ahogek.codetimetracker.database
 
 import com.intellij.openapi.diagnostic.Logger
+import java.sql.Connection
 import java.sql.SQLException
 
 class MigrationManager(private val connectionManager: ConnectionManager) {
@@ -94,29 +95,27 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
                 conn.createStatement().use { stmt ->
                     stmt.execute(tableCreationSql)
                     log.info("Database table 'coding_sessions' is ready.")
-                    // Existing databases predate the owner column; add it idempotently.
-                    try {
-                        stmt.execute("ALTER TABLE coding_sessions ADD COLUMN owner_user_id TEXT")
-                    } catch (_: SQLException) {
-                        // Column already present.
-                    }
-                    // Existing databases predate the IDE version column; add it idempotently.
-                    try {
-                        stmt.execute("ALTER TABLE coding_sessions ADD COLUMN ide_version TEXT")
-                    } catch (_: SQLException) {
-                        // Column already present.
-                    }
                     stmt.execute(userTableSql)
                     log.info("Database table 'app_user' is ready.")
                     stmt.execute(cursorTableSql)
                     log.info("Database table 'sync_cursor' is ready.")
-                    // Existing databases predate the last_sync_at column; add it idempotently.
-                    try {
-                        stmt.execute("ALTER TABLE sync_cursor ADD COLUMN last_sync_at TEXT")
-                    } catch (_: SQLException) {
-                        // Column already present.
-                    }
                 }
+                // Existing databases predate these columns. Each addition is checked instead
+                // of attempted-and-ignored: a failed ALTER must not leave the schema without
+                // a column the repositories select. A concurrent IDE instance adding the same
+                // column is tolerated by re-checking after a rejected ALTER.
+                ensureColumn(
+                    conn, "coding_sessions", "owner_user_id",
+                    "ALTER TABLE coding_sessions ADD COLUMN owner_user_id TEXT",
+                )
+                ensureColumn(
+                    conn, "coding_sessions", "ide_version",
+                    "ALTER TABLE coding_sessions ADD COLUMN ide_version TEXT",
+                )
+                ensureColumn(
+                    conn, "sync_cursor", "last_sync_at",
+                    "ALTER TABLE sync_cursor ADD COLUMN last_sync_at TEXT",
+                )
 
                 indexes.forEach { (indexName, indexSql) ->
                     try {
@@ -135,4 +134,50 @@ class MigrationManager(private val connectionManager: ConnectionManager) {
             throw e
         }
     }
+
+    /**
+     * Adds [column] to [table] when it is missing.
+     *
+     * <p>The presence check is explicit because "the ALTER failed" and "the column was
+     * already there" are indistinguishable by exception type alone. Treating both as
+     * success would silently leave the schema without a column the repositories select,
+     * which surfaces much later as empty statistics instead of an actionable error.
+     *
+     * <p>Two IDE instances can open the same database at once, so a rejected ALTER is
+     * re-checked: when the other process added the column in between, this is not a
+     * failure.
+     *
+     * @throws SQLException when the column is still missing after the attempt
+     */
+    private fun ensureColumn(conn: Connection, table: String, column: String, ddl: String) {
+        if (columnExists(conn, table, column)) return
+        try {
+            conn.createStatement().use { it.execute(ddl) }
+        } catch (e: SQLException) {
+            if (columnExists(conn, table, column)) {
+                log.info("Column $table.$column was added by another connection; continuing.")
+                return
+            }
+            throw e
+        }
+        if (!columnExists(conn, table, column)) {
+            throw SQLException(
+                "Migration failed to add column $table.$column; the database cannot be used safely.",
+            )
+        }
+    }
+
+    /** Returns true when [table] already has [column] (case-insensitive, SQLite semantics). */
+    private fun columnExists(conn: Connection, table: String, column: String): Boolean =
+        conn.prepareStatement("PRAGMA table_info($table)").use { pstmt ->
+            pstmt.executeQuery().use { rs ->
+                var found = false
+                while (rs.next()) {
+                    if (rs.getString("name").equals(column, ignoreCase = true)) {
+                        found = true
+                    }
+                }
+                found
+            }
+        }
 }
