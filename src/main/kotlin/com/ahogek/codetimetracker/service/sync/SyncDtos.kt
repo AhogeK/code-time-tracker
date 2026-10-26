@@ -77,6 +77,10 @@ enum class ChangeOp {
  * SyncChangeDto record. [sessionUuid] is the client contract session identifier (the
  * server returns it in pull responses so the client can match changes to local rows);
  * [sessionId] is the server-side primary key and is not used for local matching.
+ *
+ * [ideName]/[ideVersion] are optional per-session IDE facts. The server does not send
+ * them yet; when absent the applier falls back to local values, so both directions stay
+ * compatible.
  */
 data class SyncChangeDto(
     val changeId: Long = 0L,
@@ -92,6 +96,8 @@ data class SyncChangeDto(
     val clientModifiedAt: String? = null,
     val clientVersion: Int = 0,
     val deleted: Boolean = false,
+    val ideName: String? = null,
+    val ideVersion: String? = null,
 )
 
 /** GET /api/v1/devices response item (a registered user device). */

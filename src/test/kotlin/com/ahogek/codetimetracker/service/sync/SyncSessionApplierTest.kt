@@ -50,6 +50,8 @@ class SyncSessionApplierTest {
         clientModifiedAt: String = "2026-08-25T10:00:00Z",
         deleted: Boolean = false,
         projectName: String = "ctt-server",
+        ideName: String? = null,
+        ideVersion: String? = null,
     ) = SyncChangeDto(
         changeId = 1,
         sessionId = UUID.randomUUID().toString(),
@@ -64,6 +66,8 @@ class SyncSessionApplierTest {
         clientModifiedAt = clientModifiedAt,
         clientVersion = clientVersion,
         deleted = deleted,
+        ideName = ideName,
+        ideVersion = ideVersion,
     )
 
     private fun localSession(
@@ -104,6 +108,30 @@ class SyncSessionApplierTest {
         val sessions = sessionRepository.getSessions()
         assertThat(sessions[0].platform).isEqualTo("Linux")
         assertThat(sessions[0].ideName).isEqualTo("PyCharm")
+    }
+
+    @Test
+    fun `should record the IDE carried by the change instead of the local IDE`() {
+        applier.apply(
+            listOf(change("uuid-ide", ChangeOp.UPSERT, ideName = "PyCharm", ideVersion = "2026.1.3")),
+            userId,
+            "macOS",
+            "IntelliJ IDEA",
+        )
+
+        val stored = sessionRepository.getSessions().single()
+        assertThat(stored.ideName).isEqualTo("PyCharm")
+        assertThat(stored.ideVersion).isEqualTo("2026.1.3")
+    }
+
+    @Test
+    fun `should fall back to the local IDE when the change carries none`() {
+        applier.apply(listOf(change("uuid-legacy", ChangeOp.UPSERT)), userId, "Linux", "IntelliJ IDEA")
+
+        val stored = sessionRepository.getSessions().single()
+        assertThat(stored.platform).isEqualTo("Linux")
+        assertThat(stored.ideName).isEqualTo("IntelliJ IDEA")
+        assertThat(stored.ideVersion).isNull()
     }
 
     @Test
