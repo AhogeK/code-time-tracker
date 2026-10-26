@@ -72,7 +72,8 @@ Gson 不走构造器、缺字段填默认；新增字段一律带默认值。
 | 坑 | 事实 |
 |---|---|
 | `importSessions` 不带 `is_synced` | 种子行默认 `is_synced=0`（dirty），applier 会跳过，测试断言莫名落空 |
-| Kotlin 增量编译陈旧 | 改 DTO 构造签名后可能出现 `NoSuchMethodError` 假失败——用 `./gradlew clean test` 排除 |
+| Kotlin 增量编译陈旧 | 改数据类构造签名后可能出现 `NoSuchMethodError`（test 类仍调旧签名）；`clean test` 也可能命中缓存——用 `rm -rf build` + `--no-build-cache --no-configuration-cache` 全量重建 |
 | `sumOf` 不支持 Duration | `Duration` 非 `Int/UInt`，用 `fold(Duration.ZERO) { acc, x -> acc.plus(...) }` |
 | edit 工具的行号漂移 | 大段替换后残留旧行会导致语法错误——替换后立刻读回改动区域 |
 | 服务端 watermark 乐观推进 | 失败页不会被重发（principles #3），别按"重试即补偿"设计 |
+| 会话身份字段不参与 `ON CONFLICT` | `ide_name`/`ide_version` 只在 INSERT 写入：服务端快照不得改写会话来源 IDE；同步 SQL 的 SET 列表刻意不含它们 |

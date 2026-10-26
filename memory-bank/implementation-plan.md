@@ -1,6 +1,6 @@
 # Implementation Plan
 
-> 最后更新: 2026-09-03
+> 最后更新: 2026-09-17
 > 职责：阶段计划（大阶段划分与状态）。版本级交付见 `progress.md`；逐条变更见 `activeContext.md`。
 
 ## 阶段列表
@@ -20,10 +20,17 @@ ConnectionManager / MigrationManager / SessionRepository / StatsRepository 拆�
 | E | 端到端验证与文档（收敛测试 + README 排障） | ✅ |
 | 后续 | ctt-server 版本跟进：v0.62.0 分页对接、批量 upsert、墓碑 lifting（0.20.0） | ✅ |
 
-### Phase 3: 待定
+### Phase 3: 会话级 IDE 元数据 ✅ 插件侧完成（0.21.0）
 
-- 等待用户指示（无进行中的阶段计划）
-- 候选方向不在此预登记——需求确认后新增
+| 改动 | 状态 |
+|---|---|
+| 本地数据：`CodingSession.ideVersion` + SQLite `ide_version`（幂等迁移）+ 追踪记录 `fullVersion` + 导出/导入携带 | ✅ |
+| 同步负载：`SyncSessionDto`/`SyncSessionMapper` 逐会话发送 `ideName/ideVersion` | ✅ |
+| 服务端：`SyncSessionDto` 可选字段 + `coding_sessions` IDE 列 + 统计回退 | ⬜ 待 ctt-server 实施（插件先行兼容） |
+
+### Phase 4: 待定
+
+- 等待用户指示；候选方向不预登记
 
 ## 技术债务
 
