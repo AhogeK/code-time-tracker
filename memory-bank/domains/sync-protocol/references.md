@@ -20,8 +20,8 @@
 | `SyncPullResponse` | `changes: List<SyncChangeDto> = []`, `nextCursor: Long = 0`, `hasMore: Boolean = false` |
 | `SyncPushRequest` | `deviceId: String?`, `sessions: List<SyncSessionDto> = []` |
 | `SyncPushResponse` | `nextCursor: Long = 0` |
-| `SyncChangeDto` | `changeId`, `sessionId?`(服务端主键，不参与匹配), `sessionUuid?`(本地匹配键), `op`(UPSERT/DELETE), `serverVersion`, `happenedAt`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted` |
-| `SyncSessionDto`（push 用） | `sessionUuid`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted`, `ideName?`, `ideVersion?`（后两者 0.21.0 新增；服务端尚未实施，Jackson 默认忽略未知字段） |
+| `SyncChangeDto` | `changeId`, `sessionId?`(服务端主键，不参与匹配), `sessionUuid?`(本地匹配键), `op`(UPSERT/DELETE), `serverVersion`, `happenedAt`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted`, `ideName?`, `ideVersion?`（后两者 0.21.1 预留；服务端尚未回传） |
+| `SyncSessionDto`（push 用） | `sessionUuid`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted`, `ideName?`, `ideVersion?`（0.21.0 新增；服务端尚未实施，Jackson 默认忽略未知字段） |
 
 时间戳均为 ISO-8601 instant（如 `2026-08-25T10:00:00Z`）；解析失败回退：覆盖行保留原值、新建行用 now。
 

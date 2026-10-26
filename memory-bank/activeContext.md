@@ -1,11 +1,12 @@
 # Active Context
-## [2026-09-17] - 会话级 IDE 元数据（版本 0.21.0）
+## [2026-09-17] - 会话级 IDE 元数据（0.21.0 发送 / 0.21.1 pull 侧补齐）
 
 - **需求（ctt-web）**：IDE 从"设备注册展示字段"改为每条会话自带：`CodingSession.ideVersion` + SQLite `ide_version`（幂等迁移）+ `SyncSessionMapper` 逐会话发送 `ideName/ideVersion`；deviceId 与注册路径不变
-- **实现**：模型、MigrationManager、SessionRepository（8 处 SQL/映射）、TimeTrackerService、DataExportImportService（报告未覆盖：导出/导入需携带，否则丢字段）、SyncSessionDto、Mapper；`ide_name/ide_version` 属会话身份字段（`ON CONFLICT` 不更新），push 取会话自身值
-- **服务端**：尚未实施（DTO/表无 IDE 字段）但 Jackson 忽略未知字段 → 插件可先行；pull 方向暂不预留（其方案仅 SyncSessionDto）
-- **测试**：+6，红-绿通过，136/136；坑：Kotlin 签名变更后 `clean test` 仍可能命中陈旧 class（`NoSuchMethodError`）→ `rm -rf build` 全量重建
-- 版本 0.20.4 → 0.21.0（MINOR）
+- **push（0.21.0）**：模型、MigrationManager、SessionRepository（8 处 SQL/映射）、TimeTrackerService、DataExportImportService（报告未覆盖：导出/导入需携带，否则丢字段）、SyncSessionDto、Mapper；`ide_name/ide_version` 属会话身份字段（`ON CONFLICT` 不更新）
+- **pull（0.21.1）**：`SyncChangeDto` 增可选 `ideName/ideVersion`；applier 新建行优先采用服务端值、缺失回退本地——服务端未上线时行为不变
+- **服务端**：尚未实施（DTO/表无 IDE 字段）但 Jackson 忽略未知字段 → 插件可先行；上线后双向自动生效
+- **测试**：+8（push 6 + pull 2），红-绿通过，138/138；坑：Kotlin 签名变更后 `clean test` 仍可能命中陈旧 class（`NoSuchMethodError`）→ `rm -rf build` 全量重建
+- 版本 0.20.4 → 0.21.0（MINOR）→ 0.21.1（PATCH，补完 pull 侧）；R21 增"签名变更后陈旧编译"通用预防；`.idea/*` 删除属外部改动，已恢复不入提交
 
 ## [2026-09-17] - 例行依赖升级（版本 0.20.4）
 

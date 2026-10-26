@@ -6,7 +6,7 @@
 
 ## 当前状态
 
-- **版本**: 0.21.0（单一来源 `gradle/libs.versions.toml`）
+- **版本**: 0.21.1（单一来源 `gradle/libs.versions.toml`）
 - **阶段**: 云同步 A–E 全阶段交付完成；当前为契约跟进（ctt-server 版本对接）与统计口径维护
 - **阻塞**: 无
 
@@ -14,6 +14,7 @@
 
 | 版本 | 交付 |
 |---|---|
+| 0.21.1 | 会话级 IDE 元数据 pull 侧补齐（`SyncChangeDto` 可选 IDE + applier 缺失回退本地；服务端未上线时行为不变） |
 | 0.21.0 | 会话级 IDE 元数据（`CodingSession.ideVersion` + SQLite 幂等迁移 + 逐会话 push `ideName/ideVersion`；服务端待实施） |
 | 0.20.4 | 例行依赖升级（Kotlin 2.4.20 / IPGP 2.19.0 / ben-manes 0.64.0 / Gradle 9.8.0） |
 | 0.20.3 | 语言词表 v1 → v2 同步（842 canonical / 489 aliases；v1 缺失的 750 种语言现可合桶） |
