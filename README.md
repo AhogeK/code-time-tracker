@@ -1,6 +1,6 @@
 # Code Time Tracker
 
-[![Version](https://img.shields.io/badge/version-0.21.2-blue.svg)](https://github.com/AhogeK/code-time-tracker)
+[![Version](https://img.shields.io/badge/version-0.22.0-blue.svg)](https://github.com/AhogeK/code-time-tracker)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-IntelliJ%202026.1%2B-orange.svg)](https://plugins.jetbrains.com/)
 
@@ -64,6 +64,7 @@ A JetBrains Platform plugin for automatic coding time tracking and analytics.
 | "The API key has been revoked" | Key disabled in the server admin | Create a new API key and bind it |
 | "The API key lacks the required scope" | Key created without the SYNC scope | Recreate the key with the SYNC scope enabled |
 | Sync skips a round silently | Temporary network issue or rate limit | Sync retries automatically on the next interval; click **Sync Now** to trigger immediately |
+| "Failed to apply the pull page starting at cursor N" | A pulled page could not be applied locally | The plugin replays that page on the next round instead of skipping it; if it repeats, report the message with the cursor number — nothing is silently dropped |
 | Statistics only show one account's data after binding | Account-scoped isolation | By design: bound data is isolated per account. Unbind to view the full local dataset |
 | Sessions never appear on the other device | Key not bound on the second device | Bind the same API key on every device you want to keep in sync |
 
