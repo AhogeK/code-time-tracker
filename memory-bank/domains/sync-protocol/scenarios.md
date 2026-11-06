@@ -24,8 +24,16 @@
 - 保持顺序：apply 本页 → `setPullCursor` → 下一页
 - 保留卡死护栏（`hasMore && nextCursor <= cursor` → Failure）
 - 保留异常 → Failure 转换（不得穿透）
-- 两处 pull（首轮 + reconcile）都走 `pullAndApplyPages`——不允许只改一处
+- 所有取页（首拉/翻页/reconcile）都走 `pullPage`；不允许绕过（重放、回退、吊销自愈都在那里）
 - 测试：多页推进、中途失败停成功页、缺 hasMore 单页、护栏触发
+
+## pull 页应用失败 → 重放（0.22.0 起）
+
+- 症状：设置页出现 `Failed to apply the pull page starting at cursor N (X changes): ...`
+- 原因：该页在本地 apply/持久化失败；服务端 watermark 已越过该页，普通 pull 不会重发
+- 现状：`pullPage` 每次 pull 都带 `replayFromChangeId = 本地游标`，下一轮从该页起点重读；游标停在最后成功页（principles #2/#3）
+- 旧服务端：400 且消息点名 `replayFromChangeId` → 同轮回退并暂停重放 1 小时；其它 400 只回退不暂停
+- 排查：消息里的 cursor + 变更条数 → 查服务端该 changeId 范围的数据（坏时间戳/DB 错误）；不要用"跳过失败页"来修——那是主动丢数据
 
 ## 改 SessionRepository 同步写路径
 
@@ -43,7 +51,7 @@
 
 ```
 读取本地游标
- ├─ 首轮 pull（404 → 重注册 → 重试一次）→ pullAndApplyPages（分页直到 hasMore=false）
+ ├─ 首轮 pull（每次带 replayFromChangeId=游标；404 → 重注册 → 重试一次；400 → 去字段重试）→ pullAndApplyPages（分页直到 hasMore=false）
  ├─ getDirtySessions → 分批 push（每批 500）
  │    └─ 每批：404 → 重注册重试；成功 → markSynced；失败 → 记录首个错误
  │         └─ 任一失败 → 返回 Failure（dirty 保留）

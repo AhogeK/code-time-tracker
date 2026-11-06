@@ -124,6 +124,7 @@
 - **分支顺序**：优先完成 develop 全部提交再考虑 master
 - **AI独立**：AI相关内容（memory-bank等）单独提交，不与代码混在一起
 - **master合并**：非AI内容单独cherry-pick进master，严禁整条分支合并（导致AI污染），严禁错误cherry-pick旧develop导致污染
+- **本地 IDE 配置不入库**：`.idea/*` 的外部改动提交前用 `git checkout -- .idea` 恢复，不得混入功能提交
 
 **提交信息格式**：`feat(scope): 功能描述` / `fix(scope): 根因+修复+验证` / `refactor(scope): 描述` / `chore: bump version to X.Y.Z` / `docs(memory-bank): record implementation`
 
@@ -270,7 +271,7 @@
 
 **提交前审查清单**：项目一致性（grep现有模式） + Clean Code（无冗余注释） + 测试覆盖 + 编译通过 + 无回归 + 覆盖率≥80%
 
-**常见错误预防**：重复方法→编辑后grep+LSP；字段/枚举冲突→新建前搜索复用；冗余注释→删除"解释做了什么"；测试遗漏→新增逻辑立即创建测试；命名不一致→搜索现有模式；**数据类构造签名变更后测试报 `NoSuchMethodError`**→`rm -rf build` 后无缓存重建（`clean test` 也可能命中旧产物）
+**常见错误预防**：重复方法→编辑后grep+LSP；字段/枚举冲突→新建前搜索复用；冗余注释→删除"解释做了什么"；测试遗漏→新增逻辑立即创建测试；命名不一致→搜索现有模式；**数据类构造签名变更后测试报 `NoSuchMethodError`**→根因已由构建配置消除（`compileTestKotlin` 不进构建缓存 + `kotlin.incremental=false`，`--info` 可见 `NON_INCREMENTAL_COMPILER`）；若仍遇到，应急用 `./gradlew test --no-build-cache --rerun-tasks`（`rm -rf build` 不够）
 
 ### R22: Git 恢复禁止（强制）
 

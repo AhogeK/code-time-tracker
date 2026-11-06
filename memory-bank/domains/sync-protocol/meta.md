@@ -32,6 +32,7 @@
 | **LWW** | Last-write-wins：服务端裁决链 delete wins → serverVersion → clientVersion → clientModifiedAt |
 | **change log** | 服务端 `session_changes`：每用户追加式、changeId 单调 |
 | **watermark / 游标** | 插件侧 `sync_cursor.last_pulled_change_id`（单调不后退）；服务端也持久化自己的 watermark |
+| **replay** | pull 请求带的读取起点 `replayFromChangeId`：不受服务端 watermark 限制地重读历史，但 `nextCursor` 不回卷。插件恒等于本地游标 |
 | **page / hasMore** | 一次 pull 返回一页（服务端 `ctt.sync.pull-batch-size` 默认 1000），`hasMore=true` 表示还有 |
 | **dirty 行** | `is_synced = 0` 的本地会话——有未推送修改，pull 不覆盖 |
 | **tombstone / 软删** | `is_deleted = 1`；服务端 upsert 会 lifting 它（服务器快照是权威活状态） |
@@ -42,9 +43,9 @@
 
 | | |
 |---|---|
-| 插件侧核对 | 2026-09-17 · v0.21.1（会话级 IDE 元数据双向：push 发送 + pull 回退） |
-| 服务端契约核对 | 2026-09-16 · `../ctt-server` 工作区 v0.73.0 源码（`SyncPullService` / `SyncPullResponse` / `SyncProperties` / `SyncPullPagingIntegrationTest`）；分页自 v0.62.0；Push 入参校验 v0.74.4 经服务端告知 + 本地数据独立核查（references「Push 入参校验」）。**会话级 IDE 字段服务端尚未实施**——DTO 与表均无，插件双向预留、由 Jackson 忽略未知字段保证兼容 |
-| 覆盖 | 插件实现 + 服务端 pull/push 契约；插件测试 138/138（含 sync 套件） |
+| 插件侧核对 | 2026-11-06 · v0.22.0（replay 恒发本地游标 + 旧服务端 400 回退 + 响应 gzip） |
+| 服务端契约核对 | 2026-11-06 · `../ctt-server` 工作区 v0.92.0 源码（`SyncPullService` / `SyncPullRequest` / `SyncProperties` / `SyncPullServiceTest` / `ResponseCompressionProbeTest`）；分页自 v0.62.0；Push 入参校验 v0.74.4；**replay 字段仅存在于工作树、未提交，发布版本待服务端确认** |
+| 覆盖 | 插件实现 + 服务端 pull/push/压缩契约；插件测试 145/145（含 sync 套件） |
 | 已知漂移 | 未逐条复核——依赖具体端点或字段前先回源 `../ctt-server` 与 `src/` |
 
 未核验部分当作线索，不当作事实。

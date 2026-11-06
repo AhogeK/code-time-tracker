@@ -6,7 +6,7 @@
 
 | 端点 | 用途 | 请求 | 响应 data |
 |---|---|---|---|
-| `POST /api/v1/sync/pull` | 拉取变更页 | `{deviceId, lastPulledChangeId}` | `{changes[], nextCursor, hasMore}` |
+| `POST /api/v1/sync/pull` | 拉取变更页 | `{deviceId, lastPulledChangeId, replayFromChangeId?}` | `{changes[], nextCursor, hasMore}` |
 | `POST /api/v1/sync/push` | 推送脏会话批 | `{deviceId, sessions[]}` | `{nextCursor}` |
 | `POST /api/v1/devices` | 注册/更新设备（幂等，可清吊销） | `RegisterDeviceRequest` | 设备信息 |
 | `GET /api/v1/devices` | 设备列表（含 `revokedAt`） | — | 设备数组 |
@@ -16,12 +16,12 @@
 
 | DTO | 字段 |
 |---|---|
-| `SyncPullRequest` | `deviceId: String?`, `lastPulledChangeId: Long = 0` |
+| `SyncPullRequest` | `deviceId: String?`, `lastPulledChangeId: Long = 0`, `replayFromChangeId: Long? = null`（0.22.0 起恒等于本地游标） |
 | `SyncPullResponse` | `changes: List<SyncChangeDto> = []`, `nextCursor: Long = 0`, `hasMore: Boolean = false` |
 | `SyncPushRequest` | `deviceId: String?`, `sessions: List<SyncSessionDto> = []` |
 | `SyncPushResponse` | `nextCursor: Long = 0` |
-| `SyncChangeDto` | `changeId`, `sessionId?`(服务端主键，不参与匹配), `sessionUuid?`(本地匹配键), `op`(UPSERT/DELETE), `serverVersion`, `happenedAt`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted`, `ideName?`, `ideVersion?`（后两者 0.21.1 预留；服务端尚未回传） |
-| `SyncSessionDto`（push 用） | `sessionUuid`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted`, `ideName?`, `ideVersion?`（0.21.0 新增；服务端尚未实施，Jackson 默认忽略未知字段） |
+| `SyncChangeDto` | `changeId`, `sessionId?`(服务端主键，不参与匹配), `sessionUuid?`(本地匹配键), `op`(UPSERT/DELETE), `serverVersion`, `happenedAt`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted`, `ideName?`, `ideVersion?`（服务端 0.9x DTO 已含，回传即采用） |
+| `SyncSessionDto`（push 用） | `sessionUuid`, `projectName`, `language`, `startTime`, `endTime`, `clientModifiedAt`, `clientVersion`, `deleted`, `ideName?`, `ideVersion?`（服务端 0.9x DTO 已含） |
 
 时间戳均为 ISO-8601 instant（如 `2026-08-25T10:00:00Z`）；解析失败回退：覆盖行保留原值、新建行用 now。
 
@@ -30,6 +30,17 @@
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `ctt.sync.pull-batch-size` | 1000 | 单次 pull 最大 change 数（1–10000） |
+| `server.compression` | `enabled: true`，`application/json,text/plain`，`min-response-size: 2KB` | 协商式：不发 `Accept-Encoding` 即 identity；服务端不强制压缩 |
+
+## 重放与压缩（0.22.0 起）
+
+| 事实 | 值 |
+|---|---|
+| replay 查询语义 | `queryCursor = min(replayFromChangeId, persistedWatermark)`；`nextCursor = max(页尾, persistedWatermark)`（`SyncPullService.doPull`） |
+| replay 落地状态 | 2026-11-06 核对：`../ctt-server` 工作树已实现，**未进入任何提交**（HEAD 的 `SyncPullRequest` 无该字段）；报告所称 v0.81.0 与本地 0.92.0 不符，发布版本待服务端确认 |
+| 旧服务端遇到新字段 | 两种可能：MVC 走 Jackson 2 默认配置 → 400；走 Jackson 3 → 忽略。插件对 400 已回退、对忽略无感，两种情况都不阻断同步 |
+| 插件请求头 | 每个请求带 `Accept-Encoding: gzip`；仅当响应 `Content-Encoding` 含 gzip 才解压 |
+| 容量实测 | 单条 change ≈506 B ⇒ 1000 条/页 ≈0.5 MB；新设备 20 年全量 ≈106 页 / 53 MB（服务端 references，2026-11-05 生产库只读测量） |
 
 ## Push 入参校验（v0.74.4 起真正生效）
 

@@ -1,4 +1,21 @@
 # Active Context
+## [2026-11-06] - pull 失败页重放 + 响应 gzip（版本 0.22.0）
+
+- **问题**：服务端交付页之前就推进 watermark，普通 pull 的 `queryCursor = max(watermark, client)` 会跳过客户端应用失败的页——数据丢失；插件侧无页级重试（apply 失败即结束本轮），下一轮也拿不回该页
+- **重放**：`SyncPullRequest.replayFromChangeId` + `SyncCoordinator.pullPage`，每次 pull 恒发本地游标（服务端 `min(replay, watermark)` 读取、`nextCursor` 不回卷）；进程被杀也能续上，无需新增持久化状态
+- **兼容**：旧服务端不识别该字段（Jackson 2 默认 400 / Jackson 3 忽略）→ 同轮回退为不带字段的请求；只有 400 消息点名 `replayFromChangeId` 才暂停重放，且 1 小时后自动重探（混部发布不会永久失能），其它 400 只回退
+- **收口**：首拉/翻页/reconcile 统一走 `pullPage` → `sendPull`，吊销自愈（404 COMMON_002 → 重注册 → 重试同一请求）覆盖所有取页点（此前只有首拉有）
+- **gzip**：每个请求带 `Accept-Encoding: gzip`；按响应 `Content-Encoding` 解压 + UTF-8 解码；解压失败归 UNKNOWN。首次全量 53 MB → 约 7 MB（稳态页 <2 KB 不压缩）
+- **测试**：+8（重放起点、400 回退、探测过期重试、翻页吊销自愈、请求体字段出现/缺省、gzip 解析、Accept-Encoding、损坏 gzip 归类），147/147
+- **构建确定性**：签名变更后旧测试字节码会从构建缓存/增量编译还原（`rm -rf build` 无效）→ `compileTestKotlin` 不进缓存 + `kotlin.incremental=false`（`--info` 验证 NON_INCREMENTAL_COMPILER）；R21 与 practices 已记录
+- **审查修复**：README 折叠块缩进回归、普通 pull 请求构造三处重复、变量命名与"每进程一次"文档不符、缺请求体序列化断言——均已修
+- **服务端事实**：replay 字段仅存在于 `../ctt-server` 工作树（HEAD 无），报告所称 v0.81.0 与本地 0.92.0 不符——发布版本待服务端确认；插件对未升级服务端无回归
+- 版本 0.21.2 → 0.22.0（MINOR，协议能力新增）
+
+## 已归档（2026-08-27 ~ 2026-09-26）
+
+> 见 `memory-bank/archive/2026-11-06-activecontext-2026-08-09.md`（原文保留，R16）
+
 ## [2026-10-26] - .omp 产物归档：按类型 + 日期分目录（无代码变更）
 
 - 根目录 14 个文件 → `delivery|requirements|qa/<YYYY-MM-DD>/`（日期取 mtime），移动前后逐文件核对字节数与 SHA-256 全一致；新增 `.omp/README.md`（布局/命名唯一权威 + 旧→新迁移表）；AGENTS R30 与 activeContext 的 `.omp/` 引用同步；`memory-bank/archive/` 旧路径保持不变（R16 只写不改）；顺带按提交日校正三条记忆日期（0.21.x=10-26、0.20.4=09-26、规则吸收=09-15）
@@ -8,192 +25,7 @@
 - **需求（ctt-web）**：IDE 从"设备注册展示字段"改为每条会话自带：`CodingSession.ideVersion` + SQLite `ide_version`（幂等迁移）+ `SyncSessionMapper` 逐会话发送 `ideName/ideVersion`；deviceId 与注册路径不变
 - **push（0.21.0）**：模型、MigrationManager、SessionRepository（8 处 SQL/映射）、TimeTrackerService、DataExportImportService（报告未覆盖：导出/导入需携带，否则丢字段）、SyncSessionDto、Mapper；`ide_name/ide_version` 属会话身份字段（`ON CONFLICT` 不更新）
 - **pull（0.21.1）**：`SyncChangeDto` 增可选 `ideName/ideVersion`；applier 新建行优先采用服务端值、缺失回退本地——服务端未上线时行为不变
-- **服务端**：尚未实施（DTO/表无 IDE 字段）但 Jackson 忽略未知字段 → 插件可先行；上线后双向自动生效
-- **测试**：+8（push 6 + pull 2），红-绿通过，138/138；坑：Kotlin 签名变更后 `clean test` 仍可能命中陈旧 class（`NoSuchMethodError`）→ `rm -rf build` 全量重建
+- **服务端**：当时未实施（DTO/表无 IDE 字段）。2026-11-06 更正：当时"Jackson 忽略未知字段"是推断而非验证——服务端若由 Jackson 2 默认 mapper 反序列化会 400，Jackson 3 才默认忽略；插件现对 400 做回退（见 0.22.0 条目）
+- **测试**：+8（push 6 + pull 2），红-绿通过，138/138；坑：Kotlin 签名变更后 `clean test` 仍可能命中陈旧 class（`NoSuchMethodError`）→ 当时用 `rm -rf build`，2026-11-06 更正为 `--no-build-cache --rerun-tasks`（缓存会放回旧测试类）
 - **迁移加固（0.21.2）**：加列改为"先查列 → 缺失才 ALTER → 被拒后复查（并发 IDE 场景）→ 仍缺失必抛出"；只读库测试证明加列失败不再被静默吞掉；测试 139/139
 - 版本 0.20.4 → 0.21.0（MINOR）→ 0.21.1（PATCH，补完 pull 侧）→ 0.21.2（PATCH，迁移加固）；R21 增"签名变更后陈旧编译"预防；`.idea/*` 删除属外部改动，已恢复不入提交
-
-## [2026-09-26] - 例行依赖升级（版本 0.20.4）
-
-- **升级+验证**（每层 `clean build` 130/130）：Kotlin 2.4.10→2.4.20、IPGP 2.18.1→2.19.0、ben-manes 0.61.0→0.64.0、Gradle wrapper 9.7.1→9.8.0
-- **未升级**：`java-compiler-ant-tasks`/`test-framework` 261→263（目标平台，R8 红线）、`hot-reload-agent`（IPGP 管理组件）；其余（junit/assertj/sqlite-jdbc/gson/LGoodDatePicker/JDK 25.0.4）已最新。插曲：IPGP id 误写 `org.gradle…`，构建失败即修正；版本 0.20.3 → 0.20.4（PATCH）
-
-## [2026-09-17] - 语言归一化（0.20.2）与词表 v2 同步（0.20.3）
-
-- **0.20.2**：插件按 language 原样分组与服务端不一致（双 IDE 时 Kotlin/kotlin 分裂）→ 新增 `LanguageVocabulary` 镜像服务端判定链（blank→"" / nonLanguages→Other / 命中→规范名 / 未命中→原样），`getLanguageDistribution` 聚合 key 接入（唯一改动点）；上传值与库内存储不动
-- **0.20.3**：词表改以标准本身（GitHub Linguist + 7 本地扩展）为源，canonical 92→842 / aliases 75→489（零移除；v1 从单机 fileType 反推，缺 Elixir/Zig/Astro 等 750 种语言）；三步执行（复制 → `shasum -a 256` 与公告一致 → 测试）+ 独立复核；守卫 `version == 2` + 缺失语言断言；服务端协作采纳悬空别名 CI 校验、recordUnmapped 前提记录；评审修 `key()` 精确镜像 `strip()`（NBSP 红-绿）/ 日期前缀 / `@author`；领域同步；130/130
-
-## [2026-09-17] - ctt-server v0.74.4 push 入参校验通知（无需改动，独立核查通过）
-
-- v0.74.4 起 `SyncPushRequest` 集合元素约束真正生效（projectName ≤255 / language ≤50、时间戳非空、clientVersion ≥0），违规 = **400 原子拒批**
-- 独立核查（取值来源 + 本机 3557 条只读，**零违规**，max 19 字符）+ 400 映射确认为 `VALIDATION_ERROR` → 无需改动；批失败不中断其他批、保留 dirty、每轮一次非紧循环（不做跳过违规会话的"防御"——那是丢数据）；领域 sync-protocol 同步校验表/400 处置/基线
-
-## [2026-09-15] - AGENTS.md 优化：参考项目规则吸收 + 领域知识库落地（无版本变更）
-
-- 学习 ctt-server/ctt-web 规则与 AI 知识库文章，按本项目规模裁剪：R6 授权作用域闭合+机械判定法、R16 归档完整性+progress 账本边界、R1 渐进式披露、新增 R29（领域五件套）与 R30（AI 产物位置）
-- 领域落地 `memory-bank/domains/`（README + sync-protocol + stats-aggregation）；漂移修复：R3/systemPatterns 的"同步未实现"、progress 重写为账本、implementation-plan 更新、SYNC-CORE-DESIGN 归档；非代码变更不升版本
-
-## [2026-09-02] - ctt-server v0.62.0 pull 分页对接 + 批量 upsert（版本 0.20.0）
-
-- **契约核对（读 ../ctt-server 源码）**：SyncPullResponse 加 hasMore；服务端 doPull 取 batchSize+1 探测，响应时即持久化 watermark（queryCursor=max(服务端持久,客户端)）→ 重发旧游标安全；非空页 nextCursor=max(页尾,发送游标) 严格递增 → 循环必终止
-- **对建议书的 3 处修正**：① 同页 upsert/delete 交错不能 naive 收集批量（先改后删会被批量 upsert 覆盖回活行）→ 连续段批处理：DELETE 前 flushUpserts；② 加卡死护栏：hasMore=true 且 nextCursor<=cursor → Failure（防 AtomicBoolean 永卡 no-op）；③ 批量写抛出需配 try/catch 转 Failure（否则穿透 syncOnce 不更新 lastSyncError）
-- **诚实偏差**：失败续拉只续客户端游标之后；服务端 watermark 已越过失败页，收敛靠 LWW 自愈（v0.49 起就有的缺口，非分页引入；彻底解决=服务端确认制，未做）
-- **实现**：SyncDtos.SyncPullResponse+hasMore=false 默认（旧服务端单页兼容）；SyncCoordinator.pullAndApplyPages（两处 pull 复用：首轮带 revoke 重试/reconcile 不带；每页 apply→setPullCursor→下一页）；SessionRepository.upsertSyncedSessions（批量单事务，仿 importSessions 惯例，失败抛出；删单条版 upsertSyncedSession，测试调用方一并迁移）；SyncSessionApplier 连续段缓冲
-- **顺带修真 bug**：upsert ON CONFLICT 加 is_deleted=0（服务器 upsert 权威活状态应 lifting 本地墓碑；旧行为墓碑吞活状态=行消失）；importSessions 不带 is_synced 列→种子行默认脏（is_synced=0），测试种子改 upsertSyncedSessions
-- **测试**：+6（协调器 4：多页推进/失败停成功页/缺 hasMore 单页/护栏；applier 2：批量保序/flush-before-delete）；117/117
-- 版本 0.19.8 → 0.20.0（MINOR：同步协议新能力）；服务端无需改动
-- **审查修正（用户发现）**：reconcile 分支 `cursor = pulled.data` 死赋值（后续无读取）→ 改 `SyncResult.Success -> Unit`；编译 warning 消除，117/117 保持
-
-## [2026-09-02] - Weekly Hour 重叠会话双计修复（版本 0.20.1）
-
-- **Bug（用户报告）**：getDailyHourDistribution（DailyHourDataProvider 数据源）逐 session 按小时切片累加，无跨 session 合并 → 并行窗口同小时双计（10:00-11:00 + 10:30-10:45 的 hour 10 计 3900s，应为 3600s）
-- **根因**：fetchDailyHourlyData → processDailyHourlySession 无合并；对比 getDailyCodingTimeForHeatmap 有注释明确要求合并（TimeRangeUtils.calculateMergedDuration），daily-hour 漏做
-- **修复**：TimeRangeUtils 抽 `mergeIntervals()`（返回合并后并集区间列表），`calculateMergedDuration` 复用（语义不变）；fetchDailyHourlyData 改为按天收集区间 → mergeIntervals → 再按小时切片；processDailyHourlySession 删除（逻辑并入）
-- **验证**：红-绿确认（stash 源码后新测试失败）→ 修复后 119/119（+2：同小时重叠不双计 3600s / 跨相邻小时重叠合并）
-- 版本 0.20.0 → 0.20.1（bug 修复 PATCH）
-
-## [2026-09-02] - Yearly Coding Activity 时间层级重设（版本 0.19.8）
-
-- **需求**：heatmap 图例层级从 `<5min/5-15min/15min-1h/1-3h/3-6h/>6h` 改为 `<15m/15-60m/1-2h/2-5h/5-8h/>8h`
-- **实现**：仅 `main.js` renderYearlyActivityHeatmap visualMap.pieces；发现并修复现存边界 bug——解包捆绑 echarts 6.0.0 验证旧式 min/max 键为双闭区间且首命中（恰 300s 误落 `< 5 min`），改用 gte/lt 半开区间 `[min, max)` 键，整边界值（900s/3600s/28800s 等）严格落入上层
-- **顺带**：删除残留 `min: 0, max: 21600`（pieces 显式给出时被忽略）
-- 配色沿用 YlGn 6 色；Kotlin 零改动；测试 111/111；node --check 语法通过
-- 版本 0.19.7 → 0.19.8（UI 调整 PATCH）；待用户 runIde 手动验收边界落层
-- **边界验证（无需人工撞数据）**：echarts 6.0.0 SSR SVG 渲染逐值探测（1/899/900/3599/3600/7199/7200/17999/18000/28799/28800/86400s）12/12 命中预期层级；旧配置探测证实 300s 曾误落 `< 5 min`（双闭区间 bug 坐实）
-
-
-## [2026-08-29] - AGENTS.md R26 升级 v3：网络检索多工具可选（用户决策）
-
-- 背景: 用户解除"禁用内置 WebSearch"限制——WebSearch 与浏览器类技能（doko/opencli/browser-use）均可使用、按场景配合
-- 变更: R26 v2 → v3：删"禁止使用内置 WebSearch 工具"；改为"网络检索可选用内置 WebSearch 或浏览器类技能/工具链，按场景择优，允许配合使用"；保留浏览器安全红线（用户浏览器、禁 Incognito）与高级 AI 咨询（gemini/perplexity）
-- 顺带: 删除 R26 末尾与 275 行重复的遗留行（"可使用skills访问 gemini..."）
-- 同步: 全局 ~/.omp/agent/AGENTS.md 4.2 同批改写为"网络检索工具选择"（多工具可用）
-- 状态: ✅ 完成，待提交
-
-> 当前工作上下文（保留最近30天，删除>90天前）
-
-## 已归档（A 阶段 + B 早期，详见 archive）
-
-- 2026-08-26 ~ 2026-08-27 的历史条目（A1-A4 基础设施、规则更新、SKILL_GRAPH 创建、AGENTS 重构、B1-B4 早期）已归档至 `memory-bank/archive/2026-08-29-activecontext-a-and-b-early.md`（原文保留）
-
-## [2026-08-27] - B 阶段变更追踪补全：getDirtySessions（版本 0.16.0）
-
-- **B 阶段目标"建立脏数据追踪"补全**：SessionRepository 加 `getDirtySessions()`（is_deleted=0 AND is_synced=0，识别待同步本地变更，C 阶段 push 前置）
-- **重构**：行映射提取 `ResultSet.toCodingSession()` helper（getSessions 复用，消除重复）
-- 测试 +1（getDirtySessions：返回未同步会话 + 标记同步后为空）；63/63
-- **B 阶段最终状态**：B1 DTO 对齐 ✅ / B2 字段映射 + isSynced 脏标记 ✅ / B3 软删（用户否决，不实施）✅ 取消 / B4 设备注册（后端 v0.48.0 + 插件适配）✅ / 变更追踪（脏会话查询）✅
-- 版本 0.15.0 → 0.16.0（新功能 MINOR）
-
-## [2026-08-29] - 配置缓存兼容修复 + 设备状态 UI 调整（版本 0.16.1）
-
-- **generateSyncConfig 配置缓存修复**（build.gradle.kts）：
-  - 根因：doLast 闭包引用脚本顶层 val（Kotlin 编译成脚本实例字段访问），捕获 Gradle 脚本对象，配置缓存无法序列化；执行期访问 project.version 同样不支持
-  - 修复：改为自定义任务类 `GenerateSyncConfig`（@Input webUrl/serverUrl/appVersion + @OutputFile），配置期捕获 `project.version`（syncAppVersion），执行期只访问任务属性
-  - 验证：默认配置缓存构建 BUILD SUCCESSFUL（无 problems found），63/63
-- **设备注册状态 UI 调整**（SyncSettingsConfigurable）：Device registered 从 Test connection 结果下方移到 Bound([api key]) 右侧（statusRow 并排）——状态与操作反馈分离
-- 版本 0.16.0 → 0.16.1（bug 修复 PATCH）
-
-## [2026-08-29] - C 阶段第一批：同步核心（Pull/Push 客户端 + 游标 + 编排，版本 0.17.0）
-
-- **契约缺口（硬阻塞，需求报告）**：ctt-server `SyncChangeDto` 缺 `sessionUuid`（只有服务端主键 `sessionId`），插件无法按本地 `session_uuid` 唯一键匹配/新建会话 → `.omp/requirements/2026-08-29/ctt-server-syncchange-sessionuuid-requirement.md`（已交用户，待 ctt-server 落地）；插件侧 SyncChangeDto 已按需求契约加 sessionUuid 字段（默认 null，未落地时 applier 跳过）
-- **C3 游标持久化**：`sync_cursor` 表迁移（MigrationManager，R15 新表 IF NOT EXISTS）+ `SyncCursorRepository`（getPullCursor 首次 0 / setPullCursor 单调不后退 / setPushAt）
-- **C2/C1 传输**：`SyncApiService.pull`（POST /api/v1/sync/pull）+ `push`（POST /api/v1/sync/push）+ SyncApiServiceImpl 实现
-- **C1/C4 应用**：`SyncSessionApplier`（UPSERT 新建/覆盖 clean/跳过 dirty；DELETE 软删 clean/保留 dirty；sessionUuid null 跳过）；`SessionRepository` 加 findBySessionUuids（活跃行）/upsertSyncedSession（ON CONFLICT 不复活已删行）/markSynced/markDeleted；DatabaseManager 暴露 getSessionRepository/getSyncCursorRepository
-- **编排**：`SyncCoordinator`（@Service，syncOnce：pull→apply→push(markSynced)→pull 收敛；失败保留游标/脏标记幂等重试；429 退避走 SyncHttpClient）；绑定成功后自动初始同步（SyncSettingsConfigurable.registerDeviceOnBind 成功回调）
-- **测试**：+19（SyncCursorRepository 4 / SyncSessionApplier 8 / SyncCoordinator 5 / SyncHttpClient pull+push 2）；82/82；配置缓存兼容
-- **验收阻塞**：端到端（push→pull→再 pull 空）需 ctt-server 落地 sessionUuid 后才能完整验证；当前集成验证仅网络层可达
-- **双轴审查修复**（code-review，Standards+Spec）：① 时间解析 fallback 弃用 LocalDateTime.MIN（会污染 lastModified 破坏 LWW 排序）→ 新建行回退 now、覆盖行保留原值 + fallback 测试；② SyncCoordinator 删除编号步骤注释（KDoc 已文档化流程）+ KDoc 精确化（push 成功即 markSynced，pull#2 失败由下次 pull 补偿）；③ SyncSessionApplier.applier 改默认参数消除无参构造重复 getSessionRepository；④ SessionRepository.findBySessionUuids KDoc 修正（active rows，与 SQL 一致）；⑤ 集成测试补 2 个真实 pull/push 端点用例（无 key 实测 403 非 401，断言 401/403）
-- 测试：85/85（+6：真实端点 2 + applier fallback 1 + 审查期新增）；配置缓存兼容
-- 版本 0.16.1 → 0.17.0（新功能 MINOR）
-
-## [2026-08-29] - C 阶段端到端真实验收通过（版本 0.17.0）
-
-- **ctt-server v0.49.0 落地 sessionUuid 契约**（需求报告闭环）：SyncChangeDto 加 sessionUuid（服务端主键后、nullable，物理清除的 DELETE 为 null）；SyncPullService.toChangeDto 两处带出；全量 1186 测试通过；dev-docs/sync/frontend-integration.md 确认插件以 sessionUuid 为本地主键（sessionId 不参与匹配，与插件实现一致）
-- **真实验收（runIde + 本地 ctt-server v0.49.0）**：
-  - 初始同步：3198 个历史会话全量 push + pull 拉回 3198 条 change（含 sessionUuid）+ 游标推进 3198 + 脏标记全清（is_synced 全 1）
-  - 幂等：第二次同步只推新产生的 2 个会话，历史零重复，游标单调 3198→3200
-  - 重启续传：游标 3200 跨重启保持，设置页 checkDeviceRegistration 正常执行
-  - 日志：SyncCoordinator "Sync round completed for device <id>"（与 curl 设备 id 一致）
-- **验收结论**：C 阶段验收标准全部达成（push→pull→再 pull 空 + 游标断点续传 + sessionUuid 契约 + 幂等）
-- **收尾**：progress.md 更新（B/C 完成）；README 功能描述待更新（云同步 + Privacy 修正）；C 阶段设计文档待写
-
-
-## [2026-08-29] - D 阶段批次 1：调度与集成核心（版本 0.18.0）
-
-- **触发策略（判断）**：手动（SyncScheduler.syncNow 统一入口）+ 定时兜底（可配置间隔，默认 5 分钟）+ IDE 关闭前 flush（AppLifecycleListener.appWillBeClosed）+ 绑定后初始同步（既有）；**会话结束与项目打开不做显式触发**——每次空闲持久化（60s）就同步 = 频繁网络请求 + 侵入追踪核心；项目打开同步已试做（ProjectManagerListener.projectOpened）但 2026.1 将其 @Deprecated(forRemoval=true) 且无替代 open 事件，IDE inspection 无法用 Kotlin @Suppress 压制（Java 侧检查），故移除该触发点，由定时兜底（5 分钟）覆盖
-- **SyncScheduler**（新 @Service，Disposable）：单线程 daemon ScheduledExecutor，scheduleWithFixedDelay（固定延迟 = 间隔语义）；`start()` 启动、`reschedule()` 按 settings.syncIntervalMinutes 重排（0 或未启用 = 停表）、`syncNow()` 后台统一触发入口（EDT/事件/生命周期安全）
-- **SyncCoordinator 并发锁**：AtomicBoolean CAS 防重入（重叠触发 no-op）；状态记录 `lastSyncAt`/`lastSyncError`（@Volatile，设置页展示用，成功清错误）
-- **SyncSettingsState**：+syncIntervalMinutes（默认 5，0 关闭定时，coerceAtLeast(0)）
-- **SyncLifecycleListener**（新 listener）：appFrameCreated → scheduler.start()；appWillBeClosed → syncNow()（best-effort flush；脏会话已落本地，中断只延迟下次启动补传）——2026.1 API 坑：AppLifecycleListener 在 `com.intellij.ide` 包；appStarted/beforeAppWillBeClosed 标 @ApiStatus.Internal（不可 override）→ 用 appFrameCreated 启动（非 Internal）；关闭方法名 appWillBeClosed(boolean)（无 appWillExit）
-- **ProjectCloseListener 拆分**：平台 2026.1 将 ProjectManagerListener 全方法 @Deprecated(forRemoval=true)；关闭侧有替代（com.intellij.openapi.project.ProjectCloseListener 新 API），打开侧无替代 → 拆成 `ProjectCloseTrackingListener`（新 API，projectClosing 停追踪）+ `ProjectSyncListener`（旧 API，已删除）；项目打开同步由定时兜底覆盖
-- plugin.xml 注册 SyncLifecycleListener
-- **测试**：+4（SyncScheduler 3：syncNow 后台触发/未启用停表/间隔 0 停表；SyncCoordinator 并发锁 1：重叠触发 no-op 只跑一轮）；89/89；配置缓存兼容
-- 版本 0.17.0 → 0.18.0（新功能 MINOR）
-
-## [2026-08-29] - D 阶段批次 2：设置页同步 UI（版本 0.19.0）
-
-- **Sync now 手动按钮**：actionPanel 第三按钮（Unbind / Test connection / Sync now）；未绑定/未启用时提示先绑定；后台 coordinator.syncOnce()（拿结果反馈成功/失败）；busy 期间禁用 + 绑定感知
-- **同步状态行**（syncStatusLabel）：`Last sync: HH:mm:ss（或 Never synced） • Pending: N • Last error: <msg>`——lastSyncAt/lastSyncError 来自 SyncCoordinator（批次 1 状态），Pending = getDirtySessions().size（后台线程读 DB）；错误时红色；刷新时机：打开设置页 / 绑定解绑后 / Sync now 后 / apply 后
-- **间隔配置**（syncIntervalField，分钟，0=off）：isModified/apply/reset 接线（非法回默认 5）；apply 里 scheduler.reschedule() 使新间隔/开关即时生效（不重启）
-- **实现细节**：LocalDateTime.format 用 java.time 自带（无冗余 extension）；待同步数用 DatabaseManager.getSessionRepository（后台线程）
-- 测试 90/90（UI 无单测，手动验收）；配置缓存兼容
-- 版本 0.18.0 → 0.19.0（新功能 MINOR）
-- **D 阶段状态**：D1 触发（批次 1）✅ / D2 状态展示（批次 2）✅ / D3 后台执行（批次 1）✅ / D4 配置持久化（批次 1 间隔字段 + 批次 2 UI）✅
-
-## [2026-08-29] - 设置页布局 + 持久化 lastSync + 设备 id 一致性 + 换绑隔离（版本 0.19.1）
-
-- **设置页布局重排（用户反馈驱动）**：Test connection 移到服务器地址旁（它测编辑中的地址）；Bind/Unbind 配对同行（API key 生命周期）；Sync now 移入同步区（间隔输入右侧，一行紧凑）；serverUrlField 40→24 列、syncIntervalField 绑定 maximumSize=preferredSize（防 FormBuilder/BoxLayout 拉伸到全宽，4 列）
-- **lastSyncAt 持久化（bug）**：原为 SyncCoordinator 内存字段（重启即清空 → 设置页显示 Never synced，即使 C 阶段同步过）；改从 `sync_cursor.last_push_at` 读（SyncCursorRepository.getLastPushAt，跨重启保留）；syncNow 成功反馈不再写中间操作状态行（改由同步状态行 Last sync 推进 + 失败走右上角通知）
-- **设备 id 跨 IDE 一致性（bug，用户报告）**：原 UserManager.getUserId() 依赖 coding_sessions 有数据才跨 IDE 共享（DB 空时各 IDE 生成不同 id → 同一台电脑双 IDE 变 2 设备）；新增 `app_user` 表（MigrationManager R15）+ DatabaseManager.getOrCreateUserId（app_user → coding_sessions 旧数据迁移 → 生成写入），UserManager 改用共享 DB（与会话表无关，首次绑定也一致）
-- **换绑用户隔离（bug，用户报告）**：换绑 A→B key 时原会把 A 的脏会话推给 B（泄露）+ 用 A 的旧游标跳过 B 的前 N 条 change（丢数据）；新增 SyncCoordinator.resetForUserSwitch（清本机 sync_cursor + markAllSynced 旧会话标记不推新用户），绑定流程检测换绑（wasBound）触发；新会话正常同步到新用户
-- **统计账号隔离（bug，用户报告）**：原统计查本地全部会话，换绑后 A/B 用户数据混算；后端已存在 `GET /api/v1/users/me`（SYNC key 可调，返回 data.id，需求反馈确认无新端点）；本地 `coding_sessions` 加 owner_user_id 列（R15）+ CurrentUserResponse/SyncApiService.currentUser + SyncSettingsState.serverUserId；push 成功/pull 应用标记 owner；StatsRepository 全部查询 + SessionRepository 统计查询（getRecordCount/getAllActiveSessionTimes/getFirstRecordDate）按 owner 过滤（内部 ownerUserId 字段，DatabaseManager.setStatsOwner 同时设置两 repo）；绑定成功调 me → serverUserId + setStatsOwner，换绑 resetForUserSwitch 清 owner；未绑定全量、绑定后只当前用户数据、导出（getSessions）不过滤
-- **测试**：+5（clear 游标/时间、markAllSynced、resetForUserSwitch、getLastPushAt ×2、stats owner 过滤、markSynced owner 写入）；97/97；配置缓存兼容
-- 版本 0.19.0 → 0.19.1（bug 修复 + UI 改进 PATCH）
-
-[2026-08-29] - Fix account isolation statistics:
-  - Unbind-then-bind account switch now correctly resets pull cursor (was skipped when wasBound=false)
-  - Bind-account statistics include locally uncommitted sessions (owner_user_id IS NULL) so new coding shows up immediately
-  - Fix SQL syntax error (missing leading space → "0AND") that broke record count
-  - Move device registration UserManager.getUserId() off EDT to avoid UI freeze
-  - Fix inline FQN for java.sql.* and java.util.UUID to correct imports
-
-[2026-08-29] - E phase: end-to-end cloud sync verification and documentation:
-  - Verified full end-to-end LWW conflict resolution (last-write-wins)
-  - Verified error recovery: network outage/429 backoff/invalid auth all fail-safe without data loss
-  - Updated README.md with complete cloud sync setup instructions and conflict resolution notes
-  - Verified account switching logic works correctly: unbind→bind correctly resets pull cursor and marks previous user's dirty sessions
-  - Verified statistics filtering correctly includes bound user + local uncommitted sessions
-
-[2026-08-29] - E phase gap fixes (0.19.3):
-  - E1: added SyncConvergenceTest (4 scenarios): dual-device create/edit/delete/LWW-conflict convergence, in-memory ctt-server replica
-  - E2: added revoked-key re-bind prompt test (AUTH_012 -> toUserMessage), network-failure-retry-then-converge test
-  - E3: added README Cloud Sync Troubleshooting section (7 symptoms + LWW conflict explanation), fixed duplicated "Requests."
-  - Test isolation: UserManager.setUserIdForTest (internal), SyncCoordinator deviceMetadataProvider + notifySyncCompleted injection points; SyncCoordinatorTest no longer requires IDE Application (was order-dependent on LightPlatformTestCase)
-  - Version bumped 0.19.2 -> 0.19.3 (PATCH)
-
-[2026-08-29] - Build hygiene + dependency update (0.19.4):
-  - Group build.gradle.kts dependencies by destination (platform vs project vs test)
-  - Replace deprecated tasks.registering with tasks.register<Type>(name) (Gradle 9.6)
-  - Add description + build group to generateSyncConfig task
-  - Upgrade sqlite-jdbc 3.53.2.1 -> 3.53.4.0 (only upgradeable dep; clean build 105/105)
-  - Full dependencyUpdates audit: Kotlin 2.4.10 / IPGP 2.18.1 / ben-manes 0.61.0 / Gradle 9.7.1 / junit 6.1.3 all current
-
-[2026-08-29] - Stats owner filter + device revoke handling (0.19.5):
-  - Fix: account-scoped stats excluded unowned local sessions (owner NULL) after re-bind/init; filter now (owner = ? OR owner IS NULL)
-  - ctt-server v0.50.0: revoke device stops sync (404 COMMON_002), GET /devices returns revokedAt
-  - Plugin: DeviceResponse.revokedAt + 3-state device status (registered/revoked/not registered)
-  - Plugin: sync self-heal - on DEVICE_NOT_FOUND re-register device and retry once (no key re-bind needed)
-  - Tests 107/107
-
-[2026-08-30] - Batched push + reset condition fix (0.19.6):
-  - SyncCoordinator: push dirty sessions in bounded batches (500 default, injectable); each batch marks synced on success, failed batch keeps dirty for retry
-  - registerDeviceOnBind: reset only when serverUserId holds a different previous account (drop wasBound trigger) - dev-state reset then fresh bind pushes all local sessions
-  - Server push confirmed: per-session CRUD, no batch insert (no saveAll); uk_coding_sessions_user_session_uuid unique + LWW KEEP_EXISTING = idempotent dedup already present
-  - Full dev reset procedure (script): DELETE sync_cursor + UPDATE sessions SET is_synced=0, owner=NULL, synced_at=NULL + clear IDE SyncSettings config (serverUserId/key) after stopping sandbox IDE
-  - Tests 109/109
-
-[2026-08-30] - Heatmap overlap merge fix (0.19.7):
-  - getDailyCodingTimeForHeatmap now merges day-clipped intervals with TimeRangeUtils.calculateMergedDuration (union), matching summary totals; previously summed raw durations (overlap double-count)
-  - splitSessionByDay returns (date, interval) pairs; daily intervals merged then summed
-  - Tests: overlapping same-day sessions -> merged union; midnight-spanning session split per day
-  - Tests 111/111

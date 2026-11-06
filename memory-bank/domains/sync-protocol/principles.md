@@ -8,13 +8,17 @@ push 响应里的 `nextCursor` 是"服务端当前最大 changeId"，**不作 pu
 
 分页循环的顺序恒为：apply 本页 → `setPullCursor(本页 nextCursor)` → 下一页。apply 或持久化失败 → 返回 Failure，**游标停在最后成功页**。本地游标单调不后退（SQL `MAX(last, excluded)`），乱序/重放响应不会回退。
 
-## 3. 失败页不回退——服务端 watermark 是乐观的
+## 3. 失败页靠 replay 重读，不靠 watermark 回退
 
-服务端在**生成响应时**即推进自己的 watermark（`advancePullWatermark`），客户端下轮用旧游标重试会被 `queryCursor = max(服务端值, 客户端值)` 跳过失败页。因此：
+服务端在**生成响应时**即推进自己的 watermark（`advancePullWatermark`），正常 pull 用 `queryCursor = max(服务端值, 客户端值)` 会跳过客户端没应用到的那一页——那是数据丢失，不是延迟。
 
-- 应用失败的一页**不会**被重新下发；其数据靠 LWW 自愈（这些会话下次被任何设备修改时产生新 change 重新收敛）
-- 这是自 v0.49 单次 pull 就存在的已知缺口，分页把影响面从"整次响应"缩到"一页"
-- 彻底解决需服务端改为客户端确认制（at-least-once），当前**接受现状**，不做插件侧绕过
+因此**每次 pull 都带 `replayFromChangeId = 本地游标`**（`SyncCoordinator.pullPage`）：服务端取 `min(replay, watermark)` 作为读取起点，`nextCursor` 仍以 watermark 为下界。正常态两者相等、行为不变；失败一页时下轮从该页起点重读。
+
+- 本地游标即"已成功应用"的真相；进程被杀也不丢（游标已持久化），无需额外重试计数器
+- 旧服务端不识别该字段 → 400 → 同轮回退为不带字段的请求；回退成功才按服务器 URL 记住（换地址重新探测，重启再探测一次）
+- 本地游标 > watermark（服务端游标行丢失/重置）时，replay 从 watermark 重读：幂等，最坏一次全量
+- `nextCursor = max(页尾, watermark)` 保证重放不能让设备游标倒退；若服务端将来清理 change 行而 watermark 偏高，仍可能跳过（当前服务端无清理任务）
+- 同一页反复重放（坏数据）不会无限循环：每轮失败即返回，节奏由调度器控制，错误在设置页可见；不做跨轮计数器（要持久化就得改表，收益不足）
 
 ## 4. 客户端 apply 必须幂等
 
