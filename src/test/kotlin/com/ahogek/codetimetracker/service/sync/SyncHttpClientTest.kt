@@ -6,9 +6,12 @@ import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.AfterEach
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.io.ByteArrayOutputStream
 import java.net.InetSocketAddress
 import java.time.Instant
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.zip.GZIPOutputStream
 
 class SyncHttpClientTest {
 
@@ -21,6 +24,8 @@ class SyncHttpClientTest {
     private val alwaysRateLimitedRequests = AtomicInteger(0)
     private val bodyRetryRequests = AtomicInteger(0)
     private val hugeRetryRequests = AtomicInteger(0)
+    private val encodingHeaders = CopyOnWriteArrayList<String>()
+    private val pullBodies = CopyOnWriteArrayList<String>()
 
     @BeforeEach
     fun setUp() {
@@ -35,6 +40,9 @@ class SyncHttpClientTest {
         server.createContext("/devices-register") { exchange -> handleDevicesRegister(exchange) }
         server.createContext("/sync-pull") { exchange -> handleSyncPull(exchange) }
         server.createContext("/sync-push") { exchange -> handleSyncPush(exchange) }
+        server.createContext("/gzip") { exchange -> handleGzip(exchange) }
+        server.createContext("/gzip-broken") { exchange -> handleBrokenGzip(exchange) }
+        server.createContext("/encoding") { exchange -> handleEncoding(exchange) }
         server.start()
 
         settings = SyncSettingsState()
@@ -236,6 +244,7 @@ class SyncHttpClientTest {
     }
 
     private fun handleSyncPull(exchange: HttpExchange) {
+        pullBodies += exchange.requestBody.readBytes().toString(Charsets.UTF_8)
         respond(
             exchange,
             200,
@@ -254,6 +263,56 @@ class SyncHttpClientTest {
             200,
             """{"success":true,"data":{"nextCursor":42},"timestamp":"2026-08-29T00:00:00Z"}""",
         )
+    }
+
+    private fun handleGzip(exchange: HttpExchange) {
+        val json = """{"success":true,"data":{"userId":"user-1","accessToken":"gzip-token"}}"""
+        val compressed = ByteArrayOutputStream().use { buffer ->
+            GZIPOutputStream(buffer).use { it.write(json.toByteArray()) }
+            buffer.toByteArray()
+        }
+        exchange.responseHeaders.set("Content-Type", "application/json")
+        exchange.responseHeaders.set("Content-Encoding", "gzip")
+        exchange.sendResponseHeaders(200, compressed.size.toLong())
+        exchange.responseBody.use { it.write(compressed) }
+    }
+
+    private fun handleBrokenGzip(exchange: HttpExchange) {
+        val bytes = "this is not gzip".toByteArray()
+        exchange.responseHeaders.set("Content-Type", "application/json")
+        exchange.responseHeaders.set("Content-Encoding", "gzip")
+        exchange.sendResponseHeaders(200, bytes.size.toLong())
+        exchange.responseBody.use { it.write(bytes) }
+    }
+
+    private fun handleEncoding(exchange: HttpExchange) {
+        encodingHeaders += exchange.requestHeaders.getFirst("Accept-Encoding").orEmpty()
+        respond(exchange, 200, """{"success":true,"data":{"userId":"user-1"}}""")
+    }
+
+    @Test
+    fun `should advertise gzip support on every request`() {
+        client.execute(SyncRequest(method = "GET", path = "/encoding"), LoginResponse::class.java)
+
+        assertThat(encodingHeaders).containsExactly("gzip")
+    }
+
+    @Test
+    fun `should decompress and parse a gzip response`() {
+        val result = client.execute(SyncRequest(method = "GET", path = "/gzip"), LoginResponse::class.java)
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        assertThat((result as SyncResult.Success).data.accessToken).isEqualTo("gzip-token")
+    }
+
+    @Test
+    fun `should report a decoding failure instead of a network error`() {
+        val result = client.execute(SyncRequest(method = "GET", path = "/gzip-broken"), LoginResponse::class.java)
+
+        assertThat(result).isInstanceOf(SyncResult.Failure::class.java)
+        val error = (result as SyncResult.Failure).error
+        assertThat(error.kind).isEqualTo(SyncErrorKind.UNKNOWN)
+        assertThat(error.message).contains("Content-Encoding: gzip")
     }
 
     @Test
@@ -295,6 +354,32 @@ class SyncHttpClientTest {
         assertThat(device.id).isEqualTo("dev-1")
         assertThat(device.deviceName).isEqualTo("MacBook Pro")
         assertThat(device.platform).isEqualTo("macOS")
+    }
+
+    @Test
+    fun `should serialize the replay id only when it is set`() {
+        client.execute(
+            SyncRequest(
+                method = "POST",
+                path = "/sync-pull",
+                body = SyncPullRequest(deviceId = "dev-1", lastPulledChangeId = 3, replayFromChangeId = 3),
+                bearerToken = "cttak_key",
+            ),
+            SyncPullResponse::class.java,
+        )
+        client.execute(
+            SyncRequest(
+                method = "POST",
+                path = "/sync-pull",
+                body = SyncPullRequest(deviceId = "dev-1", lastPulledChangeId = 3),
+                bearerToken = "cttak_key",
+            ),
+            SyncPullResponse::class.java,
+        )
+
+        assertThat(pullBodies).hasSize(2)
+        assertThat(pullBodies[0]).contains("\"replayFromChangeId\":3")
+        assertThat(pullBodies[1]).doesNotContain("replayFromChangeId")
     }
 
     @Test

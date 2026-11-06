@@ -57,7 +57,10 @@ class SyncCoordinatorTest {
         coordinator = buildCoordinator()
     }
 
-    private fun buildCoordinator(pushBatchSize: Int = 500): SyncCoordinator =
+    private fun buildCoordinator(
+        pushBatchSize: Int = 500,
+        clock: () -> Long = System::currentTimeMillis,
+    ): SyncCoordinator =
         SyncCoordinator(
             settings = settings,
             keyManager = keyManager,
@@ -70,6 +73,7 @@ class SyncCoordinatorTest {
             },
             notifySyncCompleted = {},
             pushBatchSize = pushBatchSize,
+            clock = clock,
         )
 
     @AfterEach
@@ -159,6 +163,8 @@ class SyncCoordinatorTest {
         assertThat(api.pullCalls).hasSize(2)
         assertThat(api.pullCalls[0].lastPulledChangeId).isEqualTo(0L)
         assertThat(api.pullCalls[1].lastPulledChangeId).isEqualTo(0L)
+        // Every pull replays from its own cursor, which is what makes a failed page recoverable.
+        assertThat(api.pullCalls.map { it.replayFromChangeId }).containsExactly(0L, 0L)
     }
 
     @Test
@@ -351,6 +357,8 @@ class SyncCoordinatorTest {
         assertThat(api.pullCalls).hasSize(3)
         assertThat(api.pullCalls[1].lastPulledChangeId).isEqualTo(1L)
         assertThat(api.pullCalls[2].lastPulledChangeId).isEqualTo(4L)
+        // Each page replays from the cursor it resumes at, so an interrupted page is re-read.
+        assertThat(api.pullCalls.map { it.replayFromChangeId }).containsExactly(0L, 1L, 4L)
         assertThat(cursorRepository.getPullCursor(UserManager.getUserId())).isEqualTo(4L)
     }
 
@@ -416,6 +424,101 @@ class SyncCoordinatorTest {
         assertThat(api.pushCalls).isEmpty()
     }
 
+    @Test
+    fun `should replay a failed page from the last applied cursor on the next round`() {
+        val device = UserManager.getUserId()
+        val firstUuid = "page-1-uuid"
+        sessionRepository.upsertSyncedSessions(listOf(localSession(firstUuid)))
+        api.pullResponses.add(
+            SyncResult.Success(
+                SyncPullResponse(
+                    changes = listOf(pageChange(1, firstUuid, clientVersion = 2)),
+                    nextCursor = 1,
+                    hasMore = true,
+                ),
+            ),
+        )
+        api.pullResponses.add(SyncResult.Failure(SyncError(SyncErrorKind.NETWORK_ERROR)))
+
+        val failed = coordinator.syncOnce()
+
+        assertThat(failed).isInstanceOf(SyncResult.Failure::class.java)
+        assertThat(cursorRepository.getPullCursor(device)).isEqualTo(1L)
+
+        // The next round resumes one page behind the server watermark and asks the server
+        // to replay from there; without that request the page would never be sent again.
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 3)))
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 3)))
+        val recovered = coordinator.syncOnce()
+
+        assertThat(recovered).isInstanceOf(SyncResult.Success::class.java)
+        val resumed = api.pullCalls[2]
+        assertThat(resumed.lastPulledChangeId).isEqualTo(1L)
+        assertThat(resumed.replayFromChangeId).isEqualTo(1L)
+    }
+
+    @Test
+    fun `should stop sending the replay field once an older server rejects it`() {
+        api.rejectReplayField = true
+
+        val first = coordinator.syncOnce()
+
+        assertThat(first).isInstanceOf(SyncResult.Success::class.java)
+        // Rejected request, plain fallback, reconcile pull.
+        assertThat(api.pullCalls).hasSize(3)
+        assertThat(api.pullCalls[0].replayFromChangeId).isEqualTo(0L)
+        assertThat(api.pullCalls[1].replayFromChangeId).isNull()
+        assertThat(api.pullCalls[2].replayFromChangeId).isNull()
+
+        val second = coordinator.syncOnce()
+
+        assertThat(second).isInstanceOf(SyncResult.Success::class.java)
+        assertThat(api.pullCalls.drop(3).map { it.replayFromChangeId }).containsOnlyNulls()
+    }
+
+    @Test
+    fun `should re-register and retry when a later page reports the device revoked`() {
+        val firstUuid = "page-1-uuid"
+        sessionRepository.upsertSyncedSessions(listOf(localSession(firstUuid)))
+        api.pullResponses.add(
+            SyncResult.Success(
+                SyncPullResponse(
+                    changes = listOf(pageChange(1, firstUuid, clientVersion = 2)),
+                    nextCursor = 1,
+                    hasMore = true,
+                ),
+            ),
+        )
+        api.pullResponses.add(SyncResult.Failure(SyncError(SyncErrorKind.DEVICE_NOT_FOUND)))
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 1)))
+        api.pullResponses.add(SyncResult.Success(SyncPullResponse(changes = emptyList(), nextCursor = 1)))
+
+        val result = coordinator.syncOnce()
+
+        assertThat(result).isInstanceOf(SyncResult.Success::class.java)
+        assertThat(api.registerCalls).isEqualTo(1)
+        // Page 1, the revoked page, its retry after re-registration, then the reconcile pull.
+        assertThat(api.pullCalls).hasSize(4)
+    }
+
+    @Test
+    fun `should probe replay again after the unsupported verdict expires`() {
+        var now = 0L
+        val coordinator = buildCoordinator(clock = { now })
+        api.rejectReplayField = true
+
+        coordinator.syncOnce()
+        api.pullCalls.clear()
+
+        coordinator.syncOnce()
+        assertThat(api.pullCalls.map { it.replayFromChangeId }).containsOnlyNulls()
+
+        api.pullCalls.clear()
+        now += 60 * 60 * 1000L
+        coordinator.syncOnce()
+        assertThat(api.pullCalls.first().replayFromChangeId).isEqualTo(0L)
+    }
+
     private fun pageChange(changeId: Long, sessionUuid: String, clientVersion: Int) = SyncChangeDto(
         changeId = changeId,
         sessionId = UUID.randomUUID().toString(),
@@ -435,6 +538,8 @@ class SyncCoordinatorTest {
         val pullCalls = mutableListOf<SyncPullRequest>()
         val pushCalls = mutableListOf<SyncPushRequest>()
         var registerCalls = 0
+        /** Emulates a server that predates replayFromChangeId: 400 on the unknown field. */
+        var rejectReplayField = false
         val pullResponses = ArrayDeque<SyncResult<SyncPullResponse>>()
         val pushResponses = ArrayDeque<SyncResult<SyncPushResponse>>()
         var pushResult: SyncResult<SyncPushResponse> = SyncResult.Success(SyncPushResponse())
@@ -451,6 +556,16 @@ class SyncCoordinatorTest {
 
         override fun pull(request: SyncPullRequest, apiKey: String): SyncResult<SyncPullResponse> {
             pullCalls.add(request)
+            if (rejectReplayField && request.replayFromChangeId != null) {
+                return SyncResult.Failure(
+                    SyncError(
+                        SyncErrorKind.VALIDATION_ERROR,
+                        httpStatus = 400,
+                        code = "COMMON_001",
+                        message = "Unrecognized field \"replayFromChangeId\"",
+                    ),
+                )
+            }
             return pullResponses.removeFirstOrNull() ?: SyncResult.Success(SyncPullResponse())
         }
 

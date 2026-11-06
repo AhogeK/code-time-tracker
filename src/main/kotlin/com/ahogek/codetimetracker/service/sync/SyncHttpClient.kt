@@ -7,6 +7,7 @@ import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.Logger
+import java.io.ByteArrayInputStream
 import java.io.IOException
 import java.lang.reflect.Type
 import java.net.URI
@@ -14,7 +15,9 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.net.http.HttpTimeoutException
+import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.util.zip.GZIPInputStream
 
 /**
  * Result of a sync API call.
@@ -150,6 +153,7 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
             .timeout(Duration.ofSeconds(REQUEST_TIMEOUT_SECONDS))
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
+            .header("Accept-Encoding", "gzip")
         request.bearerToken?.let { builder.header("Authorization", "Bearer $it") }
         val publisher = if (request.body == null) {
             HttpRequest.BodyPublishers.noBody()
@@ -159,10 +163,23 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
         builder.method(request.method, publisher)
 
         return try {
-            val response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString())
+            val response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofByteArray())
             val status = response.statusCode()
+            val body = try {
+                decodeBody(response)
+            } catch (e: IOException) {
+                log.warn("Failed to decode the response body", e)
+                return Outcome.TransportFailure(
+                    SyncError(
+                        SyncErrorKind.UNKNOWN,
+                        httpStatus = status,
+                        message = "Failed to decode the response body (Content-Encoding: " +
+                            response.headers().firstValue("Content-Encoding").orElse("identity") + ")",
+                    ),
+                )
+            }
             if (status in 200..299) {
-                val data = parseBody<T>(response.body(), responseType)
+                val data = parseBody<T>(body, responseType)
                 if (data != null) {
                     Outcome.Success(data)
                 } else {
@@ -173,7 +190,7 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
             } else {
                 Outcome.HttpFailure(
                     statusCode = status,
-                    errorBody = parseErrorBody(response.body()),
+                    errorBody = parseErrorBody(body),
                     retryAfterHeader = response.headers().firstValue("Retry-After").orElse(null),
                 )
             }
@@ -185,6 +202,23 @@ class SyncHttpClient(private val settings: SyncSettingsState) : Disposable {
             Thread.currentThread().interrupt()
             Outcome.TransportFailure(SyncError(SyncErrorKind.UNKNOWN))
         }
+    }
+
+    /**
+     * Reads the response body, decompressing it when the server chose gzip. The decision
+     * keys on the response header, never on the request: a server that ignored
+     * `Accept-Encoding` answers identity and must be read verbatim, while a gzip body handed
+     * to the JSON parser would fail. JSON is UTF-8 (RFC 8259), so the bytes are decoded as
+     * UTF-8 instead of trusting a charset parameter that JSON responses usually omit.
+     */
+    private fun decodeBody(response: HttpResponse<ByteArray>): String {
+        val encoding = response.headers().firstValue("Content-Encoding").orElse("").lowercase()
+        val bytes = if (encoding.contains("gzip")) {
+            GZIPInputStream(ByteArrayInputStream(response.body())).use { it.readBytes() }
+        } else {
+            response.body()
+        }
+        return bytes.toString(StandardCharsets.UTF_8)
     }
 
     private fun <T> parseBody(body: String, type: Type): T? = try {

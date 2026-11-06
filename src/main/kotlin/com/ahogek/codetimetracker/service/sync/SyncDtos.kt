@@ -18,10 +18,21 @@ data class LoginResponse(
     val tokenType: String? = null,
 )
 
-/** POST /api/v1/sync/pull request body: resume from [lastPulledChangeId] for [deviceId]. */
+/**
+ * POST /api/v1/sync/pull request body: resume from [lastPulledChangeId] for [deviceId].
+ *
+ * [replayFromChangeId] is the escape hatch for the one page that can be lost: the server
+ * advances the device watermark before it hands a page over, so a page the client failed
+ * to apply (or never received because the process died) would not be sent again. Sending
+ * the local cursor here re-reads from that point even though the watermark is further
+ * ahead; the server keeps `nextCursor` at its high-water mark, so a replay can re-read
+ * history but never rewinds the device. Null sends a plain pull, which is what a server
+ * that predates the field requires.
+ */
 data class SyncPullRequest(
     val deviceId: String? = null,
     val lastPulledChangeId: Long = 0L,
+    val replayFromChangeId: Long? = null,
 )
 
 /** POST /api/v1/sync/pull response body: one page of changes plus the next cursor. */
