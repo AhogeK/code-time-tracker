@@ -18,11 +18,15 @@ import java.util.concurrent.atomic.AtomicBoolean
  * <p>Failure handling (idempotency): the pull cursor is persisted after each applied
  * page (a pull sequence drains server-reported pages until `hasMore` is false), and
  * dirty sessions keep their `is_synced = 0` marker until a push succeeds, so a pull
- * or push failure leaves the cursor at the last successful page and the next round
- * retries safely from there. 429 back-off is handled inside [SyncHttpClient]. Once a
- * push succeeds the pushed sessions are marked synced (the server has accepted the
- * batch atomically); if the follow-up reconcile pull then fails, the next round pulls
- * the remaining changes and converges.
+ * or push failure leaves the cursor at the last successful page. Every pull also
+ * replays from that cursor (`replayFromChangeId`): the server advances its own
+ * watermark before it hands a page over, so without the replay a page that failed to
+ * apply - or arrived while the process was killed - would be skipped forever. A server
+ * that predates the field answers 400 to the unknown property, and [pullPage] falls
+ * back to a plain request once per server URL. 429 back-off is handled inside
+ * [SyncHttpClient]. Once a push succeeds the pushed sessions are marked synced (the
+ * server has accepted the batch atomically); if the follow-up reconcile pull then
+ * fails, the next round pulls the remaining changes and converges.
  *
  * @author AhogeK ahogek@gmail.com
  * @since 2026-08-29
@@ -42,6 +46,7 @@ class SyncCoordinator(
             .syncCompleted()
     },
     private val pushBatchSize: Int = 500,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /**
      * Platform-container entry point: the service container only supports parameterless
@@ -57,11 +62,29 @@ class SyncCoordinator(
 
     companion object {
         private val log = Logger.getInstance(SyncCoordinator::class.java)
+
+        /** Property name the server echoes when it rejects an unknown pull field. */
+        private const val REPLAY_FIELD = "replayFromChangeId"
+
+        /** How long a server that rejected [REPLAY_FIELD] is left alone before probing again. */
+        private const val REPLAY_PROBE_INTERVAL_MS = 60 * 60 * 1000L
     }
 
     /** Guards against concurrent sync rounds from overlapping triggers (timer, events, manual). */
     private val syncInProgress = AtomicBoolean(false)
 
+    /**
+     * Server URL known to reject [SyncPullRequest.replayFromChangeId] as an unknown field,
+     * and the moment that verdict expires. Replay is suspended for that URL only: pointing
+     * the plugin at another server re-enables it immediately, and a mixed-version deployment
+     * (one old instance behind a proxy) costs at most one probe per hour instead of a silent
+     * permanent loss of replay.
+     */
+    @Volatile
+    private var replayUnsupportedServerUrl: String? = null
+
+    @Volatile
+    private var replayUnsupportedUntilMillis: Long = 0L
 
     /**
      * Last successful sync completion time, read from the persisted push timestamp
@@ -147,15 +170,7 @@ class SyncCoordinator(
 
         var cursor = cursorRepository.getPullCursor(deviceId)
 
-        // The server may have revoked this device since the last round (404 COMMON_002);
-        // re-registering the same id clears the revocation and resumes sync. The retry
-        // fires at most once per round and only when the error is device-not-found.
-        var firstPull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
-        if (isDeviceRevoked(firstPull)) {
-            reRegisterDevice(apiKey)
-            firstPull = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
-        }
-        when (val pull = pullAndApplyPages(firstPull, userId, deviceId, apiKey, local, cursor)) {
+        when (val pull = pullAndApplyPages(userId, deviceId, apiKey, local, cursor)) {
             is SyncResult.Failure -> return pull
             is SyncResult.Success -> cursor = pull.data
         }
@@ -189,8 +204,7 @@ class SyncCoordinator(
         }
 
         // Reconcile pull: converge on the server-authoritative state after pushing.
-        val reconcile = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
-        when (val pulled = pullAndApplyPages(reconcile, userId, deviceId, apiKey, local, cursor)) {
+        when (val pulled = pullAndApplyPages(userId, deviceId, apiKey, local, cursor)) {
             is SyncResult.Failure -> return pulled
             is SyncResult.Success -> Unit
         }
@@ -207,23 +221,22 @@ class SyncCoordinator(
      * (ctt-server 0.62.0+ paged the change log; older servers answer a single
      * `hasMore = false` page). Returns the final cursor on success.
      *
-     * A page that fails to apply or persist aborts the sequence with a failure and
-     * leaves the persisted cursor at the last successful page, so the next round
-     * resumes from there. A guard against a non-advancing cursor prevents a
-     * misbehaving server from pinning the sync loop forever.
+     * Every request replays from the persisted cursor (see [SyncPullRequest.replayFromChangeId]):
+     * a page that fails to apply or persist aborts the sequence and leaves the cursor at the
+     * last successful page, which is exactly the point the next round asks the server to
+     * replay. A guard against a non-advancing cursor prevents a misbehaving server from
+     * pinning the sync loop forever.
      */
     private fun pullAndApplyPages(
-        firstPage: SyncResult<SyncPullResponse>,
         userId: String,
         deviceId: String,
         apiKey: String,
         local: RegisterDeviceRequest,
         initialCursor: Long,
     ): SyncResult<Long> {
-        var page = firstPage
         var cursor = initialCursor
         while (true) {
-            when (page) {
+            when (val page = pullPage(deviceId, cursor, apiKey)) {
                 is SyncResult.Failure -> return page
                 is SyncResult.Success -> {
                     val data = page.data
@@ -246,16 +259,64 @@ class SyncCoordinator(
                         )
                         cursorRepository.setPullCursor(userId, deviceId, data.nextCursor)
                     } catch (e: Exception) {
-                        log.warn("Failed to apply a pull page for device $deviceId", e)
+                        log.warn("Failed to apply the pull page starting at cursor $cursor for device $deviceId", e)
                         return SyncResult.Failure(
-                            SyncError(SyncErrorKind.SERVER_ERROR, message = "Failed to apply pulled changes: ${e.message}"),
+                            SyncError(
+                                SyncErrorKind.SERVER_ERROR,
+                                message = "Failed to apply the pull page starting at cursor $cursor " +
+                                    "(${data.changes.size} changes): ${e.message}",
+                            ),
                         )
                     }
                     cursor = data.nextCursor
                     if (!data.hasMore) return SyncResult.Success(cursor)
-                    page = api.pull(SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor), apiKey)
                 }
             }
+        }
+    }
+
+    /**
+     * Sends one pull page for [cursor], replaying from that same id so a page the client
+     * never applied is delivered again even though the server watermark has moved past it.
+     *
+     * A server older than the replay contract answers 400 naming the unknown property. That
+     * answer suspends replay for its URL for [REPLAY_PROBE_INTERVAL_MS] and the request is
+     * retried without the field, so the extra round-trip is paid once per probe rather than
+     * on every page. A 400 about anything else is retried the same way but does not suspend
+     * replay, because it says nothing about the field.
+     */
+    private fun pullPage(deviceId: String, cursor: Long, apiKey: String): SyncResult<SyncPullResponse> {
+        val plainRequest = SyncPullRequest(deviceId = deviceId, lastPulledChangeId = cursor)
+        if (!replaySupported()) return sendPull(plainRequest, apiKey)
+
+        val replay = sendPull(plainRequest.copy(replayFromChangeId = cursor), apiKey)
+        when (replay) {
+            is SyncResult.Success -> return replay
+            is SyncResult.Failure -> if (replay.error.httpStatus != 400) return replay
+        }
+        if (replay.error.message?.contains(REPLAY_FIELD) == true) {
+            replayUnsupportedServerUrl = settings.serverUrl
+            replayUnsupportedUntilMillis = clock() + REPLAY_PROBE_INTERVAL_MS
+            log.info("Server rejected $REPLAY_FIELD; retrying without it and probing again in an hour for ${settings.serverUrl}")
+        }
+        return sendPull(plainRequest, apiKey)
+    }
+
+    private fun replaySupported(): Boolean =
+        replayUnsupportedServerUrl != settings.serverUrl || clock() >= replayUnsupportedUntilMillis
+
+    /**
+     * Sends one pull, re-registering this device once when the server reports it revoked
+     * (404 COMMON_002). Registration clears the revocation server-side, so retrying the
+     * same request resumes sync without re-binding the API key.
+     */
+    private fun sendPull(request: SyncPullRequest, apiKey: String): SyncResult<SyncPullResponse> {
+        val first = api.pull(request, apiKey)
+        return if (isDeviceRevoked(first)) {
+            reRegisterDevice(apiKey)
+            api.pull(request, apiKey)
+        } else {
+            first
         }
     }
 }
