@@ -173,6 +173,17 @@ tasks {
         useJUnitPlatform()
     }
 
+    // Observed 2026-11-06: after a data-class constructor gained a parameter, the build
+    // cache restored test bytecode compiled against the old signature while
+    // build/classes/kotlin/main already carried the new one, so every test using that
+    // constructor died with NoSuchMethodError. `rm -rf build` did not help because the
+    // stale output came back from the cache; only --no-build-cache/--rerun-tasks did.
+    // Compiling the test sources takes seconds, a phantom failure or a false green costs
+    // much more, so this task is kept out of the cache.
+    named("compileTestKotlin") {
+        outputs.cacheIf { false }
+    }
+
     processResources {
         from(project.layout.projectDirectory.file("LICENSE")) {
             into(".")
